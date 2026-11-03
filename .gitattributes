@@ -1,0 +1,2 @@
+# Scripts Windows : fins de ligne CRLF
+*.bat text eol=crlf

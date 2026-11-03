@@ -1,0 +1,57 @@
+# Configuration des PNJ parlants : modèle à copier.
+#   cp config.toml.example config.toml
+# puis renseignez cle_api dans config.toml (ce fichier-là n'est pas versionné).
+
+[moteurs]
+creation = "claude"        # création des fiches : "claude" (réseau nécessaire) ou "local"
+dialogue = "local"         # répliques des PNJ : "claude" ou "local" (fonctionne sans réseau)
+
+[claude]
+cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
+modele = "claude-haiku-5-5"
+
+[claude.generation]        # création de la fiche du PNJ (JSON)
+max_tokens = 2000          # la réflexion du modèle compte dans cette limite
+effort = "low"             # low | medium | high | xhigh | max
+
+[claude.dialogue]          # répliques du PNJ
+max_tokens = 250
+effort = "low"
+
+[local]                    # modèle local servi par Ollama (voir docker-compose.yml)
+url = "http://localhost:11434"
+modele = "qwen3:8b"        # ~5 Go de mémoire vidéo. Autres essais possibles : "gemma3:12b", "mistral-nemo"
+reflexion = false          # coupe le mode réflexion des modèles qui en ont un (Qwen 3) : bien plus rapide
+contexte = 8192            # tokens lus à chaque requête (fiche + univers + historique)
+temperature = 0.8
+garder_en_memoire = "2h"   # évite de recharger le modèle sur la carte graphique entre deux répliques
+delai_max = 180            # secondes ; le tout premier appel charge le modèle et prend plus longtemps
+
+[local.generation]
+max_tokens = 1500
+
+[local.dialogue]
+max_tokens = 200
+
+[dialogue]
+historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
+
+[voix]
+dossier = "voices"         # dossier des voix Piper (relatif à app.py, ou chemin absolu)
+
+# Genre de chaque voix Piper, pour donner au PNJ une voix de son genre.
+# Une voix absente de cette liste ne sert que pour les PNJ « neutre ».
+[voix.genres]
+fr_FR-siwis-medium = "feminin"
+fr_FR-tom-medium   = "masculin"
+fr_FR-upmc-medium  = { feminin = [0], masculin = [1] }   # 0 = jessica, 1 = pierre
+# fr_FR-mls-medium : 125 locuteurs de genre inconnu. Pour l'utiliser, listez les numéros, ex. :
+# fr_FR-mls-medium = { feminin = [3, 8], masculin = [0, 1] }
+
+[banque]
+dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)
+
+[serveur]
+hote = "0.0.0.0"
+port = 5000
+https = false              # true : HTTPS auto-signé, nécessaire pour le micro depuis une autre machine

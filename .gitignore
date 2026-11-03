@@ -1,0 +1,11 @@
+# Configuration locale (contient la clé API) : partir de config.toml.example
+config.toml
+
+.venv/
+__pycache__/
+
+# Certificat HTTPS auto-signé généré au premier lancement
+certs/
+
+# Voix Piper (268 Mo) : se retéléchargent avec python -m piper.download_voices (voir README)
+voices/

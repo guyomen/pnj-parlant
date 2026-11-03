@@ -1,0 +1,5 @@
+flask>=3.0
+anthropic>=2.4  # output_config (effort, sorties structurées)
+piper-tts>=1.3
+# pour https = true dans config.toml (certificat auto-signé) :
+pyopenssl

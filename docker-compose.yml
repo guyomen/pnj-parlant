@@ -1,0 +1,28 @@
+# Modèle local pour les PNJ, servi par Ollama dans un conteneur (rien n'est installé sur la machine,
+# à part Docker et le NVIDIA Container Toolkit).
+#
+#   docker compose up -d                                  # démarre Ollama (et au démarrage du PC ensuite)
+#   docker compose exec ollama ollama pull qwen3:8b       # télécharge le modèle, À FAIRE AVEC LE RÉSEAU
+#   docker compose down                                   # arrête Ollama
+#
+# Les modèles sont gardés dans le volume « ollama-modeles » :
+#   docker compose down -v                                # supprime aussi les modèles téléchargés
+services:
+  ollama:
+    image: ollama/ollama:0.34.4   # version testée ; changez-la pour mettre Ollama à jour
+    container_name: pnj-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"   # accessible seulement depuis ce PC (l'application Flask)
+    volumes:
+      - ollama-modeles:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama-modeles:

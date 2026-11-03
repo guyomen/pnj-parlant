@@ -1,0 +1,39 @@
+/* Styles communs : page de jeu (index.html) et page de création (creation.html). */
+:root {
+  --bg: #DCE3DB; --surface: #EEF2EC; --ink: #18241F; --muted: #4D5F57;
+  --glass: #2F5D50; --verdigris: #6FA392; --wax: #9B2D2A; --wax-ink: #FBEFEA;
+  --line: #B9C7BD;
+  --display: "IM Fell English", "Iowan Old Style", Georgia, serif;
+  --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark;
+    --bg: #121A17; --surface: #1C2723; --ink: #DCE3DB; --muted: #9DB0A6;
+    --glass: #7DB8A6; --verdigris: #4F8A7B; --wax: #C0443F; --wax-ink: #FFF4F0;
+    --line: #2E3D37; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+       font: 1.05rem/1.55 var(--body); }
+
+/* Fiche du PNJ */
+.npc { background: var(--surface); border-left: 6px solid var(--glass);
+       padding: 1.5rem; border-radius: 0 10px 10px 0; }
+.npc h1 { font: 400 2.6rem/1.05 var(--display); margin: 0 0 .25rem; }
+.npc .metier { font: italic 1.2rem var(--display); color: var(--glass); margin: 0 0 1rem; }
+.npc p { margin: 0 0 .6rem; }
+.npc .k { color: var(--muted); }
+.npc .empty { color: var(--muted); }
+.gen { display: flex; gap: .5rem; margin-top: 1.25rem; flex-wrap: wrap; }
+input[type=text], textarea { flex: 1; min-width: 10rem; font: inherit; color: var(--ink);
+       background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .55rem .7rem; }
+textarea { width: 100%; resize: vertical; line-height: 1.45; }
+button { font: 500 1rem var(--body); cursor: pointer; border-radius: 6px;
+         border: 1px solid var(--glass); background: var(--glass); color: var(--surface);
+         padding: .55rem 1rem; }
+button.ghost { background: transparent; color: var(--glass); }
+button:disabled { opacity: .5; cursor: wait; }
+:focus-visible { outline: 3px solid var(--verdigris); outline-offset: 2px; }
+select { flex: 1; min-width: 10rem; font: inherit; color: var(--ink); background: var(--bg);
+         border: 1px solid var(--line); border-radius: 6px; padding: .5rem; }
+a.link { color: var(--glass); font-weight: 500; }

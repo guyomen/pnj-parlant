@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Préparation des PNJ</title>
+<link href="fonts/fonts.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+<style>
+  header { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1.5rem 0;
+           display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  header h1 { font: 400 2.4rem/1.1 var(--display); margin: 0; }
+  main { max-width: 76rem; margin: 0 auto; padding: 1.5rem;
+         display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
+  @media (min-width: 60rem) { main { grid-template-columns: 26rem 1fr; align-items: start; } }
+
+  .panel { background: var(--surface); border-radius: 10px; padding: 1.25rem 1.5rem; }
+  .panel + .panel { margin-top: 1.5rem; }
+  .panel h2 { font: 400 1.5rem var(--display); margin: 0 0 .25rem; }
+  .hint { color: var(--muted); font-size: .92rem; margin: 0 0 .9rem; }
+  label { display: block; font-weight: 500; margin: .8rem 0 .3rem; }
+  label small { font-weight: 400; color: var(--muted); }
+  .grid2 { display: grid; gap: 0 1rem; grid-template-columns: 1fr; }
+  @media (min-width: 40rem) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .grid2 > div { display: flex; flex-direction: column; }
+  .grid2 input, .grid2 select { flex: none; width: 100%; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
+  .status { min-height: 1.5rem; color: var(--muted); font-style: italic; margin-top: .5rem; }
+  .sheet { border-left: 6px solid var(--glass); border-radius: 0 10px 10px 0; }
+  .sheet .mode { color: var(--glass); font: italic 1.1rem var(--display); margin: 0 0 .5rem; }
+  .voice { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .8rem;
+           padding-top: .8rem; border-top: 1px solid var(--line); color: var(--muted); }
+  .voice span { flex: 1; min-width: 12rem; }
+
+  .bank-list { list-style: none; margin: 0; padding: 0; }
+  .bank-list li { display: flex; align-items: center; gap: .5rem; padding: .45rem 0; border-bottom: 1px solid var(--line); }
+  .bank-list .who { flex: 1; min-width: 0; }
+  .bank-list .who small { display: block; color: var(--muted); }
+  .bank-list button { padding: .3rem .7rem; font-size: .9rem; }
+  .bank-list li.current .who { font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Préparation des PNJ</h1>
+  <a class="link" href="/">← Retour au jeu</a>
+</header>
+<main>
+  <div>
+    <section class="panel">
+      <h2>Scénario</h2>
+      <p class="hint">Les PNJ s’appuient sur ce contexte au lieu d’inventer des lieux, des factions ou des personnages.</p>
+      <label for="monde">Univers <small>— connu de tous les PNJ, transmis pendant les dialogues</small></label>
+      <textarea id="monde" rows="9" placeholder="Ex. : La ville de Brumecôte, port de pêche sur la côte nord. Le bourgmestre Aldric Ventemer. La guilde des Saleurs contrôle le commerce du poisson. Depuis un mois, les bateaux disparaissent en mer…"></textarea>
+      <label for="notes">Notes du MJ <small>— servent à créer les PNJ, jamais transmises pendant les dialogues</small></label>
+      <textarea id="notes" rows="6" placeholder="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…"></textarea>
+      <div class="actions">
+        <button id="saveScenarioBtn">Enregistrer le scénario</button>
+        <span class="status" id="scenarioStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Banque de PNJ</h2>
+      <ul class="bank-list" id="bankList"></ul>
+    </section>
+  </div>
+
+  <div>
+    <section class="panel">
+      <h2>Demander un PNJ</h2>
+      <p class="hint">Le modèle de création (Claude par défaut, réseau nécessaire) propose une fiche à partir du scénario et de vos consignes. Vous pouvez ensuite tout modifier.</p>
+      <div class="grid2">
+        <div><label for="reqRole">Métier <small>(vide = au hasard)</small></label>
+          <input type="text" id="reqRole" placeholder="Ex. aubergiste"></div>
+        <div><label for="reqNom">Nom <small>(vide = inventé)</small></label>
+          <input type="text" id="reqNom" placeholder="Ex. Maïwenn Salicorne"></div>
+        <div><label for="reqGenre">Genre</label>
+          <select id="reqGenre">
+            <option value="">Au choix</option><option value="feminin">Féminin</option>
+            <option value="masculin">Masculin</option><option value="neutre">Neutre</option>
+          </select></div>
+      </div>
+      <label for="reqConsignes">Rôle dans le scénario <small>— ce qu’il sait, ce qu’il cache, son lien avec l’intrigue</small></label>
+      <textarea id="reqConsignes" rows="4" placeholder="Ex. : Tient l’auberge du port. A vu des lumières sur l’îlot la nuit des disparitions, mais a peur du bourgmestre."></textarea>
+      <div class="actions">
+        <button id="genBtn">Proposer un PNJ</button>
+        <span class="status" id="genStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel sheet">
+      <p class="mode" id="mode">Nouveau PNJ</p>
+      <div class="grid2">
+        <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
+        <div><label for="f-metier">Métier</label><input type="text" id="f-metier"></div>
+        <div><label for="f-genre">Genre</label>
+          <select id="f-genre"><option value="feminin">Féminin</option><option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
+        <div><label for="f-humeur">Humeur</label><input type="text" id="f-humeur"></div>
+        <div><label for="f-timbre">Timbre de voix</label>
+          <select id="f-timbre"><option value="grave">Grave</option><option value="moyen">Moyen</option><option value="aigu">Aigu</option></select></div>
+        <div><label for="f-debit">Débit</label>
+          <select id="f-debit"><option value="lent">Lent</option><option value="normal">Normal</option><option value="rapide">Rapide</option></select></div>
+      </div>
+      <label for="f-apparence">Apparence</label><textarea id="f-apparence" rows="2"></textarea>
+      <label for="f-personnalite">Personnalité</label><textarea id="f-personnalite" rows="2"></textarea>
+      <label for="f-tic_de_langage">Tic de langage</label><input type="text" id="f-tic_de_langage" style="width:100%">
+      <label for="f-connaissances">Ce qu’il sait et peut révéler <small>— une information par ligne</small></label>
+      <textarea id="f-connaissances" rows="4"></textarea>
+      <label for="f-secret">Secret <small>— révélé seulement si le joueur gagne sa confiance</small></label>
+      <textarea id="f-secret" rows="2"></textarea>
+      <label for="f-salutation">Première réplique</label><textarea id="f-salutation" rows="2"></textarea>
+      <div class="voice">
+        <span id="voiceLabel">Voix : —</span>
+        <button class="ghost" id="listenBtn">Écouter</button>
+        <button class="ghost" id="voiceBtn">Autre voix</button>
+      </div>
+      <div class="actions">
+        <button id="saveBtn">Enregistrer dans la banque</button>
+        <button class="ghost" id="newBtn">Nouveau PNJ</button>
+        <span class="status" id="saveStatus"></span>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "apparence", "personnalite",
+                "tic_de_langage", "connaissances", "secret", "salutation"];
+let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
+let dirty = false;    // modifications non enregistrées
+
+async function api(path, body, method = body === undefined ? "GET" : "POST") {
+  const opts = { method, headers: { "Content-Type": "application/json" } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
+  return data;
+}
+
+// --- Fiche éditable ----------------------------------------------------------
+function fillForm(npc) {
+  current = npc;
+  for (const k of FIELDS) {
+    const v = npc[k] ?? "";
+    $(`f-${k}`).value = Array.isArray(v) ? v.join("\n") : v;
+  }
+  if (!npc.genre) $("f-genre").value = "neutre";
+  if (!npc.timbre) $("f-timbre").value = "moyen";
+  if (!npc.debit) $("f-debit").value = "normal";
+  $("mode").textContent = npc.id ? `Modification de ${npc.nom}` : (npc.nom ? "Proposition (non enregistrée)" : "Nouveau PNJ");
+  showVoice();
+  dirty = false;
+  renderBank();
+}
+
+function readForm() {
+  const npc = { ...current };
+  for (const k of FIELDS) npc[k] = $(`f-${k}`).value.trim();
+  npc.connaissances = npc.connaissances.split("\n").map(s => s.trim()).filter(Boolean);
+  return npc;
+}
+
+function showVoice() {
+  const v = current.voix;
+  $("voiceLabel").textContent = v?.name ? `Voix : ${v.name.replace(/^fr_FR-|-medium$/g, "")} · locuteur ${v.speaker}` : "Voix : attribuée à l’enregistrement";
+}
+
+const confirmDiscard = () => !dirty || confirm("Les modifications de la fiche en cours seront perdues. Continuer ?");
+
+// --- Scénario ----------------------------------------------------------------
+async function loadScenario() {
+  const s = await api("/api/scenario").catch(() => ({}));
+  $("monde").value = s.monde || "";
+  $("notes").value = s.notes_mj || "";
+}
+async function saveScenario() {
+  try {
+    await api("/api/scenario", { monde: $("monde").value, notes_mj: $("notes").value }, "PUT");
+    $("scenarioStatus").textContent = "Scénario enregistré.";
+  } catch (e) { $("scenarioStatus").textContent = e.message; }
+}
+
+// --- Banque ------------------------------------------------------------------
+let bank = [];
+async function refreshBank() { bank = await api("/api/bank").catch(() => []); renderBank(); }
+function renderBank() {
+  $("bankList").innerHTML = bank.length ? bank.map(n => `
+    <li class="${n.id === current.id ? "current" : ""}">
+      <span class="who">${esc(n.nom)}<small>${esc(n.metier)}</small></span>
+      <button class="ghost" data-edit="${esc(n.id)}">Modifier</button>
+      <button class="ghost" data-del="${esc(n.id)}" aria-label="Supprimer ${esc(n.nom)}">Supprimer</button>
+    </li>`).join("") : `<li class="hint">Aucun PNJ enregistré.</li>`;
+}
+$("bankList").onclick = async (e) => {
+  const edit = e.target.dataset.edit, del = e.target.dataset.del;
+  try {
+    if (edit && confirmDiscard()) fillForm(await api(`/api/bank/${encodeURIComponent(edit)}`));
+    if (del) {
+      const n = bank.find(x => x.id === del);
+      if (!confirm(`Supprimer « ${n?.nom} » de la banque ?`)) return;
+      await api(`/api/bank/${encodeURIComponent(del)}`, undefined, "DELETE");
+      if (current.id === del) { delete current.id; $("mode").textContent = "Proposition (non enregistrée)"; }
+      await refreshBank();
+    }
+  } catch (err) { $("saveStatus").textContent = err.message; }
+};
+
+// --- Génération, enregistrement, voix ---------------------------------------
+async function generate() {
+  if (!confirmDiscard()) return;
+  $("genBtn").disabled = true; $("genStatus").textContent = "Le PNJ prend forme…";
+  try {
+    fillForm(await api("/api/npc/generate", { role: $("reqRole").value, nom: $("reqNom").value,
+                                              genre: $("reqGenre").value, consignes: $("reqConsignes").value }));
+    $("genStatus").textContent = "Proposition prête : relisez et ajustez la fiche ci-dessous.";
+  } catch (e) { $("genStatus").textContent = e.message; }
+  $("genBtn").disabled = false;
+}
+
+async function save() {
+  const npc = readForm();
+  if (!npc.nom || !npc.salutation) { $("saveStatus").textContent = "Il faut au moins un nom et une première réplique."; return; }
+  try {
+    const { id } = npc.id ? await api(`/api/bank/${encodeURIComponent(npc.id)}`, npc, "PUT")
+                          : await api("/api/bank", npc);
+    fillForm(await api(`/api/bank/${encodeURIComponent(id)}`));  // relit la voix attribuée par le serveur
+    await refreshBank();
+    $("saveStatus").textContent = `${npc.nom} est enregistré.`;
+  } catch (e) { $("saveStatus").textContent = e.message; }
+}
+
+async function otherVoice() {
+  try { current.voix = await api("/api/voice", readForm()); showVoice(); dirty = true; }
+  catch (e) { $("saveStatus").textContent = e.message; }
+}
+
+async function listen() {
+  const text = $("f-salutation").value.trim();
+  if (!text) return;
+  if (!current.voix?.name) await otherVoice();
+  const r = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ text, voice: current.voix }) });
+  if (!r.ok) { $("saveStatus").textContent = "Voix Piper indisponible sur cette machine."; return; }
+  new Audio(URL.createObjectURL(await r.blob())).play();
+}
+
+$("genBtn").onclick = generate;
+$("saveBtn").onclick = save;
+$("newBtn").onclick = () => { if (confirmDiscard()) fillForm({}); };
+$("voiceBtn").onclick = otherVoice;
+$("listenBtn").onclick = listen;
+$("saveScenarioBtn").onclick = saveScenario;
+document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
+$("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
+window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
+
+fillForm({});
+loadScenario();
+refreshBank();
+</script>
+</body>
+</html>
