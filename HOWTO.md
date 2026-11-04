@@ -1,6 +1,6 @@
 # Installer les PNJ parlants sur Windows
 
-Ce guide installe l'application sur un PC Windows 10 ou 11 équipé d'une carte graphique NVIDIA, pour jouer **sans réseau** une fois l'installation faite.
+Ce guide installe l'application sur un PC Windows 10 ou 11 équipé d'une carte graphique NVIDIA ou AMD, pour jouer **sans réseau** une fois l'installation faite.
 
 Comptez environ une heure, avec une bonne connexion : il faut télécharger environ 10 Go (Docker, le modèle local, les voix).
 
@@ -9,8 +9,10 @@ Ce qui sera installé :
 | Élément | Rôle |
 |---|---|
 | Python | fait tourner l'application (le serveur et les voix Piper) |
-| Docker Desktop | fait tourner le modèle local dans un conteneur, sans rien installer d'autre sur la machine |
-| Ollama (dans Docker) | sert le modèle de langage qui fait parler les PNJ |
+| Ollama | sert le modèle de langage qui fait parler les PNJ |
+| Docker Desktop (carte NVIDIA seulement) | fait tourner Ollama dans un conteneur, sans rien installer d'autre sur la machine |
+
+Sous Windows, Docker ne sait pas utiliser une carte AMD : avec une carte AMD, Ollama s'installe directement sur le PC, sans Docker. Pour connaître votre carte : Gestionnaire des tâches > Performance > GPU.
 
 Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « PowerShell », puis Entrée.
 
@@ -74,7 +76,11 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
 
-## 4. Docker et le modèle local
+## 4. Le modèle local
+
+Suivez **4A** pour une carte NVIDIA, **4B** pour une carte AMD.
+
+### 4A. Carte NVIDIA : Ollama dans Docker
 
 1. **Mettez à jour le pilote NVIDIA** depuis [nvidia.com/drivers](https://www.nvidia.com/drivers) ou l'application NVIDIA. Sous Windows, c'est tout ce qu'il faut pour que Docker accède à la carte graphique : rien à installer en plus.
 2. **Installez WSL 2**, dont Docker a besoin. Ouvrez PowerShell **en administrateur** (clic droit sur PowerShell, « Exécuter en tant qu'administrateur ») :
@@ -106,9 +112,38 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
 
    Une ligne doit mentionner **CUDA** et le nom de votre carte. Si elle parle seulement de CPU, voir [Dépannage](#dépannage).
 
+### 4B. Carte AMD : Ollama installé sur le PC
+
+N'installez pas Docker : il ne servirait à rien ici, et un Ollama dans Docker prendrait le même port que celui installé sur le PC.
+
+Ollama gère sous Windows les cartes Radeon récentes (RX 6000, 7000 et 9000, et certaines Radeon PRO) ; la liste exacte est sur [docs.ollama.com/gpu](https://docs.ollama.com/gpu). Pour une carte plus ancienne ou une puce graphique intégrée, voir [Dépannage](#dépannage).
+
+1. **Mettez à jour le pilote AMD** (AMD Software: Adrenalin Edition) depuis [amd.com/support](https://www.amd.com/fr/support/download/drivers.html), puis redémarrez le PC.
+2. **Installez Ollama** :
+
+   ```powershell
+   winget install Ollama.Ollama
+   ```
+
+   Ou téléchargez-le sur [ollama.com/download](https://ollama.com/download). Ollama démarre ensuite tout seul à l'ouverture de la session (icône de lama près de l'horloge).
+3. **Fermez PowerShell, rouvrez-le, puis téléchargez le modèle** (environ 5 Go) :
+
+   ```powershell
+   ollama pull qwen3:8b
+   ```
+4. **Vérifiez que la carte graphique est utilisée** : ouvrez le journal d'Ollama.
+
+   ```powershell
+   notepad $env:LOCALAPPDATA\Ollama\server.log
+   ```
+
+   Une ligne doit mentionner **ROCm** et le nom de votre carte. Si elle parle seulement de CPU, voir [Dépannage](#dépannage).
+
+Dans la suite de ce guide, remplacez `docker compose exec ollama ollama` par `ollama` tout court : par exemple `ollama ps` au lieu de `docker compose exec ollama ollama ps`.
+
 ## 5. Lancer une partie
 
-Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il démarre le modèle local, puis l'application.
+Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il démarre le modèle local (avec une carte AMD, Ollama tourne déjà), puis l'application.
 
 Ouvrez ensuite **http://localhost:5000** dans Chrome ou Edge, sur ce PC. Si vous avez changé le `port` dans `config.toml`, remplacez 5000 par votre port.
 
@@ -130,7 +165,7 @@ Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un r
 Avec le réseau, vérifiez que tout est sur le PC :
 
 - [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `python generer_banque.py 20`. La création passe par Claude, donc demande le réseau.
-- [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` affiche `qwen3:8b`.
+- [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
 - [ ] Les voix Piper sont dans `voices\`.
 - [ ] **Test complet en coupant le Wi-Fi ou le câble réseau** : lancez `lancer.bat`, jouez un PNJ et posez-lui une question.
 
@@ -145,10 +180,11 @@ Avec le réseau, vérifiez que tout est sur le PC :
 | `docker` n'est pas reconnu | Docker Desktop n'est pas lancé ou PowerShell a été ouvert avant l'installation : lancez Docker Desktop, puis rouvrez PowerShell. |
 | `lancer.bat` dit « Docker ne répond pas » | Docker Desktop démarre encore : attendez que son icône indique « Engine running », puis relancez. |
 | Les logs d'Ollama ne parlent que de CPU, ou les réponses sont très lentes | Mettez à jour le pilote NVIDIA, redémarrez le PC, puis `docker compose down` et `docker compose up -d`. Vérifiez aussi que Docker Desktop utilise WSL 2 (Settings > General > « Use the WSL 2 based engine »). |
-| « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. |
-| « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (avec le réseau). |
+| Carte AMD : le journal d'Ollama ne parle que de CPU, ou les réponses sont très lentes | Mettez à jour le pilote AMD et redémarrez le PC. Si votre carte n'est pas dans la [liste d'Ollama](https://docs.ollama.com/gpu) (RX 5000 ou plus ancienne, puce intégrée), essayez le mode Vulkan, encore expérimental : `setx OLLAMA_VULKAN 1`, puis quittez Ollama (clic droit sur l'icône du lama, « Quit Ollama ») et relancez-le depuis le menu Démarrer. |
+| « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. Carte AMD : Ollama n'est pas lancé, démarrez-le depuis le menu Démarrer. |
+| « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (carte AMD : `ollama pull qwen3:8b`), avec le réseau. |
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
 | Pas de voix Piper, voix robotique du navigateur | Les voix ne sont pas dans `voices\` (voir étape 2.3), ou `piper-tts` ne s'est pas installé. |
 | Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
 
-**Désinstaller le modèle local** : `docker compose down -v` arrête Ollama et supprime les modèles téléchargés. Docker Desktop se désinstalle ensuite comme n'importe quel programme.
+**Désinstaller le modèle local** : `docker compose down -v` arrête Ollama et supprime les modèles téléchargés. Docker Desktop se désinstalle ensuite comme n'importe quel programme. Carte AMD : `ollama rm qwen3:8b` supprime le modèle, puis Ollama se désinstalle comme n'importe quel programme.
