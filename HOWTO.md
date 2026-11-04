@@ -8,7 +8,7 @@ Ce qui sera installé :
 
 | Élément | Rôle |
 |---|---|
-| Python | fait tourner l'application (le serveur et les voix Piper) |
+| Python | fait tourner l'application (le serveur, les voix, la reconnaissance vocale) |
 | Ollama | sert le modèle de langage qui fait parler les PNJ |
 | Docker Desktop (carte NVIDIA seulement) | fait tourner Ollama dans un conteneur, sans rien installer d'autre sur la machine |
 
@@ -51,14 +51,19 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
    ```
 
-   Si l'installation de `piper-tts` échoue, installez le reste avec `pip install flask anthropic pyopenssl` : l'application fonctionnera avec la voix du navigateur à la place de Piper.
-3. Téléchargez les voix françaises :
+   Si l'installation de `piper-tts` échoue, installez le reste avec `pip install flask anthropic pyopenssl faster-whisper` : l'application fonctionnera avec la voix du navigateur à la place de Piper.
+3. Si vous choisissez les voix Piper (voir l'étape 3), téléchargez-les :
 
    ```powershell
    mkdir voices
    cd voices
    python -m piper.download_voices fr_FR-siwis-medium fr_FR-tom-medium fr_FR-upmc-medium fr_FR-mls-medium
    cd ..
+   ```
+4. Téléchargez le modèle de reconnaissance vocale (environ 500 Mo), qui comprend ce que vous dites au micro sans passer par internet :
+
+   ```powershell
+   python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
    ```
 
 ## 3. La configuration
@@ -72,6 +77,7 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
 2. Dans le Bloc-notes :
    - `cle_api` (section `[claude]`) : votre clé API Anthropic, entre guillemets. Elle sert à créer les PNJ quand vous avez le réseau.
    - `dialogue = "local"` (section `[moteurs]`) : les PNJ parleront avec le modèle local, sans réseau.
+   - `moteur` (section `[voix]`) : `"pocket"` (le plus naturel sans réseau, conseillé), `"piper"` (plus léger) ou `"edge"` (le plus naturel, mais seulement avec le réseau). Le comparatif est dans le [README](README.md#synthèse-vocale).
 3. Enregistrez et fermez.
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
@@ -166,10 +172,11 @@ Avec le réseau, vérifiez que tout est sur le PC :
 
 - [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `python generer_banque.py 20`. La création passe par Claude, donc demande le réseau.
 - [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
-- [ ] Les voix Piper sont dans `voices\`.
+- [ ] Les voix sont téléchargées : avec `moteur = "pocket"`, l'application a été lancée une fois avec le réseau et la fenêtre n'affiche aucune « voix indisponible » ; avec `moteur = "piper"`, les voix sont dans `voices\`. Le moteur `edge` ne marche pas sans réseau.
+- [ ] Le modèle de reconnaissance vocale est dans `modeles-stt\small\` (étape 2.4), et `config.toml` contient la section `[reconnaissance]` avec `moteur = "local"`.
 - [ ] **Test complet en coupant le Wi-Fi ou le câble réseau** : lancez `lancer.bat`, jouez un PNJ et posez-lui une question.
 
-**Important :** pour l'instant, la reconnaissance vocale du micro passe par les serveurs de Google, via Chrome. Sans réseau, **tapez les questions au clavier**. La reconnaissance vocale locale est la prochaine étape du projet.
+Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaissance vocale passe par les serveurs de Google (Chrome) ou Microsoft (Edge) et ne marchera pas sans réseau : téléchargez le modèle (étape 2.4).
 
 ---
 
@@ -183,8 +190,10 @@ Avec le réseau, vérifiez que tout est sur le PC :
 | Carte AMD : le journal d'Ollama ne parle que de CPU, ou les réponses sont très lentes | Mettez à jour le pilote AMD et redémarrez le PC. Si votre carte n'est pas dans la [liste d'Ollama](https://docs.ollama.com/gpu) (RX 5000 ou plus ancienne, puce intégrée), essayez le mode Vulkan, encore expérimental : `setx OLLAMA_VULKAN 1`, puis quittez Ollama (clic droit sur l'icône du lama, « Quit Ollama ») et relancez-le depuis le menu Démarrer. |
 | « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. Carte AMD : Ollama n'est pas lancé, démarrez-le depuis le menu Démarrer. |
 | « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (carte AMD : `ollama pull qwen3:8b`), avec le réseau. |
+| « Modèle Whisper absent » au lancement | Le modèle de reconnaissance vocale n'est pas téléchargé (étape 2.4), ou `modele` dans la section `[reconnaissance]` de `config.toml` ne correspond pas au dossier de `modeles-stt\`. |
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
-| Pas de voix Piper, voix robotique du navigateur | Les voix ne sont pas dans `voices\` (voir étape 2.3), ou `piper-tts` ne s'est pas installé. |
+| Voix robotique du navigateur à la place de celle du PNJ | Pocket TTS : lancez l'application une fois avec le réseau pour télécharger le modèle et les voix. Piper : les voix ne sont pas dans `voices\` (étape 2.3). Edge : le réseau est coupé. |
+| « Pocket TTS : voix … indisponible » au lancement | Cette voix n'a pas encore été téléchargée : relancez l'application avec le réseau. |
 | Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
 
 **Désinstaller le modèle local** : `docker compose down -v` arrête Ollama et supprime les modèles téléchargés. Docker Desktop se désinstalle ensuite comme n'importe quel programme. Carte AMD : `ollama rm qwen3:8b` supprime le modèle, puis Ollama se désinstalle comme n'importe quel programme.

@@ -1,5 +1,8 @@
 flask>=3.0
 anthropic>=2.4  # output_config (effort, sorties structurées)
 piper-tts>=1.3
+pocket-tts>=4.0     # voix locale plus naturelle (installe PyTorch, ~1 Go)
+edge-tts>=7.0       # voix de Microsoft Edge (en ligne)
+faster-whisper>=1.2  # reconnaissance vocale locale
 # pour https = true dans config.toml (certificat auto-signé) :
 pyopenssl

@@ -36,17 +36,37 @@ max_tokens = 200
 [dialogue]
 historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
 
-[voix]
+[voix]                     # synthèse vocale : lit les répliques des PNJ
+moteur = "pocket"          # "pocket" : Pocket TTS de Kyutai, local, naturel, ~1 Go, demande le processeur d'un PC ;
+                           # "piper"  : local, très léger (Raspberry Pi), voix plus mécaniques ;
+                           # "edge"   : voix de Microsoft Edge, les plus naturelles, mais réseau nécessaire.
+                           # Changer de moteur donne une nouvelle voix aux PNJ (la même à chaque chargement).
+
+# Pocket TTS : 22 voix intégrées. Pour changer leur liste ou corriger un genre, recopiez-les toutes ici :
+# [voix.pocket.genres]
+# estelle = "feminin"
+# javert  = "masculin"
+# Edge : 8 voix françaises, belges et suisses ; même principe avec [voix.edge.genres]
+# (noms complets, ex. "fr-FR-HenriNeural" = "masculin").
+
+[voix.piper]
 dossier = "voices"         # dossier des voix Piper (relatif à app.py, ou chemin absolu)
 
 # Genre de chaque voix Piper, pour donner au PNJ une voix de son genre.
 # Une voix absente de cette liste ne sert que pour les PNJ « neutre ».
-[voix.genres]
+[voix.piper.genres]
 fr_FR-siwis-medium = "feminin"
 fr_FR-tom-medium   = "masculin"
 fr_FR-upmc-medium  = { feminin = [0], masculin = [1] }   # 0 = jessica, 1 = pierre
 # fr_FR-mls-medium : 125 locuteurs de genre inconnu. Pour l'utiliser, listez les numéros, ex. :
 # fr_FR-mls-medium = { feminin = [3, 8], masculin = [0, 1] }
+
+[reconnaissance]           # saisie vocale du joueur
+moteur = "local"           # "local" : faster-whisper sur ce PC, sans réseau ;
+                           # "navigateur" : Web Speech API de Chrome / Edge (envoie l'audio à Google ou Microsoft)
+modele = "small"           # tiny, base, small, medium, large-v3-turbo : plus gros = plus juste mais plus lent
+dossier = "modeles-stt"    # le modèle est dans <dossier>/<modele> (voir README pour le télécharger)
+appareil = "cpu"           # "cpu", ou "cuda" pour une carte NVIDIA (demande les bibliothèques CUDA 12 et cuDNN 9)
 
 [banque]
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)

@@ -26,10 +26,14 @@ pnj-vocal/
   Le serveur ajoute `voix` (voix Piper + speaker_id + length_scale, et pitch/rate pour le repli navigateur).
 - `POST /api/npc/talk {npc, history, message}` : la fiche devient le prompt système ;
   serveur sans état, l'historique est conservé côté navigateur (12 derniers messages).
+  Réponse en streaming NDJSON, une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`),
+  pour Claude comme pour Ollama ; le navigateur lit chaque phrase dès qu'elle arrive.
   Les réponses doivent rester courtes (1-3 phrases), sans markdown/emoji/astérisques, car lues à voix haute.
-- `POST /api/tts {text, voice}` : synthèse Piper → WAV. Sans voix Piper, le navigateur
-  utilise `speechSynthesis`.
-- Reconnaissance vocale du joueur : Web Speech API (Chrome/Edge uniquement, fr-FR).
+- `POST /api/tts {text, voice}` : synthèse vocale par le moteur de `[voix] moteur` (voix.py) :
+  `pocket` (Pocket TTS, local, WAV), `piper` (local, WAV) ou `edge` (en ligne, MP3).
+  En cas d'échec (503), le navigateur utilise `speechSynthesis`.
+- `POST /api/stt` (audio webm/opus + indice) : faster-whisper, local, section `[reconnaissance]`
+  de config.toml. Repli sur la Web Speech API (Chrome/Edge, en ligne) si le modèle manque.
   Le micro exige `localhost` ou HTTPS → `NPC_HTTPS=1` active un certificat auto-signé.
 
 ## Lancement
@@ -47,7 +51,6 @@ requête n'apparaît côté Python. Pistes : `index.html` pas dans `static/` ; a
 sur le port 5000 (ancienne instance, AirPlay sur macOS). À diagnostiquer en premier.
 
 ## Pistes pour la suite
-- STT 100 % local avec faster-whisper (alternative à la Web Speech API de Chrome).
 - Persistance des PNJ créés (JSON ou SQLite).
 - Contexte de monde partagé (ville, rumeurs du jour) et inventaire/prix pour les marchands.
 - Vérifier la latence et la charge sur Raspberry Pi.

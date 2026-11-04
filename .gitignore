@@ -9,3 +9,6 @@ certs/
 
 # Voix Piper (268 Mo) : se retéléchargent avec python -m piper.download_voices (voir README)
 voices/
+
+# Modèles Whisper (reconnaissance vocale) : se retéléchargent, voir README
+modeles-stt/

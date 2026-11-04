@@ -1,6 +1,6 @@
 # PNJ parlants (PoC)
 
-Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Piper lui donne une voix, et vous lui parlez au micro depuis le navigateur.
+Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Pocket TTS, Piper ou Edge lui donne une voix, et vous lui parlez au micro depuis le navigateur. faster-whisper reconnaît votre voix sur la machine, sans réseau.
 
 ## Installation (PC ou Raspberry Pi)
 
@@ -11,10 +11,13 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp config.toml.example config.toml   # puis renseignez cle_api = "sk-ant-..."
 
-# Voix françaises Piper (une ou plusieurs, elles seront tirées au sort)
+# Voix françaises Piper, si vous choisissez ce moteur de voix (une ou plusieurs, tirées au sort)
 mkdir -p voices && cd voices
 python -m piper.download_voices fr_FR-siwis-medium fr_FR-tom-medium fr_FR-upmc-medium fr_FR-mls-medium
 cd ..
+
+# Modèle Whisper pour la reconnaissance vocale (environ 500 Mo)
+python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
 
 python app.py
 ```
@@ -28,9 +31,9 @@ Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `h
 ## Comment ça marche
 
 - `POST /api/npc/generate` : Haiku renvoie une fiche JSON (nom, métier, humeur, rumeurs, secret, salutation, timbre, débit). Humeur, trait et initiale du nom sont tirés au sort côté Python pour éviter les PNJ qui se ressemblent.
-- `POST /api/npc/talk` : la fiche devient le prompt système, l'historique est renvoyé par le navigateur (serveur sans état).
-- `POST /api/tts` : Piper synthétise la réplique avec une voix et un locuteur tirés au hasard parmi ceux du genre du PNJ (section `[voix.genres]` de `config.toml`). Sans voix Piper, le navigateur lit le texte lui-même (`speechSynthesis`), avec une hauteur adaptée au timbre.
-- Saisie vocale : Web Speech API du navigateur, en français.
+- `POST /api/npc/talk` : la fiche devient le prompt système, l'historique est renvoyé par le navigateur (serveur sans état). La réplique arrive en streaming, avec Claude comme avec le modèle local : le serveur la découpe en phrases et envoie chacune dès qu'elle est complète (une ligne JSON par phrase). Le navigateur affiche et fait lire la première phrase pendant que le modèle écrit la suite, et prépare la voix de la phrase suivante pendant la lecture.
+- `POST /api/tts` : le moteur de voix choisi (voir [Synthèse vocale](#synthèse-vocale)) lit la phrase avec la voix attribuée au PNJ, tirée parmi celles de son genre. En cas d'échec, le navigateur lit le texte lui-même (`speechSynthesis`), avec une hauteur adaptée au timbre.
+- `POST /api/stt` : faster-whisper transcrit l'enregistrement du micro (webm/opus envoyé par le navigateur), en français, avec le nom et le métier du PNJ comme indice de vocabulaire. Le navigateur coupe l'enregistrement après une seconde de silence.
 
 ## Préparer le scénario et les PNJ (pour jouer sans réseau)
 
@@ -53,7 +56,7 @@ python generer_banque.py 20                       # 20 PNJ aux métiers tirés a
 python generer_banque.py 5 --metier "aubergiste"  # 5 aubergistes
 ```
 
-Si la voix Piper d'un PNJ n'existe pas sur la machine qui l'ouvre, une autre voix du même genre est choisie.
+Si la voix d'un PNJ n'existe pas sur la machine qui l'ouvre, ou vient d'un autre moteur de voix, une autre voix du même genre est choisie, toujours la même pour ce PNJ.
 
 ## Modèle local pour les dialogues (sans réseau)
 
@@ -74,16 +77,43 @@ Le conteneur redémarre ensuite avec le PC. `docker compose down` l'arrête ; `d
 
 **Changer de modèle** : téléchargez-le (`ollama pull`), puis changez `modele` dans la section `[local]`. Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
 
-**Avant de partir sans réseau**, vérifiez que tout est sur le PC : l'image Docker et le modèle (`docker compose exec ollama ollama list`), les voix Piper dans `voices/`, et la banque de PNJ dans `pnj/`.
+**Avant de partir sans réseau**, vérifiez que tout est sur le PC : l'image Docker et le modèle (`docker compose exec ollama ollama list`), les voix (lancez l'application une fois avec le réseau pour Pocket TTS ; `voices/` pour Piper), et la banque de PNJ dans `pnj/`.
+
+## Synthèse vocale
+
+Trois moteurs, au choix dans la section `[voix]` de `config.toml` (`moteur = ...`) :
+
+| Moteur | Où | Qualité en français | Matériel | Voix |
+|---|---|---|---|---|
+| `pocket` ([Pocket TTS](https://github.com/kyutai-labs/pocket-tts), Kyutai) | local, sans réseau | naturelle | processeur d'un PC ; une phrase prend 1 à 3 s | 22 (12 féminines, 10 masculines) |
+| `piper` ([Piper](https://github.com/OHF-Voice/piper1-gpl)) | local, sans réseau | correcte, un peu mécanique | très léger, convient au Raspberry Pi | celles téléchargées dans `voices/` |
+| `edge` ([edge-tts](https://github.com/rany2/edge-tts)) | serveurs de Microsoft | la plus naturelle | aucun, mais **réseau obligatoire** | 8 (France, Belgique, Suisse) |
+
+- **Pocket TTS** télécharge son modèle (environ 250 Mo) et ses voix au premier lancement : lancez l'application une fois avec le réseau, et attendez que la console n'affiche plus rien. Une voix qui n'a pas pu être téléchargée est signalée dans la console et n'est pas attribuée. Le débit du PNJ (`lent`, `rapide`) n'est pas appliqué, ni le timbre.
+- **Edge** applique le débit et le timbre du PNJ. Sans réseau, c'est la voix du navigateur qui prend le relais. Le service est gratuit mais non officiel : Microsoft peut le changer ou le couper.
+- Les genres des voix Pocket et Edge sont fixés dans [voix.py](voix.py) ; on peut les remplacer dans `config.toml` (voir les commentaires de `config.toml.example`).
+
+Les répliques sont lues phrase par phrase, une phrase étant regroupée avec la suivante tant qu'elle fait moins de 40 caractères (« Ah ! »), pour éviter des blancs entre deux sons trop courts.
+
+## Reconnaissance vocale locale
+
+Avec `moteur = "local"` dans la section `[reconnaissance]` de `config.toml`, votre voix est transcrite sur la machine par [faster-whisper](https://github.com/SYSTRAN/faster-whisper) : rien ne part sur internet. Avec `moteur = "navigateur"`, ou si le modèle n'est pas téléchargé, la page utilise la Web Speech API de Chrome ou Edge, qui envoie l'audio à Google ou Microsoft et ne marche donc pas sans réseau.
+
+Le modèle se télécharge une fois, avec le réseau, dans `modeles-stt/` :
+
+```bash
+python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
+```
+
+Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un Raspberry Pi. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
 
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, dossier des voix, hôte, port et HTTPS. Relancez `python app.py` après une modification.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, hôte, port et HTTPS. Relancez `python app.py` après une modification.
 
 `config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 
 ## Pistes pour la suite
 
-- Reconnaissance vocale 100 % locale avec `faster-whisper` (la Web Speech API de Chrome envoie l'audio aux serveurs de Google).
 - Sauvegarder les PNJ créés (fichier JSON ou SQLite) pour les retrouver d'une session à l'autre.
 - Donner au PNJ un inventaire et des prix fixes, ou un contexte commun (ville, actualité) partagé par tous les PNJ.

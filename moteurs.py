@@ -40,11 +40,14 @@ class Moteurs:
                             {"effort": cfg["effort"], "format": {"type": "json_schema", "schema": schema}})
 
     def replique(self, system, messages):
-        """Réplique du PNJ dans le dialogue."""
+        """Réplique du PNJ dans le dialogue, morceau de texte par morceau de texte (générateur),
+        pour commencer à la lire avant qu'elle soit finie.
+        Lève MoteurIndisponible dès l'appel si le moteur ne répond pas ; pendant la lecture du
+        générateur si la connexion se coupe en cours de route."""
         if self.choix["dialogue"] == "local":
-            return self._local(system, messages, self.local_cfg["dialogue"]["max_tokens"])
+            return self._local_flux(system, messages, self.local_cfg["dialogue"]["max_tokens"])
         cfg = self.claude_cfg["dialogue"]
-        return self._claude(system, messages, cfg["max_tokens"], {"effort": cfg["effort"]})
+        return self._claude_flux(system, messages, cfg["max_tokens"], {"effort": cfg["effort"]})
 
     # --- Claude ---------------------------------------------------------------
     def _claude(self, system, messages, max_tokens, output_config):
@@ -59,13 +62,54 @@ class Moteurs:
             print(f"[claude] réponse coupée à max_tokens={max_tokens}")
         return "".join(b.text for b in msg.content if b.type == "text")
 
+    def _claude_flux(self, system, messages, max_tokens, output_config):
+        try:  # la requête part ici : une erreur de connexion est levée avant de renvoyer le générateur
+            flux = self.client.messages.create(model=self.claude_cfg["modele"], max_tokens=max_tokens,
+                                               system=system, messages=messages, output_config=output_config,
+                                               stream=True)
+        except anthropic.APIConnectionError as e:
+            raise MoteurIndisponible("Pas de connexion à Claude.") from e
+        except anthropic.APIStatusError as e:
+            raise MoteurIndisponible(f"Claude a refusé la requête ({e.status_code}).") from e
+
+        def morceaux():
+            try:
+                for event in flux:
+                    if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                        yield event.delta.text
+                    elif event.type == "message_delta" and event.delta.stop_reason == "max_tokens":
+                        print(f"[claude] réponse coupée à max_tokens={max_tokens}")
+            except anthropic.APIError as e:
+                raise MoteurIndisponible("La connexion à Claude s'est interrompue.") from e
+        return morceaux()
+
     # --- Modèle local (API d'Ollama) ------------------------------------------
     def _local(self, system, messages, max_tokens, schema=None):
+        with self._ollama(system, messages, max_tokens, schema, stream=False) as r:
+            data = json.loads(r.read())
+        return data.get("message", {}).get("content", "")
+
+    def _local_flux(self, system, messages, max_tokens):
+        r = self._ollama(system, messages, max_tokens, stream=True)
+
+        def morceaux():
+            # Ollama envoie une ligne JSON par morceau de texte, jusqu'à "done": true
+            try:
+                with r:
+                    for ligne in r:
+                        if ligne.strip():
+                            yield json.loads(ligne).get("message", {}).get("content", "")
+            except (OSError, ValueError) as e:  # coupure réseau, délai dépassé, ligne illisible
+                raise MoteurIndisponible("Le modèle local s'est interrompu.") from e
+        return morceaux()
+
+    def _ollama(self, system, messages, max_tokens, schema=None, stream=False):
+        """Envoie la requête à Ollama et renvoie la réponse HTTP ouverte."""
         cfg = self.local_cfg
         body = {
             "model": cfg["modele"],
             "messages": [{"role": "system", "content": system}] + messages,
-            "stream": False,
+            "stream": stream,
             "keep_alive": cfg.get("garder_en_memoire", "2h"),  # évite de recharger le modèle à chaque réplique
             "options": {"num_predict": max_tokens, "num_ctx": cfg.get("contexte", 8192),
                         "temperature": cfg.get("temperature", 0.8)},
@@ -77,8 +121,7 @@ class Moteurs:
         req = urllib.request.Request(f"{cfg['url'].rstrip('/')}/api/chat", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=cfg.get("delai_max", 180)) as r:
-                data = json.loads(r.read())
+            return urllib.request.urlopen(req, timeout=cfg.get("delai_max", 180))
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")
             if e.code == 404:
@@ -87,4 +130,3 @@ class Moteurs:
             raise MoteurIndisponible(f"Le modèle local a renvoyé une erreur : {detail[:200]}") from e
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             raise MoteurIndisponible("Modèle local injoignable : lancez-le avec « docker compose up -d ».") from e
-        return data.get("message", {}).get("content", "")

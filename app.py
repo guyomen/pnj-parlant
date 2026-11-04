@@ -1,8 +1,9 @@
 """
 PoC : générateur de PNJ parlants.
 - Claude Haiku ou un modèle local (Ollama) invente le PNJ (fiche JSON) puis joue son rôle.
-- Piper lit les répliques à voix haute (sinon, repli sur la voix du navigateur).
-- La reconnaissance vocale du joueur se fait dans le navigateur (Web Speech API).
+- Piper, Pocket TTS ou Edge lit les répliques à voix haute (sinon, repli sur la voix du navigateur).
+- La voix du joueur est reconnue sur le serveur par faster-whisper (sans réseau),
+  ou à défaut par le navigateur (Web Speech API, qui envoie l'audio à Google ou Microsoft).
 
 Lancement :  python app.py   puis ouvrir http://localhost:5000
 Réglages :   config.toml (à créer à partir de config.toml.example)
@@ -12,13 +13,14 @@ import json
 import random
 import re
 import secrets
+import threading
 import tomllib
 import unicodedata
-import wave
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, Response, jsonify, request, send_file
 
+import voix
 from moteurs import MoteurIndisponible, Moteurs
 
 BASE_DIR = Path(__file__).parent
@@ -30,39 +32,37 @@ with open(CONFIG_PATH, "rb") as f:
     CONFIG = tomllib.load(f)
 
 HISTORIQUE = CONFIG.get("dialogue", {}).get("historique", 12)  # messages gardés pour le contexte
-VOICES_DIR = BASE_DIR / CONFIG["voix"]["dossier"]  # un chemin absolu reste absolu
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 moteurs = Moteurs(CONFIG)  # Claude ou modèle local, d'après la section [moteurs]
+tts = voix.charger(CONFIG, BASE_DIR)  # Piper, Pocket TTS ou Edge, d'après la section [voix]
 
-# --- Piper (optionnel) -------------------------------------------------------
+# --- Reconnaissance vocale locale : faster-whisper (optionnel) ---------------
 try:
-    from piper import PiperVoice, SynthesisConfig
-    PIPER_OK = True
+    from faster_whisper import WhisperModel
+    WHISPER_OK = True
 except ImportError:
-    PIPER_OK = False
+    WHISPER_OK = False
 
-_voice_cache = {}
-
-
-def list_voices():
-    """Toutes les voix .onnx présentes dans voices/, avec leur nombre de locuteurs."""
-    if not PIPER_OK or not VOICES_DIR.exists():
-        return []
-    voices = []
-    for onnx in sorted(VOICES_DIR.glob("*.onnx")):
-        cfg = onnx.with_suffix(".onnx.json")
-        speakers = 1
-        if cfg.exists():
-            speakers = json.loads(cfg.read_text(encoding="utf-8")).get("num_speakers", 1)
-        voices.append({"name": onnx.stem, "speakers": max(1, speakers)})
-    return voices
+STT_CFG = CONFIG.get("reconnaissance", {})
+STT_DIR = BASE_DIR / STT_CFG.get("dossier", "modeles-stt") / STT_CFG.get("modele", "small")
+_stt_model = None
+_stt_lock = threading.Lock()
 
 
-def load_voice(name):
-    if name not in _voice_cache:
-        _voice_cache[name] = PiperVoice.load(VOICES_DIR / f"{name}.onnx")
-    return _voice_cache[name]
+def stt_local():
+    """Vrai si la reconnaissance locale est choisie et que le modèle est sur la machine."""
+    return STT_CFG.get("moteur", "navigateur") == "local" and WHISPER_OK and (STT_DIR / "model.bin").exists()
+
+
+def load_stt():
+    global _stt_model
+    with _stt_lock:  # deux requêtes simultanées ne chargent pas le modèle deux fois
+        if _stt_model is None:
+            appareil = STT_CFG.get("appareil", "cpu")
+            _stt_model = WhisperModel(str(STT_DIR), device=appareil,
+                                      compute_type="float16" if appareil == "cuda" else "int8")
+    return _stt_model
 
 
 # --- Aléatoire injecté côté code (pour éviter les PNJ tous pareils) ----------
@@ -123,40 +123,58 @@ def clean_for_speech(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def speaker_genders(voice):
-    """{numéro de locuteur: genre} d'après la section [voix.genres] de config.toml."""
-    g = CONFIG["voix"].get("genres", {}).get(voice["name"])
-    if isinstance(g, str):  # voix à un seul genre : tous ses locuteurs
-        return {i: g for i in range(voice["speakers"])}
-    if isinstance(g, dict):  # voix multi-locuteurs : { feminin = [0], masculin = [1] }
-        return {i: genre for genre, ids in g.items() for i in ids if i < voice["speakers"]}
-    return {}  # genre inconnu
+# Fin de phrase : ponctuation, éventuels guillemets ou parenthèse fermants, puis une espace
+FIN_DE_PHRASE = re.compile(r"[.!?…]+[»”\"')]*\s+")
+PHRASE_MIN = 40  # caractères : « Ah ! » attend la phrase suivante, pour éviter un blanc entre deux sons
 
 
-def assign_voice(npc):
-    """Choisit une voix Piper du genre du PNJ (et un réglage navigateur) d'après timbre et débit."""
+def phrases(morceaux):
+    """Regroupe en phrases complètes le texte qui arrive morceau par morceau,
+    pour que chaque phrase soit lue pendant que le modèle écrit la suivante."""
+    tampon = ""
+    for morceau in morceaux:
+        tampon += morceau
+        while True:
+            # on ne coupe pas au milieu d'une didascalie *...*, que clean_for_speech retire en entier
+            fin = next((m.end() for m in FIN_DE_PHRASE.finditer(tampon)
+                        if len(tampon[:m.end()].strip()) >= PHRASE_MIN
+                        and tampon[:m.end()].count("*") % 2 == 0), None)
+            if fin is None:
+                break
+            yield tampon[:fin]
+            tampon = tampon[fin:]
+    if tampon.strip():
+        yield tampon
+
+
+def assign_voice(npc, rng=random):
+    """Choisit une voix du moteur de synthèse, du genre du PNJ, réglée d'après son timbre et son débit
+    (avec aussi un réglage pour la voix du navigateur, en repli)."""
     genre = npc.get("genre")
     debit = {"lent": 1.2, "normal": 1.0, "rapide": 0.85}.get(npc.get("debit"), 1.0)
     pitch = {"grave": 0.7, "moyen": 1.0, "aigu": 1.35}.get(npc.get("timbre"), 1.0)
     pitch *= {"feminin": 1.25, "masculin": 0.85}.get(genre, 1.0)  # voix du navigateur
-    voice = {"length_scale": round(debit * random.uniform(0.95, 1.05), 2),
+    voice = {"length_scale": round(debit * rng.uniform(0.95, 1.05), 2), "timbre": npc.get("timbre"),
              "browser_pitch": round(pitch, 2), "browser_rate": round(1 / debit, 2)}
-    voices = list_voices()
-    if voices:
-        # Locuteurs du bon genre ; à défaut (PNJ neutre ou aucune voix de ce genre), n'importe lequel.
-        matching = [(v["name"], i) for v in voices
-                    for i, g in speaker_genders(v).items() if g == genre]
-        everyone = [(v["name"], i) for v in voices for i in range(v["speakers"])]
-        voice["name"], voice["speaker"] = random.choice(matching or everyone)
+    catalogue = tts.catalogue()
+    if catalogue:
+        # Voix du bon genre ; à défaut (PNJ neutre ou aucune voix de ce genre), n'importe laquelle.
+        matching = [v for v, g in catalogue if g == genre]
+        voice.update(rng.choice(matching or [v for v, _ in catalogue]))
     voice["genre"] = genre
+    voice["moteur"] = tts.nom
     return voice
 
 
 def ensure_voice(npc):
-    """Réattribue une voix si celle du PNJ manque sur cette machine ou ne correspond plus à son genre."""
+    """Réattribue une voix si celle du PNJ vient d'un autre moteur de synthèse, manque sur cette machine
+    ou ne correspond plus à son genre."""
     v = npc.get("voix") or {}
-    if v.get("name") not in {x["name"] for x in list_voices()} or v.get("genre") != npc.get("genre"):
-        npc["voix"] = assign_voice(npc)
+    connues = [(c["name"], c.get("speaker")) for c, _ in tts.catalogue()]
+    if (v.get("moteur", "piper") != tts.nom or (v.get("name"), v.get("speaker")) not in connues
+            or v.get("genre") != npc.get("genre")):
+        # tirage fixé par le nom : le PNJ retrouve la même voix à chaque chargement
+        npc["voix"] = assign_voice(npc, random.Random(npc.get("nom", "")))
     return npc
 
 
@@ -168,7 +186,8 @@ def index():
 
 @app.get("/api/config")
 def config():
-    return jsonify({"moteurs": moteurs.description(), "piper": bool(list_voices()), "voices": list_voices()})
+    return jsonify({"moteurs": moteurs.description(), "tts": tts.nom if tts.catalogue() else None,
+                    "stt_local": stt_local()})
 
 
 def create_npc(role="", nom="", genre="", consignes=""):
@@ -377,33 +396,62 @@ def talk():
         messages.append({"role": "user", "content": message})
 
     try:
-        reply = moteurs.replique(npc_system_prompt(npc), messages)
+        morceaux = moteurs.replique(npc_system_prompt(npc), messages)
     except MoteurIndisponible as e:
         return jsonify({"error": str(e)}), 503
-    return jsonify({"reply": clean_for_speech(reply)})
+
+    def lignes():
+        """Une ligne JSON par phrase prête à être lue : {"phrase": "..."}, ou {"error": "..."}."""
+        try:
+            for phrase in map(clean_for_speech, phrases(morceaux)):
+                if phrase:
+                    yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
+        except MoteurIndisponible as e:
+            yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"
+    return Response(lignes(), mimetype="application/x-ndjson")
 
 
 @app.post("/api/tts")
-def tts():
+def synthese():
     data = request.json or {}
     text = clean_for_speech(data.get("text", ""))[:600]
-    voice = data.get("voice") or {}
-    names = {v["name"]: v["speakers"] for v in list_voices()}
-    name = voice.get("name")
-    if not text or name not in names:  # protège aussi contre les chemins arbitraires
-        return jsonify({"error": "Voix Piper indisponible."}), 404
+    if not text:
+        return jsonify({"error": "Rien à lire."}), 400
+    try:
+        audio, mimetype = tts.synthese(text, data.get("voice") or {})
+    except voix.VoixIndisponible as e:
+        app.logger.warning("Synthèse vocale : %s", e)
+        return jsonify({"error": "Synthèse vocale indisponible."}), 503
+    return send_file(io.BytesIO(audio), mimetype=mimetype)
 
-    speaker = voice.get("speaker") if names[name] > 1 else None
-    cfg = SynthesisConfig(speaker_id=speaker,
-                          length_scale=float(voice.get("length_scale", 1.0)))
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wav_file:
-        load_voice(name).synthesize_wav(text, wav_file, syn_config=cfg)
-    buf.seek(0)
-    return send_file(buf, mimetype="audio/wav")
+
+@app.post("/api/stt")
+def stt():
+    """Transcrit l'enregistrement du micro (webm/opus envoyé par le navigateur)."""
+    audio = request.files.get("audio")
+    if not stt_local():
+        return jsonify({"error": "Reconnaissance vocale locale indisponible."}), 404
+    if not audio:
+        return jsonify({"error": "Aucun enregistrement reçu."}), 400
+    # L'indice (nom et métier du PNJ) aide Whisper à écrire les noms propres et le vocabulaire du jeu.
+    indice = request.form.get("indice", "").strip()[:200] or None
+    try:
+        segments, _ = load_stt().transcribe(io.BytesIO(audio.read()), language="fr", beam_size=1,
+                                            vad_filter=True, initial_prompt=indice)
+        text = " ".join(s.text.strip() for s in segments).strip()
+    except ValueError:
+        text = ""  # enregistrement vide ou illisible
+    return jsonify({"text": text})
 
 
 if __name__ == "__main__":
+    threading.Thread(target=tts.prechauffer, daemon=True).start()  # voix prêtes avant la 1re réplique
+    if STT_CFG.get("moteur") == "local":
+        if stt_local():
+            threading.Thread(target=load_stt, daemon=True).start()  # prêt avant la première question
+        else:
+            print(f"[reconnaissance] modèle Whisper absent de {STT_DIR} : la reconnaissance du navigateur "
+                  "sera utilisée. Téléchargez-le avec le réseau (voir README).")
     # HTTPS auto-signé si serveur.https = true : nécessaire pour le micro quand on
     # accède au serveur depuis une autre machine (ex. le Raspberry Pi sur le réseau).
     # Le certificat est créé une seule fois dans certs/ puis réutilisé : le navigateur

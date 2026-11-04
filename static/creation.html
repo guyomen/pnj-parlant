@@ -166,7 +166,7 @@ function readForm() {
 
 function showVoice() {
   const v = current.voix;
-  $("voiceLabel").textContent = v?.name ? `Voix : ${v.name.replace(/^fr_FR-|-medium$/g, "")} · locuteur ${v.speaker}` : "Voix : attribuée à l’enregistrement";
+  $("voiceLabel").textContent = v?.name ? `Voix : ${v.label ?? v.name}` : "Voix : attribuée à l’enregistrement";
 }
 
 const confirmDiscard = () => !dirty || confirm("Les modifications de la fiche en cours seront perdues. Continuer ?");
@@ -244,7 +244,7 @@ async function listen() {
   if (!current.voix?.name) await otherVoice();
   const r = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ text, voice: current.voix }) });
-  if (!r.ok) { $("saveStatus").textContent = "Voix Piper indisponible sur cette machine."; return; }
+  if (!r.ok) { $("saveStatus").textContent = "Synthèse vocale indisponible (voix absente, ou réseau coupé pour Edge)."; return; }
   new Audio(URL.createObjectURL(await r.blob())).play();
 }
 

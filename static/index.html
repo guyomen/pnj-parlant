@@ -74,7 +74,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-let cfg = { piper: false };
+let cfg = { tts: null };
 let npc = null;
 let history = [];
 let busy = false;
@@ -91,12 +91,34 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
   return data;
 }
 
+// Lit une réponse NDJSON (un objet JSON par ligne) au fur et à mesure qu'elle arrive
+async function apiStream(path, body, onItem) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(body) });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Erreur serveur (${r.status})`);
+  }
+  const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += value;
+    const lines = buf.split("\n");
+    buf = lines.pop();  // ligne pas encore complète
+    for (const line of lines) if (line.trim()) onItem(JSON.parse(line));
+  }
+  if (buf.trim()) onItem(JSON.parse(buf));
+}
+
 function addLine(role, text) {
   const div = document.createElement("div");
   div.className = "line " + (role === "assistant" ? "npc-line" : "pj");
-  div.innerHTML = `<span class="who">${role === "assistant" ? esc(npc.nom) : "Vous"}</span>${esc(text)}`;
+  div.innerHTML = `<span class="who">${role === "assistant" ? esc(npc.nom) : "Vous"}</span><span class="text">${esc(text)}</span>`;
   $("log").appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
+  return div;
 }
 
 function renderCard() {
@@ -112,24 +134,31 @@ function renderCard() {
 function setBusy(b) {
   busy = b;
   for (const id of ["genBtn", "sendBtn", "ask"]) $(id).disabled = b || (id !== "genBtn" && !npc);
-  $("micBtn").disabled = b || !npc || !recognition;
+  $("micBtn").disabled = b || !npc || !(cfg.stt_local || recognition);
   $("saveBtn").disabled = b || !npc || !!npc.id;  // déjà dans la banque
   $("loadBtn").disabled = b || !$("bankSel").value;
 }
 
 // --- Voix du PNJ -------------------------------------------------------------
-async function speak(text) {
-  if (cfg.piper && npc.voix?.name) {
-    try {
-      const r = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ text, voice: npc.voix }) });
-      if (r.ok) {
-        const audio = new Audio(URL.createObjectURL(await r.blob()));
-        await new Promise((res) => { audio.onended = res; audio.onerror = res; audio.play().catch(res); });
-        return;
-      }
-    } catch (e) { /* repli sur la voix du navigateur */ }
-  }
+// Lance tout de suite la synthèse (Piper, Pocket TTS ou Edge) et renvoie une fonction qui joue
+// le son : la phrase suivante se prépare ainsi pendant que la précédente est lue.
+function prepareSpeech(text) {
+  const audioFile = cfg.tts && npc.voix?.name
+    ? fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ text, voice: npc.voix }) })
+        .then(r => r.ok ? r.blob() : null).catch(() => null)
+    : Promise.resolve(null);
+  return async () => {
+    const blob = await audioFile;
+    if (!blob) return browserSpeak(text);  // repli sur la voix du navigateur
+    const audio = new Audio(URL.createObjectURL(blob));
+    await new Promise((res) => { audio.onended = res; audio.onerror = res; audio.play().catch(res); });
+  };
+}
+
+const speak = (text) => prepareSpeech(text)();
+
+async function browserSpeak(text) {
   if (!("speechSynthesis" in window)) return;
   await new Promise((res) => {
     const u = new SpeechSynthesisUtterance(text);
@@ -196,17 +225,85 @@ async function send(text) {
   $("ask").value = "";
   addLine("user", text);
   setBusy(true); status(`${npc.nom} réfléchit…`);
+  let line = null, reply = "", voice = Promise.resolve();
   try {
-    const { reply } = await api("/api/npc/talk", { npc, history, message: text });
-    history.push({ role: "user", content: text }, { role: "assistant", content: reply });
-    addLine("assistant", reply);
-    status("");
-    await speak(reply);
+    // Chaque phrase est affichée et lue dès qu'elle arrive, pendant que le modèle écrit la suite
+    await apiStream("/api/npc/talk", { npc, history, message: text }, (item) => {
+      if (item.error) throw new Error(item.error);
+      if (!line) { line = addLine("assistant", ""); status(""); }
+      reply += (reply ? " " : "") + item.phrase;
+      line.querySelector(".text").textContent = reply;
+      line.scrollIntoView({ behavior: "smooth", block: "end" });
+      voice = voice.then(prepareSpeech(item.phrase));
+    });
   } catch (e) { status(e.message); }
+  if (reply) history.push({ role: "user", content: text }, { role: "assistant", content: reply });
+  await voice;
   setBusy(false);
 }
 
-// --- Reconnaissance vocale du joueur (Chrome / Edge) ------------------------
+// --- Reconnaissance vocale du joueur ------------------------------------------
+// Sur le serveur (faster-whisper, sans réseau) si config.toml le prévoit,
+// sinon dans le navigateur (Web Speech API de Chrome / Edge, qui passe par internet).
+function micPressed(on) {
+  $("micBtn").setAttribute("aria-pressed", on ? "true" : "false");
+  $("micBtn").textContent = on ? "J’écoute" : "Parler";
+}
+
+let stopListening = () => recognition?.stop();
+
+async function listenLocal() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    status("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).");
+    return;
+  }
+  const rec = new MediaRecorder(stream);
+  const chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+
+  // Arrêt automatique après une seconde de silence, comme la reconnaissance du navigateur
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  const start = performance.now();
+  let heard = false, lastSound = start;
+  const timer = setInterval(() => {
+    analyser.getFloatTimeDomainData(samples);
+    const level = Math.sqrt(samples.reduce((sum, x) => sum + x * x, 0) / samples.length);
+    const now = performance.now();
+    if (level > 0.02) { heard = true; lastSound = now; }
+    if ((heard && now - lastSound > 1200) || (!heard && now - start > 8000) || now - start > 30000) stopListening();
+  }, 100);
+
+  stopListening = () => { if (rec.state !== "inactive") rec.stop(); };
+
+  rec.onstop = async () => {
+    clearInterval(timer); ctx.close(); stream.getTracks().forEach(t => t.stop());
+    micPressed(false);
+    if (!heard) { status("Je n’ai rien entendu."); return; }
+    setBusy(true); status("Je transcris…");
+    let text = "";
+    try {
+      const form = new FormData();
+      form.append("audio", new Blob(chunks, { type: rec.mimeType }), "micro.webm");
+      form.append("indice", `Dialogue avec ${npc.nom}, ${npc.metier}.`);
+      const r = await fetch("/api/stt", { method: "POST", body: form });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
+      text = data.text;
+      status(text ? "" : "Je n’ai pas compris. Recommencez ou tapez votre question.");
+    } catch (e) { status(e.message); }
+    setBusy(false);
+    if (text) send(text);
+  };
+  rec.start();
+  micPressed(true);
+}
+
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
 if (SR) {
@@ -215,7 +312,7 @@ if (SR) {
   recognition.interimResults = true;
   recognition.continuous = false;
   let finalText = "";
-  recognition.onstart = () => { finalText = ""; $("micBtn").setAttribute("aria-pressed", "true"); $("micBtn").textContent = "J’écoute"; };
+  recognition.onstart = () => { finalText = ""; micPressed(true); };
   recognition.onresult = (ev) => {
     let interim = "";
     for (const r of ev.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
@@ -227,15 +324,16 @@ if (SR) {
       : `Reconnaissance vocale : ${ev.error}`);
   };
   recognition.onend = () => {
-    $("micBtn").setAttribute("aria-pressed", "false"); $("micBtn").textContent = "Parler";
+    micPressed(false);
     if (finalText) send(finalText);
   };
 }
 
 $("micBtn").onclick = () => {
-  if (!recognition) return;
-  if ($("micBtn").getAttribute("aria-pressed") === "true") recognition.stop();
-  else { speechSynthesis?.cancel(); recognition.start(); }
+  if ($("micBtn").getAttribute("aria-pressed") === "true") return stopListening();
+  speechSynthesis?.cancel();
+  if (cfg.stt_local) listenLocal();
+  else recognition?.start();
 };
 $("genBtn").onclick = generate;
 $("loadBtn").onclick = loadFromBank;
@@ -246,8 +344,9 @@ $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate()
 
 fetch("/api/config").then(r => r.json()).then(c => {
   cfg = c;
-  if (!recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
-  else if (!c.piper) status("Aucune voix Piper trouvée : la voix du navigateur sera utilisée.");
+  setBusy(busy);
+  if (!c.stt_local && !recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
+  else if (!c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
 });
 setBusy(false);
 refreshBank();
