@@ -64,7 +64,13 @@ Les répliques des PNJ peuvent venir d'un modèle qui tourne sur le PC, servi pa
 
 **Installation, une fois, avec le réseau** (PC avec carte NVIDIA) :
 
-1. Installez Docker, le plugin `docker compose` et le [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), qui donne au conteneur l'accès à la carte graphique.
+1. Installez Docker, le plugin `docker compose` et le [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), qui donne au conteneur l'accès à la carte graphique. Sous Ubuntu :
+
+   ```bash
+   sudo ubuntu-drivers install && sudo reboot   # pilote NVIDIA (Docker ne sait pas utiliser le pilote libre « nouveau »)
+   nvidia-smi                                   # après le redémarrage : doit afficher la carte
+   sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+   ```
 2. Démarrez Ollama et téléchargez le modèle (environ 5 Go) :
 
    ```bash
@@ -74,6 +80,22 @@ Les répliques des PNJ peuvent venir d'un modèle qui tourne sur le PC, servi pa
 3. Vérifiez que le modèle utilise bien la carte graphique : `docker compose exec ollama ollama ps` doit afficher `100% GPU` après une première réplique.
 
 Le conteneur redémarre ensuite avec le PC. `docker compose down` l'arrête ; `docker compose down -v` supprime aussi les modèles téléchargés.
+
+**Petite carte graphique (4 Go, ex. NVIDIA T400)** : `qwen3:8b` ne tient pas. Réglages testés pour que le modèle tourne à 100 % sur le GPU (environ 21 tokens/s, une réplique en 3 à 5 s) :
+
+- Modèle `qwen3:4b-instruct` (2,5 Go) : `docker compose exec ollama ollama pull qwen3:4b-instruct`, puis `modele = "qwen3:4b-instruct"` dans `[local]`. Évitez le tag `qwen3:4b` tout court : il réfléchit toujours, même avec `reflexion = false`, et lit son raisonnement à voix haute.
+- `contexte = 2048` dans `[local]`. Ça suffit : une création de PNJ demande au plus environ 1900 tokens, un dialogue avec 12 messages d'historique environ 1200. Un long univers de scénario s'ajoute à chaque requête : passez alors à 3072, au prix d'environ 10 % du modèle sur le processeur.
+- La *flash attention* et la mémoire de conversation compressée (`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`) sont déjà réglées dans [docker-compose.yml](docker-compose.yml).
+- Le bureau Linux occupe environ 700 Mo de mémoire vidéo. Si l'écran du PC ne sert pas (accès en SSH), coupez-le avec [ecran.sh](ecran.sh) :
+
+  ```bash
+  ./ecran.sh couper                 # jusqu'au prochain redémarrage
+  ./ecran.sh couper --permanent     # le PC démarrera aussi sans écran graphique
+  ./ecran.sh rallumer [--permanent] # inverse
+  ./ecran.sh etat                   # mémoire vidéo utilisée, et répartition CPU/GPU du modèle
+  ```
+
+  Sans cela, une partie du modèle reste sur le processeur et les répliques sont plus lentes (14 tokens/s mesurés avec l'écran allumé, 21 sans).
 
 **Changer de modèle** : téléchargez-le (`ollama pull`), puis changez `modele` dans la section `[local]`. Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
 

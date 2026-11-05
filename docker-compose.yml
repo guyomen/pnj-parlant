@@ -12,6 +12,9 @@ services:
     image: ollama/ollama:0.34.4   # version testée ; changez-la pour mettre Ollama à jour
     container_name: pnj-ollama
     restart: unless-stopped
+    environment:
+      OLLAMA_FLASH_ATTENTION: "1"   # moins de mémoire vidéo pour le calcul
+      OLLAMA_KV_CACHE_TYPE: q8_0    # mémoire de conversation compressée : le modèle tient mieux sur une carte de 4 Go
     ports:
       - "127.0.0.1:11434:11434"   # accessible seulement depuis ce PC (l'application Flask)
     volumes:
