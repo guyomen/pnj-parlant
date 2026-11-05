@@ -453,7 +453,7 @@ if __name__ == "__main__":
             print(f"[reconnaissance] modèle Whisper absent de {STT_DIR} : la reconnaissance du navigateur "
                   "sera utilisée. Téléchargez-le avec le réseau (voir README).")
     # HTTPS auto-signé si serveur.https = true : nécessaire pour le micro quand on
-    # accède au serveur depuis une autre machine (ex. le Raspberry Pi sur le réseau).
+    # accède au serveur depuis une autre machine (ex. le téléphone d'un joueur).
     # Le certificat est créé une seule fois dans certs/ puis réutilisé : le navigateur
     # garde ainsi l'exception de sécurité et l'autorisation du micro d'un lancement à l'autre.
     srv = CONFIG["serveur"]

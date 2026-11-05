@@ -2,7 +2,7 @@
 
 Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Pocket TTS, Piper ou Edge lui donne une voix, et vous lui parlez au micro depuis le navigateur. faster-whisper reconnaît votre voix sur la machine, sans réseau.
 
-## Installation (PC ou Raspberry Pi)
+## Installation (PC sous Linux)
 
 Sous Windows, suivez plutôt le guide pas à pas [HOWTO.md](HOWTO.md).
 
@@ -24,9 +24,9 @@ python app.py
 
 Ouvrez ensuite http://localhost:5000 dans Chrome ou Edge.
 
-## Accès depuis une autre machine (ex. serveur sur le Raspberry Pi)
+## Accès depuis une autre machine (ex. le téléphone d'un joueur)
 
-Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `python app.py`, puis ouvrez `https://<ip-du-pi>:5000` et acceptez l'avertissement de certificat.
+Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `python app.py`, puis ouvrez `https://<ip-du-pc>:5000` et acceptez l'avertissement de certificat.
 
 ## Comment ça marche
 
@@ -108,7 +108,7 @@ Trois moteurs, au choix dans la section `[voix]` de `config.toml` (`moteur = ...
 | Moteur | Où | Qualité en français | Matériel | Voix |
 |---|---|---|---|---|
 | `pocket` ([Pocket TTS](https://github.com/kyutai-labs/pocket-tts), Kyutai) | local, sans réseau | naturelle | processeur d'un PC ; une phrase prend 1 à 3 s | 22 (12 féminines, 10 masculines) |
-| `piper` ([Piper](https://github.com/OHF-Voice/piper1-gpl)) | local, sans réseau | correcte, un peu mécanique | très léger, convient au Raspberry Pi | celles téléchargées dans `voices/` |
+| `piper` ([Piper](https://github.com/OHF-Voice/piper1-gpl)) | local, sans réseau | correcte, un peu mécanique | très léger, le plus rapide sur un petit processeur | celles téléchargées dans `voices/` |
 | `edge` ([edge-tts](https://github.com/rany2/edge-tts)) | serveurs de Microsoft | la plus naturelle | aucun, mais **réseau obligatoire** | 8 (France, Belgique, Suisse) |
 
 - **Pocket TTS** télécharge son modèle (environ 250 Mo) et ses voix au premier lancement : lancez l'application une fois avec le réseau, et attendez que la console n'affiche plus rien. Une voix qui n'a pas pu être téléchargée est signalée dans la console et n'est pas attribuée. Le débit du PNJ (`lent`, `rapide`) n'est pas appliqué, ni le timbre.
@@ -127,7 +127,7 @@ Le modèle se télécharge une fois, avec le réseau, dans `modeles-stt/` :
 python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
 ```
 
-Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un Raspberry Pi. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
+Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
 
 ## Configuration
 

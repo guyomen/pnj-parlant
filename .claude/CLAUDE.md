@@ -1,56 +1,70 @@
 # PNJ parlants — contexte du projet
 
 ## Objectif
-Générateur de PNJ (personnages non-joueurs) aléatoires pour jeu de rôle médiéval-fantastique,
-avec voix de synthèse. Le joueur parle au PNJ au micro depuis un navigateur, le PNJ répond
-dans son personnage, à voix haute. Langue : français.
+Générateur de PNJ (personnages non-joueurs) pour jeu de rôle médiéval-fantastique, avec voix de
+synthèse. Le MJ prépare un scénario et une banque de PNJ ; le joueur parle au PNJ au micro depuis
+un navigateur, le PNJ répond dans son personnage, à voix haute. Langue : français.
 
 ## Contraintes
-- Serveur Python, destiné à tourner sur un PC ou un Raspberry Pi ; client = navigateur web.
+- Serveur Python sur un PC (le Raspberry Pi est abandonné) ; client = navigateur web (Chrome/Edge),
+  y compris les téléphones des joueurs sur le même Wi-Fi.
+- Jouable sans réseau une fois la préparation faite : chaque brique a une version locale.
 - Solutions gratuites / open source privilégiées pour la voix.
-- LLM : Claude Haiku via l'API Anthropic (`claude-haiku-5-5`, configurable via `NPC_MODEL`).
-  Haiku suffit car le contexte de chaque PNJ est court ; la latence faible compte pour la voix.
+- Réponses courtes (1-3 phrases), sans markdown/emoji/astérisques, car lues à voix haute ; latence faible.
 
-## Architecture actuelle (PoC)
+## Architecture
 ```
-pnj-vocal/
-├── app.py              # Flask : API + service de la page
-├── requirements.txt    # flask, anthropic, piper-tts, pyopenssl
-├── voices/             # modèles Piper .onnx + .onnx.json (à télécharger)
-└── static/index.html   # interface (HTML/CSS/JS vanilla, aucun build)
+app.py               # Flask : routes, prompts, banque de PNJ, reconnaissance vocale
+moteurs.py           # LLM : Claude (API Anthropic) ou modèle local (Ollama)
+voix.py              # synthèse vocale : Pocket TTS, Piper ou Edge
+generer_banque.py    # remplit la banque en lot : python generer_banque.py 20 [--metier ...]
+config.toml(.example)# tous les réglages ; config.toml (clé API) n'est pas versionné
+docker-compose.yml   # Ollama dans Docker (carte NVIDIA)
+lancer.bat, lancerAMD.bat, ecran.sh  # lanceurs Windows ; ecran.sh libère la mémoire vidéo sous Linux
+static/index.html    # page de jeu (HTML/CSS/JS vanilla, aucun build)
+static/creation.html # préparation : scénario + banque de PNJ
+pnj/                 # banque : _scenario.json + un JSON par PNJ (créé à l'usage)
+voices/, modeles-stt/  # voix Piper et modèle Whisper, téléchargés, non versionnés
 ```
-- `GET /api/config` : modèle utilisé + voix Piper détectées dans `voices/`.
-- `POST /api/npc/generate {role}` : Haiku renvoie une fiche JSON (nom, metier, apparence,
-  personnalite, tic_de_langage, humeur, connaissances[3], secret, salutation, timbre, debit).
-  Humeur/trait/initiale du nom sont tirés au sort en Python pour varier les PNJ.
-  Le serveur ajoute `voix` (voix Piper + speaker_id + length_scale, et pitch/rate pour le repli navigateur).
-- `POST /api/npc/talk {npc, history, message}` : la fiche devient le prompt système ;
-  serveur sans état, l'historique est conservé côté navigateur (12 derniers messages).
-  Réponse en streaming NDJSON, une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`),
-  pour Claude comme pour Ollama ; le navigateur lit chaque phrase dès qu'elle arrive.
-  Les réponses doivent rester courtes (1-3 phrases), sans markdown/emoji/astérisques, car lues à voix haute.
-- `POST /api/tts {text, voice}` : synthèse vocale par le moteur de `[voix] moteur` (voix.py) :
-  `pocket` (Pocket TTS, local, WAV), `piper` (local, WAV) ou `edge` (en ligne, MP3).
-  En cas d'échec (503), le navigateur utilise `speechSynthesis`.
-- `POST /api/stt` (audio webm/opus + indice) : faster-whisper, local, section `[reconnaissance]`
-  de config.toml. Repli sur la Web Speech API (Chrome/Edge, en ligne) si le modèle manque.
-  Le micro exige `localhost` ou HTTPS → `NPC_HTTPS=1` active un certificat auto-signé.
+Moteurs, choisis dans `config.toml` :
+- `[moteurs] creation` et `dialogue` : `"claude"` (`claude-haiku-5-5`, `[claude] modele`) ou `"local"`
+  (Ollama, `[local] modele`, ex. `qwen3:4b-instruct` sur 4 Go de VRAM, `qwen3:8b` au-delà).
+- `[voix] moteur` : `pocket` (local, WAV), `piper` (local, WAV) ou `edge` (en ligne, MP3).
+- `[reconnaissance] moteur` : `local` (faster-whisper, modèle dans `modeles-stt/<modele>`) ou `navigateur`.
+
+Routes :
+- `GET /api/config` : moteurs utilisés, moteur de voix, reconnaissance locale disponible ou non.
+- `POST /api/npc/generate {role, nom, genre, consignes}` : fiche JSON imposée par un schéma
+  (nom, metier, apparence, personnalite, tic_de_langage, humeur, connaissances, secret, salutation,
+  genre, timbre, debit). Humeur/trait/initiale du nom tirés au sort en Python pour varier les PNJ.
+  Le serveur ajoute `voix` (voix du genre du PNJ + réglages, et pitch/rate pour le repli navigateur).
+- `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues) et `notes_mj`
+  (servent seulement à la création, jamais envoyées pendant les dialogues).
+- `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>`, `POST /api/voice` (autre voix pour un PNJ).
+  `ensure_voice` réattribue une voix stable (graine = nom) si celle du PNJ manque sur la machine.
+- `POST /api/npc/talk {npc, history, message}` : fiche + univers = prompt système ; serveur sans état,
+  historique côté navigateur (`[dialogue] historique`, 12 messages). Réponse en streaming NDJSON,
+  une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`) ; le navigateur lit chaque phrase dès
+  qu'elle arrive et prépare la voix de la suivante.
+- `POST /api/tts {text, voice}` : en cas d'échec (503), le navigateur utilise `speechSynthesis`.
+- `POST /api/stt` (audio webm/opus + indice) : faster-whisper ; repli sur la Web Speech API.
+
+Le micro exige `localhost` ou HTTPS : `[serveur] https = true` crée un certificat auto-signé dans `certs/`.
 
 ## Lancement
+Voir README.md (Linux) et HOWTO.md (Windows, cartes NVIDIA ou AMD).
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=...
-cd voices && python -m piper.download_voices fr_FR-siwis-medium fr_FR-tom-medium && cd ..
-python app.py   # http://localhost:5000  (PORT pour changer le port)
+cp config.toml.example config.toml   # cle_api, ou variable ANTHROPIC_API_KEY
+python app.py                        # port dans [serveur] port (5000 par défaut)
 ```
-API Piper utilisée : `PiperVoice.load(path)`, `voice.synthesize_wav(text, wav_file, syn_config=SynthesisConfig(speaker_id=..., length_scale=...))`.
 
-## État / problème en cours
-Premier lancement : le serveur démarre mais `/` renvoie « Not Found », et aucun log de
-requête n'apparaît côté Python. Pistes : `index.html` pas dans `static/` ; autre processus
-sur le port 5000 (ancienne instance, AirPlay sur macOS). À diagnostiquer en premier.
+## État
+- Machine de dev en tout-local (`qwen3:4b-instruct`, NVIDIA T400 4 Go, port 7800 en HTTPS).
+  Ollama y tourne encore sur le processeur : installer le pilote NVIDIA, voir A-FAIRE-APRES-INSTALL.md.
+- Aucun test automatisé.
 
 ## Pistes pour la suite
-- Persistance des PNJ créés (JSON ou SQLite).
-- Contexte de monde partagé (ville, rumeurs du jour) et inventaire/prix pour les marchands.
-- Vérifier la latence et la charge sur Raspberry Pi.
+- Contexte de monde plus riche (ville, rumeurs du jour) et inventaire/prix fixes pour les marchands.
+- Vérifier la latence et la charge sur le PC de référence.

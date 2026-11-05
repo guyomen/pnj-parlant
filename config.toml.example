@@ -38,7 +38,7 @@ historique = 12            # nombre de messages gardés pour le contexte (quel q
 
 [voix]                     # synthèse vocale : lit les répliques des PNJ
 moteur = "pocket"          # "pocket" : Pocket TTS de Kyutai, local, naturel, ~1 Go, demande le processeur d'un PC ;
-                           # "piper"  : local, très léger (Raspberry Pi), voix plus mécaniques ;
+                           # "piper"  : local, très léger (petit processeur), voix plus mécaniques ;
                            # "edge"   : voix de Microsoft Edge, les plus naturelles, mais réseau nécessaire.
                            # Changer de moteur donne une nouvelle voix aux PNJ (la même à chaque chargement).
 

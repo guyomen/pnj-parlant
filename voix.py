@@ -2,7 +2,7 @@
 Moteurs de synthèse vocale : lisent à voix haute les répliques des PNJ.
 
 Le choix se fait dans la section [voix] de config.toml :
-    moteur = "piper"    # local, très léger (convient au Raspberry Pi), voix un peu mécaniques
+    moteur = "piper"    # local, très léger (convient à un petit processeur), voix un peu mécaniques
     moteur = "pocket"   # local, Pocket TTS de Kyutai : bien plus naturel, demande le processeur d'un PC
     moteur = "edge"     # voix neuronales de Microsoft Edge : les plus naturelles, mais réseau nécessaire
 Sans moteur disponible, le navigateur lit le texte lui-même (speechSynthesis).
