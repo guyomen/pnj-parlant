@@ -104,7 +104,6 @@
       </div>
       <label for="f-apparence">Apparence</label><textarea id="f-apparence" rows="2"></textarea>
       <label for="f-personnalite">Personnalité</label><textarea id="f-personnalite" rows="2"></textarea>
-      <label for="f-tic_de_langage">Tic de langage</label><input type="text" id="f-tic_de_langage" style="width:100%">
       <label for="f-connaissances">Ce qu’il sait et peut révéler <small>— une information par ligne</small></label>
       <textarea id="f-connaissances" rows="4"></textarea>
       <label for="f-secret">Secret <small>— révélé seulement si le joueur gagne sa confiance</small></label>
@@ -112,8 +111,13 @@
       <label for="f-salutation">Première réplique</label><textarea id="f-salutation" rows="2"></textarea>
       <div class="voice">
         <span id="voiceLabel">Voix : —</span>
+        <select id="engineSel" aria-label="Moteur de voix">
+          <option value="pocket">Pocket TTS (naturel)</option>
+          <option value="piper">Piper (léger)</option>
+          <option value="edge">Edge (en ligne)</option>
+        </select>
+        <select id="voiceSel" aria-label="Choisir une voix"></select>
         <button class="ghost" id="listenBtn">Écouter</button>
-        <button class="ghost" id="voiceBtn">Autre voix</button>
       </div>
       <div class="actions">
         <button id="saveBtn">Enregistrer dans la banque</button>
@@ -128,7 +132,7 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "apparence", "personnalite",
-                "tic_de_langage", "connaissances", "secret", "salutation"];
+                "connaissances", "secret", "salutation"];
 let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
 let dirty = false;    // modifications non enregistrées
 
@@ -164,7 +168,42 @@ function readForm() {
   return npc;
 }
 
+let allVoices = [];
+function fillVoiceList() {
+  const genre = $("f-genre").value;
+  const list = allVoices.filter(v => genre === "neutre" || v.genre === genre);
+  const sel = $("voiceSel");
+  sel.innerHTML = `<option value="">— choisir une voix —</option>` +
+    list.map(v => `<option value="${v.name}">${v.label ?? v.name}</option>`).join("");
+  sel.value = list.some(v => v.name === current.voix?.name) ? current.voix.name : "";
+}
+
+async function loadEngine() {
+  try {
+    $("engineSel").value = (await api("/api/voice-engine")).actuel;
+    allVoices = await api("/api/voices");
+    showVoice();
+  } catch {}
+}
+
+async function pickEngine() {
+  try {
+    await api("/api/voice-engine", { moteur: $("engineSel").value }, "PUT");
+    allVoices = await api("/api/voices");
+    await otherVoice();  // les voix d'un moteur ne valent pas pour l'autre
+    $("saveStatus").textContent = "Moteur changé : réenregistrez le PNJ pour garder sa nouvelle voix.";
+  } catch (e) { $("saveStatus").textContent = e.message; await loadEngine(); }
+}
+
+async function pickVoice() {
+  const choix = $("voiceSel").value;
+  if (!choix) return;
+  try { current.voix = await api("/api/voice", { ...readForm(), choix }); showVoice(); dirty = true; listen(); }
+  catch (e) { $("saveStatus").textContent = e.message; }
+}
+
 function showVoice() {
+  fillVoiceList();
   const v = current.voix;
   $("voiceLabel").textContent = v?.name ? `Voix : ${v.label ?? v.name}` : "Voix : attribuée à l’enregistrement";
 }
@@ -238,26 +277,42 @@ async function otherVoice() {
   catch (e) { $("saveStatus").textContent = e.message; }
 }
 
+// Une seule lecture à la fois : une nouvelle écoute coupe la précédente, et une réponse
+// arrivée en retard (voix changée entre-temps) n'est pas jouée.
+let player = null, listenId = 0;
+function stopListen() {
+  if (player) { player.pause(); URL.revokeObjectURL(player.src); player = null; }
+}
+
 async function listen() {
   const text = $("f-salutation").value.trim();
   if (!text) return;
+  const id = ++listenId;
+  stopListen();
   if (!current.voix?.name) await otherVoice();
   const r = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ text, voice: current.voix }) });
+  if (id !== listenId) return;
   if (!r.ok) { $("saveStatus").textContent = "Synthèse vocale indisponible (voix absente, ou réseau coupé pour Edge)."; return; }
-  new Audio(URL.createObjectURL(await r.blob())).play();
+  const blob = await r.blob();
+  if (id !== listenId) return;
+  stopListen();
+  player = new Audio(URL.createObjectURL(blob));
+  player.play();
 }
 
 $("genBtn").onclick = generate;
 $("saveBtn").onclick = save;
 $("newBtn").onclick = () => { if (confirmDiscard()) fillForm({}); };
-$("voiceBtn").onclick = otherVoice;
+$("voiceSel").onchange = pickVoice;
+$("engineSel").onchange = pickEngine;
 $("listenBtn").onclick = listen;
 $("saveScenarioBtn").onclick = saveScenario;
 document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
 $("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
 window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
 
+loadEngine();
 fillForm({});
 loadScenario();
 refreshBank();

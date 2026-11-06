@@ -1,0 +1,27 @@
+{
+  "apparence": "Elle porte un manteau rapiécé qui tente désespérément d'imiter l'éclat des vêtements de rang supérieur, orné de faux insignes brillants.",
+  "connaissances": [
+    "La taverne 'Le Gobelet Brisé' sert la meilleure poutarde de la ville si on demande au propriétaire en lui parlant d'une vieille histoire militaire.",
+    "Les gardes du poste nord sont particulièrement stricts ce matin et font des fouilles aléatoires aux portes principales.",
+    "Une rumeur circule selon laquelle le marchand d'épices vendrait des artefacts volés dans son sous-sol après la tombée de la nuit."
+  ],
+  "debit": "rapide",
+  "genre": "feminin",
+  "humeur": "Joyeuse et sur d'elle",
+  "metier": "Voyageuse",
+  "nom": "Ornella Bouchetrou",
+  "personnalite": "Érudit dans la forme mais profondément insécurisée, elle compense son manque réel de compétences par une confiance en soi démesurée et un vocabulaire fleuri.",
+  "salutation": "Je dois filer, les vents du destin ne m'attendent pas ! Mais avant cela, laissez-moi vous conter comment j'ai désamorcé un dragon avec une simple pincée de sel...",
+  "secret": "Elle n'a jamais mené une seule quête à succès et a volé les insignes de son manteau pour se donner des airs d'aventurière.",
+  "timbre": "moyen",
+  "voix": {
+    "browser_pitch": 1.25,
+    "browser_rate": 1.18,
+    "genre": "feminin",
+    "label": "Estelle",
+    "length_scale": 0.81,
+    "moteur": "pocket",
+    "name": "estelle",
+    "timbre": "moyen"
+  }
+}

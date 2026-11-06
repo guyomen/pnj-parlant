@@ -22,13 +22,16 @@ class VoixIndisponible(Exception):
     """La synthèse a échoué (voix absente, réseau coupé…) : le navigateur prend le relais."""
 
 
-def charger(config, base_dir):
-    """Le moteur choisi dans config.toml. Seul celui-là est importé (Pocket TTS charge PyTorch)."""
+MOTEURS = ("piper", "pocket", "edge")
+
+
+def charger(config, base_dir, moteur=None):
+    """Le moteur demandé, ou celui de config.toml. Seul celui-là est importé (Pocket TTS charge PyTorch)."""
     cfg = config.get("voix", {})
-    moteur = cfg.get("moteur", "piper")
+    moteur = moteur or cfg.get("moteur", "piper")
     classes = {"piper": Piper, "pocket": Pocket, "edge": Edge}
     if moteur not in classes:
-        raise SystemExit(f"[voix] moteur = « {moteur} » inconnu : choisissez piper, pocket ou edge.")
+        raise ValueError(f"Moteur de voix « {moteur} » inconnu : choisissez piper, pocket ou edge.")
     return classes[moteur](cfg.get(moteur, {}), base_dir)
 
 
@@ -103,8 +106,8 @@ class Piper:
 
 
 # --- Pocket TTS (Kyutai) : local, naturel, tourne sur processeur -------------
-# Voix intégrées au modèle français. Genres déduits des locuteurs d'origine : écoutez-les avec le bouton
-# « Autre voix » de la page de création, et corrigez au besoin dans [voix.pocket.genres] de config.toml.
+# Voix intégrées au modèle français. Genres déduits des locuteurs d'origine : écoutez-les avec le
+# menu des voix de la page de création, et corrigez au besoin dans [voix.pocket.genres] de config.toml.
 POCKET_GENRES = {
     "estelle": "feminin", "cosette": "feminin", "fantine": "feminin", "eponine": "feminin",
     "azelma": "feminin", "alba": "feminin", "anna": "feminin", "vera": "feminin", "mary": "feminin",

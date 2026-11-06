@@ -7,3 +7,7 @@ faster-whisper>=1.2  # reconnaissance vocale locale
 av>=11,<19  # faster-whisper 1.2.x utilise une option supprimée dans PyAV 19
 # pour https = true dans config.toml (certificat auto-signé) :
 pyopenssl
+num2words>=0.5  # nombres en toutes lettres avant la synthèse vocale
+# reconnaissance sur carte NVIDIA (appareil = "cuda") : CUDA 12 et cuDNN 9 pour CTranslate2
+# nvidia-cublas-cu12
+# nvidia-cudnn-cu12>=9,<10

@@ -29,6 +29,26 @@ class Moteurs:
         nom = lambda m: self.claude_cfg["modele"] if m == "claude" else f"local : {self.local_cfg.get('modele')}"
         return {"creation": nom(self.choix["creation"]), "dialogue": nom(self.choix["dialogue"])}
 
+    def modeles_locaux(self):
+        """Modèles installés dans Ollama : [{"nom": ..., "taille": octets}]. Vide si Ollama ne répond pas."""
+        url = f"{self.local_cfg.get('url', 'http://localhost:11434').rstrip('/')}/api/tags"
+        try:
+            with urllib.request.urlopen(url, timeout=3) as r:
+                return [{"nom": x["name"], "taille": x.get("size", 0)} for x in json.loads(r.read())["models"]]
+        except (OSError, ValueError, KeyError):
+            return []
+
+    def modele_local_installe(self, installes):
+        """Nom du modèle configuré tel qu'Ollama le liste (« mistral-nemo » → « mistral-nemo:latest »)."""
+        nom = self.local_cfg.get("modele", "")
+        return next((x["nom"] for x in installes if x["nom"] in (nom, f"{nom}:latest")), nom)
+
+    def choisir_modele_local(self, nom):
+        """Change de modèle local jusqu'au redémarrage du serveur (config.toml n'est pas modifié)."""
+        if nom not in [x["nom"] for x in self.modeles_locaux()]:
+            raise MoteurIndisponible(f"Modèle local « {nom} » absent d'Ollama.")
+        self.local_cfg["modele"] = nom
+
     # --- Points d'entrée ------------------------------------------------------
     def fiche(self, system, demande, schema):
         """Texte JSON de la fiche d'un PNJ, conforme à `schema`."""

@@ -1,0 +1,27 @@
+{
+  "apparence": "Un homme maigre aux vêtements rapiécés en peau de loup, dont les yeux verts scrutent chaque ombre avec une attention féline.",
+  "connaissances": [
+    "Les ombres du vieux château murmurent les noms de ceux qui y ont péri.",
+    "Un passage secret existe derrière la fontaine de la place du marché, caché sous une plaque de pierre mouvante.",
+    "Le capitaine des gardes vole les péages pour financer sa passion pour les cartes à jouer."
+  ],
+  "debit": "lent",
+  "genre": "masculin",
+  "humeur": "fatigué",
+  "metier": "rodeur",
+  "nom": "Ivar le Silenceux",
+  "personnalite": "Malgré son apparence austère, il possède un sens de l'humour noir et une joie malicieuse à piéger ses proies ou ses visiteurs.",
+  "salutation": "Chuuut... Tu parles trop fort pour un visiteur qui cherche à rester inaperçu. Assieds-toi doucement, je t'offrirai un thé si tu promets de ne pas effrayer les rats.",
+  "secret": "Il a involontairement tué un jeune loup-lutin qu'il appréciait lors d'une chasse, et porte un collier fait de ses crocs en signe de culpabilité.",
+  "timbre": "moyen",
+  "voix": {
+    "browser_pitch": 0.85,
+    "browser_rate": 0.83,
+    "genre": "masculin",
+    "label": "Stuart Bell",
+    "length_scale": 1.21,
+    "moteur": "pocket",
+    "name": "stuart_bell",
+    "timbre": "moyen"
+  }
+}

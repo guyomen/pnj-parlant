@@ -35,7 +35,7 @@ Moteurs, choisis dans `config.toml` :
 Routes :
 - `GET /api/config` : moteurs utilisés, moteur de voix, reconnaissance locale disponible ou non.
 - `POST /api/npc/generate {role, nom, genre, consignes}` : fiche JSON imposée par un schéma
-  (nom, metier, apparence, personnalite, tic_de_langage, humeur, connaissances, secret, salutation,
+  (nom, metier, apparence, personnalite, humeur, connaissances, secret, salutation,
   genre, timbre, debit). Humeur/trait/initiale du nom tirés au sort en Python pour varier les PNJ.
   Le serveur ajoute `voix` (voix du genre du PNJ + réglages, et pitch/rate pour le repli navigateur).
 - `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues) et `notes_mj`

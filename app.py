@@ -14,11 +14,14 @@ import random
 import re
 import secrets
 import threading
+import subprocess
 import tomllib
 import unicodedata
+import urllib.request
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_file
+from num2words import num2words
 
 import voix
 from moteurs import MoteurIndisponible, Moteurs
@@ -35,7 +38,11 @@ HISTORIQUE = CONFIG.get("dialogue", {}).get("historique", 12)  # messages gardé
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 moteurs = Moteurs(CONFIG)  # Claude ou modèle local, d'après la section [moteurs]
-tts = voix.charger(CONFIG, BASE_DIR)  # Piper, Pocket TTS ou Edge, d'après la section [voix]
+try:
+    tts = voix.charger(CONFIG, BASE_DIR)  # Piper, Pocket TTS ou Edge, d'après la section [voix]
+except ValueError as e:
+    raise SystemExit(f"[voix] {e}")
+_tts_charges = {tts.nom: tts}  # moteurs déjà chargés : on ne recharge pas Pocket TTS à chaque bascule
 
 # --- Reconnaissance vocale locale : faster-whisper (optionnel) ---------------
 try:
@@ -55,13 +62,26 @@ def stt_local():
     return STT_CFG.get("moteur", "navigateur") == "local" and WHISPER_OK and (STT_DIR / "model.bin").exists()
 
 
+def precharger_cuda12():
+    """CTranslate2 veut CUDA 12 et cuDNN 9 : on charge ceux du paquet pip (nvidia-cublas-cu12,
+    nvidia-cudnn-cu12) si le système n'a pas les siens. Sans effet s'ils sont absents."""
+    import ctypes
+    import site
+    for racine in site.getsitepackages():
+        for motif in ("nvidia/cublas/lib/libcublas.so.12", "nvidia/cudnn/lib/libcudnn.so.9"):
+            for lib in Path(racine).glob(motif):
+                ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+
+
 def load_stt():
     global _stt_model
     with _stt_lock:  # deux requêtes simultanées ne chargent pas le modèle deux fois
         if _stt_model is None:
             appareil = STT_CFG.get("appareil", "cpu")
+            if appareil == "cuda":
+                precharger_cuda12()
             _stt_model = WhisperModel(str(STT_DIR), device=appareil,
-                                      compute_type="float16" if appareil == "cuda" else "int8")
+                                      compute_type=STT_CFG.get("precision", "float16" if appareil == "cuda" else "int8"))
     return _stt_model
 
 
@@ -77,7 +97,7 @@ METIERS = ["marchand de potions", "forgeron", "aubergiste", "garde de la porte n
 GEN_SYSTEM = """Tu crées des personnages non-joueurs (PNJ) pour un jeu de rôle médiéval-fantastique.
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour ni balises markdown, avec ces clés :
 "nom" (prénom + surnom ou nom), "metier", "apparence" (une phrase), "personnalite" (une phrase),
-"tic_de_langage" (une expression ou manie verbale), "humeur",
+"humeur",
 "connaissances" (liste de 3 rumeurs ou informations utiles qu'il peut révéler),
 "secret" (une chose qu'il cache), "salutation" (première réplique, 1 ou 2 phrases, à l'oral),
 "genre" ("feminin", "masculin" ou "neutre" : le genre grammatical utilisé pour parler du personnage),
@@ -96,14 +116,14 @@ NPC_SCHEMA = {
     "type": "object",
     "properties": {
         "nom": _TEXTE, "metier": _TEXTE, "apparence": _TEXTE, "personnalite": _TEXTE,
-        "tic_de_langage": _TEXTE, "humeur": _TEXTE,
+        "humeur": _TEXTE,
         "connaissances": {"type": "array", "items": _TEXTE},
         "secret": _TEXTE, "salutation": _TEXTE,
         "genre": {"type": "string", "enum": ["feminin", "masculin", "neutre"]},
         "timbre": {"type": "string", "enum": ["grave", "moyen", "aigu"]},
         "debit": {"type": "string", "enum": ["lent", "normal", "rapide"]},
     },
-    "required": ["nom", "metier", "apparence", "personnalite", "tic_de_langage", "humeur",
+    "required": ["nom", "metier", "apparence", "personnalite", "humeur",
                  "connaissances", "secret", "salutation", "genre", "timbre", "debit"],
     "additionalProperties": False,
 }
@@ -121,6 +141,28 @@ def clean_for_speech(text):
     text = re.sub(r"[#_`>]", "", text)
     text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def chiffres_en_lettres(text):
+    """Écrit les nombres en toutes lettres (« 12 » → « douze »), que la synthèse vocale lit mal en chiffres."""
+    def ordinal(m):
+        return num2words(int(m[1]), lang="fr", to="ordinal")  # 1er → premier, 2e → deuxième
+
+    def nombre(m):
+        entier, decimales = m[1], m[2]
+        if len(entier) > 15:  # trop long pour un nombre : chiffre par chiffre
+            return " ".join(num2words(int(c), lang="fr") for c in entier)
+        mot = num2words(int(entier), lang="fr")
+        if decimales:
+            if decimales.startswith("0"):  # 2,05 → deux virgule zéro cinq
+                mot += " virgule " + " ".join(num2words(int(c), lang="fr") for c in decimales)
+            else:
+                mot += " virgule " + num2words(int(decimales), lang="fr")
+        return mot
+
+    text = re.sub(r"\b(\d+)\s?(er|re|ère|ere|e|è|ème|eme)\b", ordinal, text)
+    text = re.sub(r"(?<=\d)[\u202f\u00a0 ](?=\d{3}\b)", "", text)  # « 1 000 » → « 1000 »
+    return re.sub(r"(\d+)(?:[,.](\d+))?", nombre, text)
 
 
 # Fin de phrase : ponctuation, éventuels guillemets ou parenthèse fermants, puis une espace
@@ -186,8 +228,52 @@ def index():
 
 @app.get("/api/config")
 def config():
+    installes = moteurs.modeles_locaux() if "local" in moteurs.choix.values() else []
     return jsonify({"moteurs": moteurs.description(), "tts": tts.nom if tts.catalogue() else None,
-                    "stt_local": stt_local()})
+                    "stt_local": stt_local(), "modeles_locaux": installes,
+                    "modele_local": moteurs.modele_local_installe(installes)})
+
+
+def _ollama_get(chemin):
+    url = f"{moteurs.local_cfg.get('url', 'http://localhost:11434').rstrip('/')}{chemin}"
+    with urllib.request.urlopen(url, timeout=2) as r:
+        return json.loads(r.read())
+
+
+def etat_gpu():
+    """Utilisation de la carte NVIDIA via nvidia-smi ; None si absent ou en panne."""
+    try:
+        sortie = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=3, check=True).stdout
+        nom, usage, utilisee, totale = [x.strip() for x in sortie.splitlines()[0].split(",")]
+        return {"nom": nom, "usage": int(usage), "memoire_mo": int(utilisee), "memoire_totale_mo": int(totale)}
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
+@app.get("/api/etat")
+def etat():
+    """État de la machine pour la page de jeu : Ollama (si un moteur local est choisi) et GPU."""
+    res = {"gpu": etat_gpu(), "ollama": None}
+    if "local" in moteurs.choix.values():
+        try:
+            charges = _ollama_get("/api/ps").get("models", [])
+            res["ollama"] = {"ok": True, "charges": [
+                {"nom": m["name"], "vram_mo": round(m.get("size_vram", 0) / 1e6)} for m in charges]}
+        except (OSError, ValueError, KeyError):
+            res["ollama"] = {"ok": False}
+    return jsonify(res)
+
+
+@app.post("/api/model")
+def choisir_modele():
+    """Change le modèle local pour tout le serveur, sans toucher à config.toml."""
+    try:
+        moteurs.choisir_modele_local((request.json or {}).get("modele", ""))
+    except MoteurIndisponible as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"modele_local": moteurs.local_cfg["modele"]})
 
 
 def create_npc(role="", nom="", genre="", consignes=""):
@@ -334,8 +420,46 @@ def bank_update(npc_id):
 
 @app.post("/api/voice")
 def new_voice():
-    """Tire une autre voix pour le PNJ (bouton « Autre voix » de la page de création)."""
-    return jsonify(assign_voice(request.json or {}))
+    """Tire une autre voix pour le PNJ (changement de genre ou de moteur),
+    ou applique celle demandée dans `choix` (nom de voix de GET /api/voices)."""
+    npc = request.json or {}
+    voice = assign_voice(npc)
+    choix = npc.get("choix")
+    if choix:
+        trouvee = next((v for v, _ in tts.catalogue() if v["name"] == choix), None)
+        if not trouvee:
+            return jsonify({"error": "Voix inconnue."}), 404
+        voice.update(trouvee)
+    return jsonify(voice)
+
+
+@app.get("/api/voice-engine")
+def voice_engine_get():
+    return jsonify({"actuel": tts.nom, "moteurs": list(voix.MOTEURS)})
+
+
+@app.put("/api/voice-engine")
+def voice_engine_set():
+    """Change de moteur de synthèse pour tout le serveur, sans toucher à config.toml."""
+    global tts
+    nom = (request.json or {}).get("moteur", "")
+    try:
+        moteur = _tts_charges.get(nom) or voix.charger(CONFIG, BASE_DIR, nom)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not moteur.catalogue():
+        return jsonify({"error": f"Le moteur « {nom} » n'est pas utilisable ici (paquet ou voix manquants)."}), 400
+    if nom not in _tts_charges:
+        _tts_charges[nom] = moteur
+        threading.Thread(target=moteur.prechauffer, daemon=True).start()
+    tts = moteur
+    return jsonify({"actuel": tts.nom})
+
+
+@app.get("/api/voices")
+def voices_list():
+    """Voix du moteur de synthèse, avec leur genre, pour la liste de choix de la page de création."""
+    return jsonify([{**v, "genre": g} for v, g in tts.catalogue()])
 
 
 @app.delete("/api/bank/<npc_id>")
@@ -358,7 +482,6 @@ def npc_system_prompt(npc):
     return f"""{univers}Tu es {npc.get('nom')}, {npc.get('metier')}, dans un monde médiéval-fantastique.
 Apparence : {npc.get('apparence')}
 Personnalité : {npc.get('personnalite')} Humeur du jour : {npc.get('humeur')}.
-Tic de langage : {npc.get('tic_de_langage')}
 Ce que tu sais et peux révéler :
 {infos}
 Ton secret (ne le révèle que si le voyageur gagne vraiment ta confiance ou te paie bien) : {npc.get('secret')}
@@ -414,7 +537,7 @@ def talk():
 @app.post("/api/tts")
 def synthese():
     data = request.json or {}
-    text = clean_for_speech(data.get("text", ""))[:600]
+    text = chiffres_en_lettres(clean_for_speech(data.get("text", "")))[:600]
     if not text:
         return jsonify({"error": "Rien à lire."}), 400
     try:
@@ -436,7 +559,7 @@ def stt():
     # L'indice (nom et métier du PNJ) aide Whisper à écrire les noms propres et le vocabulaire du jeu.
     indice = request.form.get("indice", "").strip()[:200] or None
     try:
-        segments, _ = load_stt().transcribe(io.BytesIO(audio.read()), language="fr", beam_size=1,
+        segments, _ = load_stt().transcribe(io.BytesIO(audio.read()), language="fr", beam_size=STT_CFG.get("beam_size", 5),
                                             vad_filter=True, initial_prompt=indice)
         text = " ".join(s.text.strip() for s in segments).strip()
     except ValueError:
