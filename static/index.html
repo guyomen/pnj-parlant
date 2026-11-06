@@ -15,6 +15,7 @@
   .bank { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .bank h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
   .bank .row { display: flex; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; align-items: center; }
+  .bank .row[hidden] { display: none; }
 
   /* Conversation */
   .talk { display: flex; flex-direction: column; min-height: 70vh; }
@@ -24,6 +25,11 @@
   .line.pj { align-self: flex-end; text-align: right; color: var(--muted); }
   .line .who { display: block; font: 700 .85rem var(--body); color: var(--glass); }
   .line.pj .who { color: var(--muted); }
+  /* État de la machine */
+  .sys { margin-top: 1rem; font-size: .85rem; color: var(--muted); display: grid; gap: .35rem; }
+  .sys .bar { height: .4rem; background: var(--line); border-radius: .2rem; overflow: hidden; }
+  .sys .bar i { display: block; height: 100%; background: var(--glass); width: 0; transition: width .4s; }
+  .sys .alert { color: #b3261e; font-weight: 700; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 
   .controls { display: flex; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
@@ -56,7 +62,11 @@
         <button class="ghost" id="saveBtn">Sauvegarder ce PNJ</button>
         <a class="link" href="creation.html">Préparer les PNJ et le scénario →</a>
       </div>
+      <div class="row" id="modelRow" hidden>
+        <select id="modelSel" aria-label="Modèle local"></select>
+      </div>
     </div>
+    <div class="sys" id="sys" aria-live="polite"></div>
   </section>
 
   <section class="talk">
@@ -127,8 +137,7 @@ function renderCard() {
     <p class="metier">${esc(npc.metier)}</p>
     <p>${esc(npc.apparence)}</p>
     <p><span class="k">Caractère :</span> ${esc(npc.personnalite)}</p>
-    <p><span class="k">Humeur :</span> ${esc(npc.humeur)}</p>
-    <p><span class="k">Tic :</span> « ${esc(npc.tic_de_langage)} »</p>`;
+    <p><span class="k">Humeur :</span> ${esc(npc.humeur)}</p>`;
 }
 
 function setBusy(b) {
@@ -255,27 +264,43 @@ let stopListening = () => recognition?.stop();
 async function listenLocal() {
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
     status("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).");
     return;
   }
-  const rec = new MediaRecorder(stream);
+  let rec, ctx, analyser;
   const chunks = [];
-  rec.ondataavailable = (e) => chunks.push(e.data);
-
-  // Arrêt automatique après une seconde de silence, comme la reconnaissance du navigateur
-  const ctx = new AudioContext();
-  const analyser = ctx.createAnalyser();
-  ctx.createMediaStreamSource(stream).connect(analyser);
+  try {
+    rec = new MediaRecorder(stream);
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    // Arrêt automatique après une seconde de silence, comme la reconnaissance du navigateur.
+    // Firefox exige que l'AudioContext ait la même fréquence que le micro.
+    const rate = stream.getAudioTracks()[0]?.getSettings().sampleRate;
+    ctx = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext();
+    if (ctx.state === "suspended") await ctx.resume();
+    analyser = ctx.createAnalyser();
+    ctx.createMediaStreamSource(stream).connect(analyser);
+  } catch (e) {
+    stream.getTracks().forEach(t => t.stop());
+    status(`Micro inutilisable : ${e.message}`);
+    return;
+  }
   const samples = new Float32Array(analyser.fftSize);
   const start = performance.now();
-  let heard = false, lastSound = start;
+  // Seuil adaptatif : bruit de fond mesuré pendant la première demi-seconde, voix = nettement au-dessus.
+  let heard = false, lastSound = start, peak = 0, noise = 0, nNoise = 0;
   const timer = setInterval(() => {
     analyser.getFloatTimeDomainData(samples);
-    const level = Math.sqrt(samples.reduce((sum, x) => sum + x * x, 0) / samples.length);
+    let sum = 0;
+    for (const x of samples) sum += x * x;
+    const level = Math.sqrt(sum / samples.length);
     const now = performance.now();
-    if (level > 0.02) { heard = true; lastSound = now; }
+    peak = Math.max(peak, level);
+    if (now - start < 500) { noise = Math.max(noise, level); nNoise++; }
+    const seuil = Math.max(0.004, noise * 3);
+    if (now - start >= 500 && level > seuil) { heard = true; lastSound = now; }
+    status(`J’écoute… niveau ${"▮".repeat(Math.min(20, Math.round(level * 200)))}`);
     if ((heard && now - lastSound > 1200) || (!heard && now - start > 8000) || now - start > 30000) stopListening();
   }, 100);
 
@@ -284,7 +309,12 @@ async function listenLocal() {
   rec.onstop = async () => {
     clearInterval(timer); ctx.close(); stream.getTracks().forEach(t => t.stop());
     micPressed(false);
-    if (!heard) { status("Je n’ai rien entendu."); return; }
+    // Même si le seuil n'a rien détecté, on laisse Whisper (qui filtre le silence) trancher,
+    // sauf si le micro est réellement muet (signal nul : mauvais périphérique ou micro coupé).
+    if (!heard && peak < 0.0005) {
+      status("Micro muet : aucun signal reçu. Vérifiez le périphérique d’entrée choisi par le navigateur.");
+      return;
+    }
     setBusy(true); status("Je transcris…");
     let text = "";
     try {
@@ -339,15 +369,47 @@ $("genBtn").onclick = generate;
 $("loadBtn").onclick = loadFromBank;
 $("saveBtn").onclick = saveToBank;
 $("bankSel").onchange = () => setBusy(busy);
+$("modelSel").onchange = async () => {
+  const r = await fetch("/api/model", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({modele: $("modelSel").value})});
+  const d = await r.json();
+  status(r.ok ? `Modèle : ${d.modele_local} (le premier échange le charge, il peut être lent).` : d.error);
+};
 $("sendBtn").onclick = () => send($("ask").value);
 $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
 
 fetch("/api/config").then(r => r.json()).then(c => {
   cfg = c;
+  if (c.modeles_locaux.length) {
+    $("modelSel").innerHTML = c.modeles_locaux.map(m =>
+      `<option value="${esc(m.nom)}">${esc(m.nom)} (${(m.taille / 1e9).toFixed(1)} Go)</option>`).join("");
+    $("modelSel").value = c.modele_local;
+    $("modelRow").hidden = false;
+  }
   setBusy(busy);
   if (!c.stt_local && !recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
   else if (!c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
 });
+async function refreshSys() {
+  const box = $("sys");
+  try {
+    const e = await (await fetch("/api/etat")).json();
+    let h = "";
+    if (e.ollama) {
+      h += e.ollama.ok
+        ? `<div>Ollama : actif${e.ollama.charges.length ? " — " + e.ollama.charges.map(m => `${esc(m.nom)} (${m.vram_mo} Mo en VRAM)`).join(", ") : " — aucun modèle chargé"}</div>`
+        : `<div class="alert">Ollama ne répond pas : démarrez-le (sudo systemctl start ollama).</div>`;
+    }
+    if (e.gpu) {
+      const pct = Math.round(100 * e.gpu.memoire_mo / e.gpu.memoire_totale_mo);
+      h += `<div>${esc(e.gpu.nom)} : calcul ${e.gpu.usage} %, mémoire ${e.gpu.memoire_mo} / ${e.gpu.memoire_totale_mo} Mo</div>
+            <div class="bar"><i style="width:${pct}%"></i></div>`;
+    }
+    box.innerHTML = h;
+  } catch { box.innerHTML = `<div class="alert">Serveur injoignable.</div>`; }
+}
+refreshSys();
+setInterval(() => { if (!document.hidden) refreshSys(); }, 3000);
 setBusy(false);
 refreshBank();
 </script>
