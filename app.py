@@ -10,15 +10,32 @@ Réglages :   config.toml (à créer à partir de config.toml.example)
 """
 import io
 import json
+import os
 import random
 import re
 import secrets
+import signal
 import threading
 import subprocess
 import tomllib
 import unicodedata
 import urllib.request
 from pathlib import Path
+
+
+def arreter(signum=None, frame=None):
+    """Ctrl+C : quitte aussitôt, sans pile d'erreurs. os._exit n'attend pas les fils en cours
+    (préchargement des voix et de Whisper, réponses en streaming), que l'arrêt normal de Python
+    interromprait en plein travail, d'où des erreurs en cascade."""
+    print("\nArrêt des PNJ parlants.", flush=True)
+    os._exit(0)
+
+
+if __name__ == "__main__":  # installé avant les imports lourds (PyTorch…) : Ctrl+C marche dès le lancement
+    signal.signal(signal.SIGINT, arreter)
+    signal.signal(signal.SIGTERM, arreter)
+    if hasattr(signal, "SIGBREAK"):  # Ctrl+Pause sous Windows
+        signal.signal(signal.SIGBREAK, arreter)
 
 from flask import Flask, Response, jsonify, request, send_file
 from num2words import num2words

@@ -28,6 +28,9 @@ def main():
         except MoteurIndisponible as e:  # réseau, clé, Docker arrêté… inutile d'insister
             print(f"[{i}/{args.nombre}] arrêt : {e}")
             break
+        except KeyboardInterrupt:  # Ctrl+C : le PNJ en cours est abandonné, les précédents sont gardés
+            print(f"\n[{i}/{args.nombre}] interrompu")
+            break
         npc_id = save_npc(npc)
         ok += 1
         print(f"[{i}/{args.nombre}] {npc['nom']}, {npc['metier']} ({npc['genre']}) -> {npc_id}.json")

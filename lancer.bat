@@ -19,7 +19,8 @@ if errorlevel 1 (
 call .venv\Scripts\activate.bat
 echo.
 echo Application lancee. Ouvrez l'adresse indiquee ci-dessous dans Chrome ou Edge.
-echo Fermez cette fenetre pour arreter l'application.
+echo Ctrl+C (ou fermer cette fenetre) arrete l'application.
 echo.
 python app.py
-pause
+rem en cas d'erreur, la fenetre reste ouverte pour la lire
+if errorlevel 1 pause
