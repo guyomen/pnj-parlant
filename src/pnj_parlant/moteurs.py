@@ -59,15 +59,16 @@ class Moteurs:
         return self._claude(system, messages, cfg["max_tokens"],
                             {"effort": cfg["effort"], "format": {"type": "json_schema", "schema": schema}})
 
-    def replique(self, system, messages):
+    def replique(self, system, messages, arrets=()):
         """Réplique du PNJ dans le dialogue, morceau de texte par morceau de texte (générateur),
-        pour commencer à la lire avant qu'elle soit finie.
+        pour commencer à la lire avant qu'elle soit finie. `arrets` : textes qui arrêtent net la génération
+        (ex. « Léonard : », quand le modèle se met à écrire la réplique d'un autre).
         Lève MoteurIndisponible dès l'appel si le moteur ne répond pas ; pendant la lecture du
         générateur si la connexion se coupe en cours de route."""
         if self.choix["dialogue"] == "local":
-            return self._local_flux(system, messages, self.local_cfg["dialogue"]["max_tokens"])
+            return self._local_flux(system, messages, self.local_cfg["dialogue"]["max_tokens"], arrets)
         cfg = self.claude_cfg["dialogue"]
-        return self._claude_flux(system, messages, cfg["max_tokens"], {"effort": cfg["effort"]})
+        return self._claude_flux(system, messages, cfg["max_tokens"], {"effort": cfg["effort"]}, arrets)
 
     # --- Claude ---------------------------------------------------------------
     def _claude(self, system, messages, max_tokens, output_config):
@@ -82,11 +83,12 @@ class Moteurs:
             print(f"[claude] réponse coupée à max_tokens={max_tokens}")
         return "".join(b.text for b in msg.content if b.type == "text")
 
-    def _claude_flux(self, system, messages, max_tokens, output_config):
+    def _claude_flux(self, system, messages, max_tokens, output_config, arrets=()):
+        options = {"stop_sequences": list(arrets)} if arrets else {}
         try:  # la requête part ici : une erreur de connexion est levée avant de renvoyer le générateur
             flux = self.client.messages.create(model=self.claude_cfg["modele"], max_tokens=max_tokens,
                                                system=system, messages=messages, output_config=output_config,
-                                               stream=True)
+                                               stream=True, **options)
         except anthropic.APIConnectionError as e:
             raise MoteurIndisponible("Pas de connexion à Claude.") from e
         except anthropic.APIStatusError as e:
@@ -101,6 +103,8 @@ class Moteurs:
                         print(f"[claude] réponse coupée à max_tokens={max_tokens}")
             except anthropic.APIError as e:
                 raise MoteurIndisponible("La connexion à Claude s'est interrompue.") from e
+            finally:
+                flux.close()  # réponse abandonnée en route (Stop, filtre) : Claude arrête d'écrire
         return morceaux()
 
     # --- Modèle local (API d'Ollama) ------------------------------------------
@@ -109,11 +113,12 @@ class Moteurs:
             data = json.loads(r.read())
         return data.get("message", {}).get("content", "")
 
-    def _local_flux(self, system, messages, max_tokens):
-        r = self._ollama(system, messages, max_tokens, stream=True)
+    def _local_flux(self, system, messages, max_tokens, arrets=()):
+        r = self._ollama(system, messages, max_tokens, stream=True, arrets=arrets)
 
         def morceaux():
-            # Ollama envoie une ligne JSON par morceau de texte, jusqu'à "done": true
+            # Ollama envoie une ligne JSON par morceau de texte, jusqu'à "done": true.
+            # Réponse abandonnée en route (Stop, filtre) : fermer la connexion arrête la génération.
             try:
                 with r:
                     for ligne in r:
@@ -123,7 +128,7 @@ class Moteurs:
                 raise MoteurIndisponible("Le modèle local s'est interrompu.") from e
         return morceaux()
 
-    def _ollama(self, system, messages, max_tokens, schema=None, stream=False):
+    def _ollama(self, system, messages, max_tokens, schema=None, stream=False, arrets=()):
         """Envoie la requête à Ollama et renvoie la réponse HTTP ouverte."""
         cfg = self.local_cfg
         body = {
@@ -136,6 +141,8 @@ class Moteurs:
         }
         if schema:
             body["format"] = schema  # Ollama contraint la sortie à ce schéma JSON
+        if arrets:
+            body["options"]["stop"] = list(arrets)  # la génération s'arrête net sur l'un de ces textes
         if cfg.get("reflexion") is not None:
             body["think"] = cfg["reflexion"]  # false : coupe le mode réflexion (Qwen 3…), plus rapide
         req = urllib.request.Request(f"{cfg['url'].rstrip('/')}/api/chat", data=json.dumps(body).encode(),

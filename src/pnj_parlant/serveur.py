@@ -239,7 +239,8 @@ def create_app(cfg, **moteurs):
             return erreur("Il manque le PNJ ou la question.", 400)
         system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents)
         try:
-            morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents))
+            morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents),
+                                            dialogue.arrets(npc["nom"], presents))
         except MoteurIndisponible as e:
             return erreur(str(e), 503)
 

@@ -57,8 +57,10 @@ Routes :
   `[{speaker: nom du PNJ ou null pour le joueur, content}]`, salutations comprises. Scène à plusieurs PNJ
   (`presents`, jusqu'à 3 en tout) : chaque PNJ voit ses répliques en `assistant` et celles des autres en
   `user` préfixées par le nom de l'auteur, plus un rappel en fin de dernier message. Les petits modèles
-  écrivent quand même la suite de la scène : `texte.sans_autres_locuteurs` coupe le flux dès qu'une étiquette
-  (autre PNJ, « Voyageur », « Nom ») suit une fin de phrase, même au milieu d'un morceau.
+  écrivent quand même la suite de la scène : séquences d'arrêt (`dialogue.arrets` : « Léonard : »,
+  « Voyageur: »… → option `stop` d'Ollama, `stop_sequences` de Claude) qui arrêtent la génération à la
+  source, puis en filet de sécurité `texte.sans_autres_locuteurs`, qui coupe le flux dès qu'une étiquette
+  suit une fin de phrase ; la connexion au modèle est alors fermée.
   Côté navigateur : répond le PNJ cité (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un
   autre pose une question répond juste après (`questionnes`, 4 répliques d'affilée au plus) ; options
   « Interventions spontanées » (`[dialogue] intervention`), « Laissez-les discuter » et « Faire entrer »

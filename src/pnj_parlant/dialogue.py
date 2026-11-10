@@ -84,11 +84,26 @@ RAPPEL = "Réponds seulement en tant que {nom}, sans écrire de nom suivi de deu
 AUTRES_LOCUTEURS = [VOYAGEUR, "Le voyageur", "Nom"]
 
 
+def arrets(nom, presents=()):
+    """Séquences d'arrêt pour le modèle (option `stop` d'Ollama, `stop_sequences` de Claude) : la génération
+    s'arrête net dès que le modèle annonce un autre locuteur (« Léonard : », « Voyageur: », « Nom : »),
+    sans attendre qu'il ait écrit toute la réplique de l'autre. Le filtre de repliques() reste le filet de
+    sécurité pour les variantes que ces textes exacts ne couvrent pas."""
+    miennes = {e.lower() for e in texte.etiquettes([nom])}
+    autres = [e for e in texte.etiquettes([p["nom"] for p in presents] + AUTRES_LOCUTEURS)
+              if e.lower() not in miennes]  # deux PNJ peuvent partager un prénom
+    return [f"{e}{deux_points}" for e in autres for deux_points in (" :", ":")]
+
+
 def repliques(morceaux, nom, presents=()):
     """Phrases de la réponse du PNJ `nom`, nettoyées et prêtes à être lues, au fil de l'écriture du modèle.
     S'arrête si le modèle se met à écrire la réplique d'un autre (« Brom : … », « Voyageur : … »)."""
     autres = [p["nom"] for p in presents] + AUTRES_LOCUTEURS
-    for phrase in texte.phrases(texte.sans_autres_locuteurs(morceaux, nom, autres)):
-        phrase = texte.nettoyer(phrase)
-        if phrase:
-            yield phrase
+    try:
+        for phrase in texte.phrases(texte.sans_autres_locuteurs(morceaux, nom, autres)):
+            phrase = texte.nettoyer(phrase)
+            if phrase:
+                yield phrase
+    finally:
+        if hasattr(morceaux, "close"):
+            morceaux.close()  # réponse coupée : on ferme la connexion, le modèle arrête d'écrire

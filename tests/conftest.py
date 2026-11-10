@@ -28,6 +28,7 @@ class FauxMoteurs:
         self.fiche_json = json.dumps(FICHE, ensure_ascii=False)
         self.reponses = ["Bonjour."]
         self.appels = []  # (system, messages) de chaque réplique demandée
+        self.arrets = []  # séquences d'arrêt de chaque réplique demandée
 
     def description(self):
         return {"creation": "local : faux", "dialogue": "local : faux"}
@@ -47,8 +48,9 @@ class FauxMoteurs:
             raise self.fiche_json
         return self.fiche_json
 
-    def replique(self, system, messages):
+    def replique(self, system, messages, arrets=()):
         self.appels.append((system, messages))
+        self.arrets.append(list(arrets))
         if isinstance(self.reponses, Exception):
             raise self.reponses
         return iter(self.reponses)

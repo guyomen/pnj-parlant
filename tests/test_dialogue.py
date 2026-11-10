@@ -49,6 +49,22 @@ class TestMessages:
         assert "Brom : Je m'en vais.\nVoyageur : Et toi ?\n" in msgs[-1]["content"]
 
 
+class TestArrets:
+    def test_les_autres_le_voyageur_et_le_format_des_consignes(self):
+        arrets = dialogue.arrets("Berthe la joyeuse", [{"nom": "Léonard le Sage"}])
+        for attendu in ["Léonard le Sage :", "Léonard le Sage:", "Léonard :", "Léonard:",
+                        "Voyageur :", "Le voyageur :", "Nom :", "Nom:"]:
+            assert attendu in arrets
+        assert not any(a.startswith("Berthe") for a in arrets)  # jamais sa propre étiquette
+
+    def test_prenom_partage_avec_un_autre_pnj(self):
+        arrets = dialogue.arrets("Jean le Meunier", [{"nom": "Jean le Forgeron"}])
+        assert "Jean le Forgeron :" in arrets and "Jean :" not in arrets
+
+    def test_seul_avec_le_voyageur(self):
+        assert dialogue.arrets("Ysolde") == ["Le voyageur :", "Le voyageur:", "Voyageur :", "Voyageur:", "Nom :", "Nom:"]
+
+
 def test_nettoyer_historique_garde_les_derniers_messages_valides():
     history = [entree(None, "a"), "pas un dict", entree(None, "  "), entree("X", "b"), entree(None, "c")]
     assert dialogue.nettoyer_historique(history, 2) == [entree("X", "b"), entree(None, "c")]
@@ -87,6 +103,18 @@ class TestRepliques:
         texte = "Et toi, Brom, toujours à la forge du matin au soir ? Nom : Brom Brom : Oui."
         assert list(dialogue.repliques(iter(texte), "Ysolde", [BROM])) == [
             "Et toi, Brom, toujours à la forge du matin au soir ?"]
+
+    def test_ferme_le_flux_du_modele_quand_la_reponse_est_coupee(self):
+        ferme = []
+
+        def flux():
+            try:
+                yield "Bien sûr, voyageur, je te sers tout de suite.\nBrom : Et moi ?"
+                yield " Encore du texte que le modèle continue d'écrire."
+            finally:
+                ferme.append(True)
+        assert len(list(dialogue.repliques(flux(), "Ysolde", [BROM]))) == 1
+        assert ferme == [True]
 
     def test_consignes_donnent_un_vrai_nom_en_exemple(self):
         system = dialogue.consignes(YSOLDE, presents=[BROM])
