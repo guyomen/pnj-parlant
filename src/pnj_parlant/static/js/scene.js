@@ -72,6 +72,20 @@ export function arrivee(lieu, restent = []) {
 }
 
 // Deux voix identiques (même nom de voix et même locuteur)
+// Où se trouve un PNJ pendant la partie : là où on l'a laissé, sinon son lieu habituel ("" : nulle part)
+export function position(pnj, lieux, positions = {}) {
+  const id = positions[pnj.nom] ?? pnj.lieu ?? "";
+  return lieux.some(l => l.id === id) ? id : "";
+}
+
+// PNJ regroupés par lieu, dans l'ordre des lieux du scénario (le lieu actuel d'abord), puis ceux sans lieu.
+// → [{ lieu: {id, nom} | null, pnjs }] ; les lieux vides sont omis.
+export function parLieu(pnjs, lieux, positions = {}, actuel = "") {
+  const ordre = [...lieux.filter(l => l.id === actuel), ...lieux.filter(l => l.id !== actuel), null];
+  return ordre.map(lieu => ({ lieu, pnjs: pnjs.filter(p => position(p, lieux, positions) === (lieu?.id ?? "")) }))
+    .filter(g => g.pnjs.length);
+}
+
 export const memeVoix = (a, b) => !!a?.name && a.name === b?.name && (a.speaker ?? null) === (b?.speaker ?? null);
 
 // --- PNJ qui entre en cours de discussion ---------------------------------------------

@@ -7,13 +7,32 @@
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
-  main { max-width: 68rem; margin: 0 auto; padding: 1.5rem;
-         display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
-  @media (min-width: 52rem) { main { grid-template-columns: 22rem 1fr; align-items: start; } }
+  /* Trois colonnes : la scène (lieu, PNJ présents) | la discussion | préparation et réglages.
+     Écran moyen : la scène et les réglages l'un sous l'autre à gauche ; téléphone : tout empilé,
+     les réglages en dernier. */
+  main { max-width: 100rem; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.5rem;
+         grid-template-columns: minmax(0, 1fr); grid-template-areas: "scene" "talk" "reglages"; }
+  .npc { grid-area: scene; }
+  .talk { grid-area: talk; }
+  .reglages { grid-area: reglages; }
+  @media (min-width: 52rem) {
+    main { grid-template-columns: 21rem minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start;
+           grid-template-areas: "scene talk" "reglages talk"; }
+  }
+  @media (min-width: 84rem) {
+    main { grid-template-columns: 21rem minmax(0, 1fr) 19rem; grid-template-rows: auto;
+           grid-template-areas: "scene talk reglages"; }
+    /* les colonnes de côté restent visibles pendant que la discussion défile */
+    .npc, .reglages { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
+  }
+
+  /* Préparation et réglages : création, banque, options, état de la machine */
+  .reglages { background: var(--surface); border-radius: 10px; padding: 1.25rem; }
+  .reglages h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
+  .reglages .bloc + .bloc { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .reglages .gen { margin-top: 0; }
 
   /* Banque de PNJ */
-  .bank { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-  .bank h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
   .bank .row { display: flex; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; align-items: center; }
   .bank .row[hidden] { display: none; }
 
@@ -54,8 +73,6 @@
   .pnj-card.second p { font-size: .95rem; }
 
   /* Options */
-  .options { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-  .options h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
   .options label { display: block; margin-bottom: .4rem; cursor: pointer; }
   .options .sub { margin-left: 1.6rem; }
   .options .sub[hidden], .options .gen[hidden] { display: none; }
@@ -70,8 +87,8 @@
   .sys .alert { color: #b3261e; font-weight: 700; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 
-  .controls { display: flex; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
-  .ask { flex: 1; display: flex; gap: .5rem; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+  .ask { flex: 1 1 16rem; display: flex; gap: .5rem; }
   /* Le sceau de cire : l'élément fort de la page */
   .mic { width: 5.5rem; height: 5.5rem; flex: none; border-radius: 50%; border: none;
          background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, white), var(--wax) 60%);
@@ -91,41 +108,7 @@
       <p class="lieu-desc" id="lieuDesc"></p>
       <div class="ici" id="ici"></div>
     </div>
-    <div id="cards"><p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p></div>
-    <div class="gen">
-      <input type="text" id="role" placeholder="Métier (ex. marchand de potions)" aria-label="Métier du PNJ">
-      <button id="genBtn">Créer un PNJ</button>
-    </div>
-    <div class="bank">
-      <h2>Banque de PNJ</h2>
-      <div class="row">
-        <select id="bankSel" aria-label="PNJ enregistrés"></select>
-        <button id="loadBtn">Jouer</button>
-        <button class="ghost" id="addBtn" title="Le PNJ rejoint la conversation en cours">Ajouter à la scène</button>
-      </div>
-      <div class="row">
-        <button class="ghost" id="saveBtn">Sauvegarder</button>
-        <button class="ghost" id="exportBtn">Exporter la conversation</button>
-        <a class="link" href="creation.html">Préparer les PNJ et le scénario →</a>
-      </div>
-      <div class="row" id="modelRow" hidden>
-        <select id="modelSel" aria-label="Modèle local"></select>
-      </div>
-    </div>
-    <div class="options">
-      <h2>Options</h2>
-      <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
-      <div class="sub" id="multiOpts">
-        <label><input type="checkbox" id="optIntervention"> Interventions spontanées
-          <span class="hint">: un autre PNJ réagit parfois de lui-même</span></label>
-        <label><input type="checkbox" id="optEntree"> Faire entrer un PNJ inventé d’après la conversation</label>
-        <div class="gen" id="entreeRow">
-          <input type="text" id="entree" placeholder="Qui ? (vide : au choix du modèle)" aria-label="PNJ à faire entrer">
-          <button class="ghost" id="entreeBtn">Faire entrer</button>
-        </div>
-      </div>
-    </div>
-    <div class="sys" id="sys" aria-live="polite"></div>
+    <div id="cards"><p class="empty">Aucun PNJ pour l’instant. Abordez quelqu’un ici, jouez un PNJ de la banque ou créez-en un.</p></div>
   </section>
 
   <section class="talk">
@@ -148,11 +131,51 @@
       </form>
     </div>
   </section>
+
+  <aside class="reglages" aria-label="Préparation et réglages">
+    <div class="bloc">
+      <h2>Nouveau PNJ</h2>
+      <div class="gen">
+        <input type="text" id="role" placeholder="Métier (ex. marchand de potions)" aria-label="Métier du PNJ">
+        <button id="genBtn">Créer un PNJ</button>
+      </div>
+    </div>
+    <div class="bloc bank">
+      <h2>Banque de PNJ</h2>
+      <div class="row">
+        <select id="bankSel" aria-label="PNJ enregistrés"></select>
+        <button id="loadBtn">Jouer</button>
+        <button class="ghost" id="addBtn" title="Le PNJ rejoint la conversation en cours">Ajouter à la scène</button>
+      </div>
+      <div class="row">
+        <button class="ghost" id="saveBtn">Sauvegarder</button>
+        <button class="ghost" id="exportBtn">Exporter la conversation</button>
+        <a class="link" href="creation.html">Préparer les PNJ et le scénario →</a>
+      </div>
+      <div class="row" id="modelRow" hidden>
+        <select id="modelSel" aria-label="Modèle local"></select>
+      </div>
+    </div>
+    <div class="bloc options">
+      <h2>Options</h2>
+      <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
+      <div class="sub" id="multiOpts">
+        <label><input type="checkbox" id="optIntervention"> Interventions spontanées
+          <span class="hint">: un autre PNJ réagit parfois de lui-même</span></label>
+        <label><input type="checkbox" id="optEntree"> Faire entrer un PNJ inventé d’après la conversation</label>
+        <div class="gen" id="entreeRow">
+          <input type="text" id="entree" placeholder="Qui ? (vide : au choix du modèle)" aria-label="PNJ à faire entrer">
+          <button class="ghost" id="entreeBtn">Faire entrer</button>
+        </div>
+      </div>
+    </div>
+    <div class="sys" id="sys" aria-live="polite"></div>
+  </aside>
 </main>
 
 <script type="module">
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
-         nomFichierExport, lieuEvoque, arrivee } from "./js/scene.js";
+         nomFichierExport, lieuEvoque, arrivee, parLieu } from "./js/scene.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -250,12 +273,14 @@ function renderCards() {
       <p>${esc(n.apparence)}</p>
       <p><span class="k">Caractère :</span> ${esc(n.personnalite)}</p>
       <p><span class="k">Humeur :</span> ${esc(n.humeur)}</p>
-      ${nomDuLieu(n.lieu) ? `<p><span class="k">Lieu habituel :</span> ${esc(nomDuLieu(n.lieu))}</p>` : ""}
+      ${nomDuLieu(lieuActuel) ? `<p><span class="k">Se trouve :</span> ${esc(nomDuLieu(lieuActuel))}</p>` : ""}
+      ${nomDuLieu(n.lieu) && n.lieu !== lieuActuel
+        ? `<p><span class="k">Lieu habituel :</span> ${esc(nomDuLieu(n.lieu))}</p>` : ""}
       ${lieux.length ? `<label class="suit"><input type="checkbox" data-suit="${i}" ${n.suit ? "checked" : ""}>
         Vous accompagne quand vous changez de lieu</label>` : ""}
       ${i ? `<button class="ghost" data-retirer="${i}">Retirer de la scène</button>` : ""}
     </div>`).join("")
-    : `<p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p>`;
+    : `<p class="empty">Aucun PNJ pour l’instant. Abordez quelqu’un ici, jouez un PNJ de la banque ou créez-en un.</p>`;
 }
 
 // Bloc « Lieu » : menu, description, PNJ de la banque qui se trouvent ici
@@ -273,7 +298,20 @@ function renderLieu() {
     : ici.length ? `<span class="k">Ici :</span>` + ici.map((c, i) =>
         `<button class="ghost" data-aborder="${i}">${esc(c.nom)} — ${esc(c.metier)}</button>`).join("")
     : `<span class="k">Personne d’autre ici.</span>`;
+  renderBanque();
   setBusy(busy);
+}
+
+// Menu de la banque, regroupé par lieu où se trouve chaque PNJ pendant la partie (le lieu actuel d'abord)
+function renderBanque() {
+  const choisi = $("bankSel").value;
+  const option = (n) => `<option value="${esc(n.id)}">${esc(n.nom)} — ${esc(n.metier)}</option>`;
+  const groupes = parLieu(banque, lieux, positions, lieuActuel);
+  $("bankSel").innerHTML = !banque.length ? `<option value="">Banque vide</option>`
+    : !lieux.length ? banque.map(option).join("")
+    : groupes.map(g => `<optgroup label="${esc(g.lieu ? g.lieu.nom + (g.lieu.id === lieuActuel ? " (vous êtes ici)" : "")
+                                                    : "Sans lieu")}">${g.pnjs.map(option).join("")}</optgroup>`).join("");
+  if (banque.some(n => n.id === choisi)) $("bankSel").value = choisi;
 }
 
 function setBusy(b) {
@@ -523,11 +561,9 @@ async function faireEntrer() {
 // --- Banque de PNJ -----------------------------------------------------------
 async function refreshBank(selectId) {
   banque = await api("/api/bank").catch(() => []);
-  $("bankSel").innerHTML = banque.length
-    ? banque.map(n => `<option value="${esc(n.id)}">${esc(n.nom)} — ${esc(n.metier)}</option>`).join("")
-    : `<option value="">Banque vide</option>`;
+  renderLieu();  // remplit aussi le menu de la banque
   if (selectId) $("bankSel").value = selectId;
-  renderLieu();
+  setBusy(busy);
 }
 
 // ajout : le PNJ rejoint la scène en cours au lieu d'en commencer une nouvelle

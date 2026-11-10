@@ -46,6 +46,7 @@ await js(`(() => { const c = document.querySelector("[data-suit='0']"); c.checke
 await js(`document.getElementById("propOui").click()`);
 verifier("arrivée à la forge, menu à jour", await quand(`document.getElementById("lieuSel").value === "forge-de-brom" && [...document.querySelectorAll(".narration-line")].some(l => l.textContent.includes("Vous arrivez : Forge de Brom"))`));
 verifier("Ysolde a suivi, Brom est là", await quand(`document.querySelector(".pnj-card h1")?.textContent === "Ysolde" && document.getElementById("ici").textContent.includes("Brom")`));
+verifier("fiche : se trouve à la forge, habituellement à l'auberge", await js(`(() => { const t = document.querySelector(".pnj-card").textContent; return t.includes("Se trouve : Forge de Brom") && t.includes("Lieu habituel : Auberge du Sanglier"); })()`));
 verifier("proposition masquée", await js(`document.getElementById("proposition").hidden`));
 await quand(`!document.getElementById("ask").disabled`);
 
@@ -57,6 +58,8 @@ await quand(`!document.getElementById("ask").disabled`);
 await js(`(() => { const c = document.querySelector("[data-suit='0']"); c.checked = false; c.dispatchEvent(new Event("change", { bubbles: true })); const s = document.getElementById("lieuSel"); s.value = "auberge-du-sanglier"; s.dispatchEvent(new Event("change")); })()`);
 verifier("Ysolde reste derrière (narration, scène vide)", await quand(`[...document.querySelectorAll(".narration-line")].some(l => l.textContent.includes("Ysolde reste derrière")) && !document.querySelector(".pnj-card")`));
 verifier("de retour à l'auberge, Ysolde n'y est plus", await quand(`!document.getElementById("ici").textContent.includes("Ysolde") && !document.getElementById("ici").textContent.includes("Brom")`));
+
+verifier("banque regroupée par lieu, Ysolde avec Brom à la forge", await js(`[...document.querySelectorAll("#bankSel optgroup")].map(o => o.label + " : " + [...o.children].map(c => c.textContent.split(" — ")[0]).join(", ")).join(" | ")`) === "Forge de Brom : Brom, Ysolde");
 
 // Ysolde est restée à la forge : on l'y retrouve
 await js(`(() => { const s = document.getElementById("lieuSel"); s.value = "forge-de-brom"; s.dispatchEvent(new Event("change")); })()`);

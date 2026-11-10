@@ -69,6 +69,20 @@ test("arrivee : texte du narrateur", () => {
   assert.equal(scene.arrivee(lieu, [{ nom: "A" }, { nom: "B" }]).slice(0, 26), "(A et B restent derrière. ");
 });
 
+test("position et parLieu : où se trouvent les PNJ", () => {
+  const lieux = [{ id: "auberge", nom: "Auberge" }, { id: "forge", nom: "Forge" }];
+  const pnjs = [{ nom: "Ysolde", lieu: "auberge" }, { nom: "Brom", lieu: "forge" },
+                { nom: "Gaspard" }, { nom: "Fantôme", lieu: "cave" }];
+  assert.equal(scene.position(pnjs[0], lieux), "auberge");
+  assert.equal(scene.position(pnjs[0], lieux, { Ysolde: "forge" }), "forge");  // emmenée à la forge
+  assert.equal(scene.position(pnjs[2], lieux), "");
+  assert.equal(scene.position(pnjs[3], lieux), "");                            // lieu supprimé
+  const groupes = (pos, actuel) => scene.parLieu(pnjs, lieux, pos, actuel)
+    .map(g => [g.lieu?.id ?? null, g.pnjs.map(p => p.nom)]);
+  assert.deepEqual(groupes({}), [["auberge", ["Ysolde"]], ["forge", ["Brom"]], [null, ["Gaspard", "Fantôme"]]]);
+  assert.deepEqual(groupes({ Ysolde: "forge" }, "forge"), [["forge", ["Ysolde", "Brom"]], [null, ["Gaspard", "Fantôme"]]]);
+});
+
 test("memeVoix : même nom et même locuteur", () => {
   assert.ok(scene.memeVoix({ name: "a" }, { name: "a" }));
   assert.ok(!scene.memeVoix({ name: "a", speaker: 0 }, { name: "a", speaker: 1 }));

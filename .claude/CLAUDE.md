@@ -57,7 +57,8 @@ Routes :
   (`/api/npc/generate {..., lieu}` rattache le PNJ à son lieu habituel, champ `lieu` de la fiche).
   `/api/npc/talk {..., lieu}` : le PNJ sait où il est (et s'il accompagne le voyageur hors de son lieu).
   Côté navigateur : menu du lieu, PNJ présents (« Aborder »), compagnons (case « Vous accompagne »),
-  positions des PNJ pendant la partie, « allons à la forge » → proposition (`lieuEvoque`).
+  positions des PNJ pendant la partie (`position`, `parLieu` : fiche « Se trouve », menu de la banque groupé
+  par lieu), « allons à la forge » → proposition (`lieuEvoque`).
 - `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>`, `POST /api/voice` (autre voix pour un PNJ).
   `ensure_voice` réattribue une voix stable (graine = nom) si celle du PNJ manque sur la machine.
 - `POST /api/npc/talk {npc, presents, history}` : fiche + univers = prompt système ; serveur sans état,
