@@ -11,6 +11,7 @@ un navigateur, le PNJ répond dans son personnage, à voix haute. Langue : fran�
 - Jouable sans réseau une fois la préparation faite : chaque brique a une version locale.
 - Solutions gratuites / open source privilégiées pour la voix.
 - Réponses courtes (1-3 phrases), sans markdown/emoji/astérisques, car lues à voix haute ; latence faible.
+  Le serveur coupe la réponse après `[dialogue] phrases_max` phrases (`texte.limiter_phrases`, 3 par défaut).
 
 ## Architecture
 Paquet Python `pnj_parlant` (layout src/, `pyproject.toml`), installé par `pip install -e ".[tout]"`.

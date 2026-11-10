@@ -82,6 +82,22 @@ class TestDialogue:
         assert "Brom :" in moteurs.arrets[-1] and "Ysolde :" not in moteurs.arrets[-1]
         assert messages[-1]["content"].startswith("Brom : Salut.\nVoyageur : Ysolde, Brom dit que tu triches.\n")
 
+    def test_trois_phrases_au_plus(self, client, moteurs, ctx):
+        moteurs.reponses = ["Ah, voyageur ! Bienvenue dans mon humble auberge du carrefour. ",
+                            "Tu veux une bière ? Ou peut-être une chambre pour la nuit ? ",
+                            "Ma cousine tient la forge. Elle est très douée. Et mon oncle..."]
+        reponse = client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"content": "Salut."}]})
+        dit = " ".join(ligne["phrase"] for ligne in lignes(reponse))
+        assert dit == "Ah, voyageur ! Bienvenue dans mon humble auberge du carrefour. Tu veux une bière ?"
+        assert "1 à 3 phrases courtes" in moteurs.appels[-1][0]
+
+    def test_maximum_reglable(self, client, moteurs, ctx):
+        ctx.phrases_max = 1
+        moteurs.reponses = ["Bien le bonjour, voyageur égaré. Que veux-tu ?"]
+        reponse = client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"content": "Salut."}]})
+        assert lignes(reponse) == [{"phrase": "Bien le bonjour, voyageur égaré."}]
+        assert "une phrase courte" in moteurs.appels[-1][0]
+
     def test_les_notes_du_mj_ne_sont_jamais_envoyees(self, client, moteurs):
         client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Le roi est un imposteur."})
         client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"speaker": None, "content": "Salut."}]})

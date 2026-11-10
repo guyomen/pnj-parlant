@@ -1,4 +1,28 @@
-from pnj_parlant.texte import chiffres_en_lettres, nettoyer, phrases, sans_autres_locuteurs
+from pnj_parlant.texte import chiffres_en_lettres, limiter_phrases, nettoyer, phrases, sans_autres_locuteurs
+
+
+class TestLimiterPhrases:
+    def limiter(self, texte, maximum=3):
+        """Texte gardé, quelle que soit la façon dont le modèle le découpe en morceaux."""
+        resultats = {"".join(limiter_phrases([texte], maximum))}
+        for t in (1, 2, 7):
+            resultats.add("".join(limiter_phrases((texte[i:i + t] for i in range(0, len(texte), t)), maximum)))
+        assert len(resultats) == 1, resultats
+        return resultats.pop()
+
+    def test_coupe_apres_la_troisieme_phrase(self):
+        assert self.limiter("Un. Deux ! Trois ? Quatre. Cinq.") == "Un. Deux ! Trois ? "
+        assert self.limiter("Un. Deux.", maximum=1) == "Un. "
+
+    def test_reponse_courte_intacte(self):
+        assert self.limiter("Un. Deux.") == "Un. Deux."
+
+    def test_les_descriptions_et_didascalies_ne_comptent_pas(self):
+        texte = "(Il sourit. Puis tousse.) Un. *Il boit. Longtemps.* Deux. Trois. Quatre."
+        assert self.limiter(texte) == "(Il sourit. Puis tousse.) Un. *Il boit. Longtemps.* Deux. Trois. "
+
+    def test_ponctuation_multiple_et_nombres(self):
+        assert self.limiter("Quoi ?! Ça coûte 3.5 écus... Non. Si.") == "Quoi ?! Ça coûte 3.5 écus... Non. "
 
 
 class TestNettoyer:

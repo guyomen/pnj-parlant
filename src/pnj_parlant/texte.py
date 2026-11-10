@@ -43,6 +43,30 @@ FIN_DE_PHRASE = re.compile(r"[.!?…]+[»”\"')]*\s+")
 PHRASE_MIN = 40  # caractères : « Ah ! » attend la phrase suivante, pour éviter un blanc entre deux sons
 
 
+def dans_une_description(texte):
+    """Vrai si `texte` s'arrête à l'intérieur d'une description (...) ou d'une didascalie *...*."""
+    return texte.count("(") > texte.count(")") or texte.count("*") % 2 == 1
+
+
+def limiter_phrases(morceaux, maximum):
+    """Laisse passer le texte, morceau par morceau, jusqu'à la fin de la `maximum`-ième phrase dite.
+    Les phrases des descriptions entre parenthèses et des didascalies *...* ne comptent pas.
+    Un point sans espace derrière (« 3.5 ») n'est pas une fin de phrase."""
+    total, envoye, cherche, compte = "", 0, 0, 0
+    for morceau in morceaux:
+        total += morceau
+        for m in FIN_DE_PHRASE.finditer(total, cherche):
+            cherche = m.end()
+            if dans_une_description(total[:m.start()]):
+                continue
+            compte += 1
+            if compte >= maximum:
+                yield total[envoye:m.end()]
+                return
+        yield total[envoye:]
+        envoye = len(total)
+
+
 def phrases(morceaux):
     """Regroupe en phrases complètes le texte qui arrive morceau par morceau,
     pour que chaque phrase soit lue pendant que le modèle écrit la suivante."""

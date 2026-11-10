@@ -35,6 +35,8 @@ max_tokens = 200
 
 [dialogue]
 historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
+phrases_max = 3            # phrases dites au plus par réplique : au-delà, la réponse est coupée
+                           # (les descriptions entre parenthèses ne comptent pas)
 intervention = 0.3         # à plusieurs PNJ : chance qu'un autre PNJ réagisse de lui-même après une réplique
                            # (si « Interventions spontanées » est cochée sur la page de jeu)
 

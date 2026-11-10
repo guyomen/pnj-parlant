@@ -13,10 +13,14 @@ from . import texte
 VOYAGEUR = "Voyageur"
 
 
-def consignes(npc, monde="", presents=()):
+PHRASES_MAX = 3  # par réplique, réglable dans [dialogue] phrases_max de config.toml
+
+
+def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX):
     """Prompt système du PNJ : sa fiche, l'univers connu de tous, les autres PNJ présents.
     Jamais les notes du MJ (elles peuvent contenir l'intrigue), ni le secret des autres PNJ."""
     infos = "\n".join(f"- {c}" for c in npc.get("connaissances", []))
+    longueur = "une phrase courte" if phrases_max == 1 else f"1 à {phrases_max} phrases courtes"
     scene = ""
     if presents:
         autres = "\n".join(f"- {p.get('nom')}, {p.get('metier')}. {p.get('apparence', '')}" for p in presents)
@@ -40,7 +44,7 @@ Ce que tu sais et peux révéler :
 Ton secret (ne le révèle que si le voyageur gagne vraiment ta confiance ou te paie bien) : {npc.get('secret')}
 
 Règles :
-- Tes réponses sont LUES À VOIX HAUTE : 1 à 3 phrases courtes, langage parlé.
+- Tes réponses sont LUES À VOIX HAUTE : {longueur}, langage parlé.
 - Aucun markdown, aucun emoji, aucune action entre astérisques.
 - Reste toujours dans ton personnage. Tu ne sais rien du monde réel moderne.
 - Ne cite aucun lieu, personnage, faction ou événement absent de l'univers ci-dessus ou de ta fiche.
@@ -95,12 +99,14 @@ def arrets(nom, presents=()):
     return [f"{e}{deux_points}" for e in autres for deux_points in (" :", ":")]
 
 
-def repliques(morceaux, nom, presents=()):
+def repliques(morceaux, nom, presents=(), phrases_max=PHRASES_MAX):
     """Phrases de la réponse du PNJ `nom`, nettoyées et prêtes à être lues, au fil de l'écriture du modèle.
-    S'arrête si le modèle se met à écrire la réplique d'un autre (« Brom : … », « Voyageur : … »)."""
+    S'arrête si le modèle se met à écrire la réplique d'un autre (« Brom : … », « Voyageur : … »), ou après
+    `phrases_max` phrases : un petit modèle ne respecte pas toujours la longueur demandée."""
     autres = [p["nom"] for p in presents] + AUTRES_LOCUTEURS
     try:
-        for phrase in texte.phrases(texte.sans_autres_locuteurs(morceaux, nom, autres)):
+        sien = texte.sans_autres_locuteurs(morceaux, nom, autres)  # sans les répliques des autres
+        for phrase in texte.phrases(texte.limiter_phrases(sien, phrases_max)):
             phrase = texte.nettoyer(phrase)
             if phrase:
                 yield phrase

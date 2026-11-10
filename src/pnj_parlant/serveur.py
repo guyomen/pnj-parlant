@@ -54,6 +54,7 @@ class Contexte:
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
         self.historique = cfg.section("dialogue").get("historique", 12)  # messages gardés pour le contexte
         self.intervention = cfg.section("dialogue").get("intervention", 0.3)
+        self.phrases_max = max(1, int(cfg.section("dialogue").get("phrases_max", dialogue.PHRASES_MAX)))
 
     def changer_tts(self, nom):
         """Change de moteur de synthèse pour tout le serveur. Lève ValueError s'il est inutilisable."""
@@ -237,7 +238,7 @@ def create_app(cfg, **moteurs):
         history = dialogue.nettoyer_historique(data.get("history"), ctx.historique)
         if not npc.get("nom") or not history:
             return erreur("Il manque le PNJ ou la question.", 400)
-        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents)
+        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, ctx.phrases_max)
         try:
             morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents),
                                             dialogue.arrets(npc["nom"], presents))
@@ -246,7 +247,7 @@ def create_app(cfg, **moteurs):
 
         def lignes():
             try:
-                for phrase in dialogue.repliques(morceaux, npc["nom"], presents):
+                for phrase in dialogue.repliques(morceaux, npc["nom"], presents, ctx.phrases_max):
                     yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
             except MoteurIndisponible as e:
                 yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"
