@@ -43,12 +43,11 @@ def charger(config, base_dir, moteur=None):
     return instance
 
 
-def voix_narrateur(moteur, eviter=None):
+def voix_narrateur(moteur, eviter=()):
     """Voix neutre pour les descriptions entre parenthèses : celle de config.toml, sauf si c'est
-    justement celle du PNJ (`eviter`) ; on prend alors une autre voix du même genre. None si aucune voix."""
-    eviter = eviter or {}
-    pris = (eviter.get("name"), eviter.get("speaker"))
-    catalogue = [(v, g) for v, g in moteur.catalogue() if (v["name"], v.get("speaker")) != pris]
+    celle d'un PNJ de la scène (`eviter`) ; on prend alors une autre voix du même genre. None si aucune voix."""
+    pris = {(v.get("name"), v.get("speaker")) for v in eviter}
+    catalogue = [(v, g) for v, g in moteur.catalogue() if (v["name"], v.get("speaker")) not in pris]
     if not catalogue:
         return None
     voulue = lambda v: v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))

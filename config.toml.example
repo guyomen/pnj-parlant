@@ -35,6 +35,8 @@ max_tokens = 200
 
 [dialogue]
 historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
+intervention = 0.3         # à plusieurs PNJ : chance qu'un autre PNJ réagisse de lui-même après une réplique
+                           # (si « Interventions spontanées » est cochée sur la page de jeu)
 
 [voix]                     # synthèse vocale : lit les répliques des PNJ
 moteur = "pocket"          # "pocket" : Pocket TTS de Kyutai, local, naturel, ~1 Go, demande le processeur d'un PC ;

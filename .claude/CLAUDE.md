@@ -42,8 +42,14 @@ Routes :
   (servent seulement à la création, jamais envoyées pendant les dialogues).
 - `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>`, `POST /api/voice` (autre voix pour un PNJ).
   `ensure_voice` réattribue une voix stable (graine = nom) si celle du PNJ manque sur la machine.
-- `POST /api/npc/talk {npc, history, message}` : fiche + univers = prompt système ; serveur sans état,
-  historique côté navigateur (`[dialogue] historique`, 12 messages). Réponse en streaming NDJSON,
+- `POST /api/npc/talk {npc, presents, history}` : fiche + univers = prompt système ; serveur sans état,
+  historique côté navigateur (`[dialogue] historique`, 12 messages) : toute la scène,
+  `[{speaker: nom du PNJ ou null pour le joueur, content}]`, salutations comprises. Scène à plusieurs PNJ
+  (`presents`, jusqu'à 3 en tout) : chaque PNJ voit ses répliques en `assistant` et celles des autres en
+  `user` préfixées « Nom : » ; le serveur coupe la réponse si le modèle écrit la réplique d'un autre.
+  Côté navigateur : répond le PNJ cité (nom ou métier), sinon le dernier à avoir parlé ; options
+  « Interventions spontanées » (`[dialogue] intervention`), « Laissez-les discuter » et « Faire entrer »
+  (PNJ créé par `/api/npc/generate` avec la conversation dans `consignes`). Réponse en streaming NDJSON,
   une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`) ; le navigateur lit chaque phrase dès
   qu'elle arrive et prépare la voix de la suivante.
 - `POST /api/tts {text, voice, narrateur}` : en cas d'échec (503), le navigateur utilise `speechSynthesis`.

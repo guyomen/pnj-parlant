@@ -208,16 +208,22 @@ def phrases(morceaux):
         yield tampon
 
 
-def assign_voice(npc, rng=random):
+def cle_voix(v):
+    return (v.get("name"), v.get("speaker"))
+
+
+def assign_voice(npc, rng=random, eviter=()):
     """Choisit une voix du moteur de synthèse, du genre du PNJ, réglée d'après son timbre et son débit
-    (avec aussi un réglage pour la voix du navigateur, en repli)."""
+    (avec aussi un réglage pour la voix du navigateur, en repli).
+    `eviter` : voix déjà prises par les autres PNJ de la scène, écartées tant qu'il en reste d'autres."""
     genre = npc.get("genre")
     debit = {"lent": 1.2, "normal": 1.0, "rapide": 0.85}.get(npc.get("debit"), 1.0)
     pitch = {"grave": 0.7, "moyen": 1.0, "aigu": 1.35}.get(npc.get("timbre"), 1.0)
     pitch *= {"feminin": 1.25, "masculin": 0.85}.get(genre, 1.0)  # voix du navigateur
     voice = {"length_scale": round(debit * rng.uniform(0.95, 1.05), 2), "timbre": npc.get("timbre"),
              "browser_pitch": round(pitch, 2), "browser_rate": round(1 / debit, 2)}
-    catalogue = tts.catalogue()
+    prises = {cle_voix(v) for v in eviter if isinstance(v, dict)}
+    catalogue = [(v, g) for v, g in tts.catalogue() if cle_voix(v) not in prises] or tts.catalogue()
     if catalogue:
         # Voix du bon genre ; à défaut (PNJ neutre ou aucune voix de ce genre), n'importe laquelle.
         matching = [v for v, g in catalogue if g == genre]
@@ -250,6 +256,7 @@ def config():
     installes = moteurs.modeles_locaux() if "local" in moteurs.choix.values() else []
     return jsonify({"moteurs": moteurs.description(), "tts": tts.nom if tts.catalogue() else None,
                     "stt_local": stt_local(), "modeles_locaux": installes,
+                    "intervention": CONFIG.get("dialogue", {}).get("intervention", 0.3),
                     "modele_local": moteurs.modele_local_installe(installes)})
 
 
@@ -306,11 +313,19 @@ def create_npc(role="", nom="", genre="", consignes=""):
         parts.append(f"<notes_du_mj>\n{scenario['notes_mj']}\n</notes_du_mj>")
     if consignes.strip():
         parts.append(f"<consignes_pour_ce_pnj>\n{consignes.strip()[:4000]}\n</consignes_pour_ce_pnj>")
-    demande = [f"Métier : {role.strip()[:80] or random.choice(METIERS)}."]
+    if role.strip():
+        demande = [f"Métier : {role.strip()[:80]}."]
+    elif consignes.strip():  # ex. PNJ qui entre en cours de discussion : métier déjà évoqué dans la scène
+        demande = [f"Métier : celui qu'indiquent les consignes, sinon {random.choice(METIERS)}."]
+    else:
+        demande = [f"Métier : {random.choice(METIERS)}."]
+    lettre = random.choice(INITIALES)
     if nom.strip():
         demande.append(f"Nom imposé : {nom.strip()[:80]}.")
+    elif consignes.strip():
+        demande.append(f"Si les consignes donnent son nom, garde-le ; sinon, le nom commence par la lettre {lettre}.")
     else:
-        demande.append(f"Le nom commence par la lettre {random.choice(INITIALES)}.")
+        demande.append(f"Le nom commence par la lettre {lettre}.")
     if genre in ("feminin", "masculin", "neutre"):
         demande.append(f"Genre : {genre}.")
     demande.append(f"Suggestions : humeur {random.choice(HUMEURS)}, trait dominant {random.choice(TRAITS)}.")
@@ -442,7 +457,7 @@ def new_voice():
     """Tire une autre voix pour le PNJ (changement de genre ou de moteur),
     ou applique celle demandée dans `choix` (nom de voix de GET /api/voices)."""
     npc = request.json or {}
-    voice = assign_voice(npc)
+    voice = assign_voice(npc, eviter=npc.get("eviter") or [])  # eviter : voix des autres PNJ de la scène
     choix = npc.get("choix")
     if choix:
         trouvee = next((v for v, _ in tts.catalogue() if v["name"] == choix), None)
@@ -490,8 +505,18 @@ def bank_delete(npc_id):
     return jsonify({"ok": True})
 
 
-def npc_system_prompt(npc):
+def npc_system_prompt(npc, presents=()):
+    """Consignes du PNJ. `presents` : les autres PNJ de la scène (on ne lui donne jamais leur secret)."""
     infos = "\n".join(f"- {c}" for c in npc.get("connaissances", []))
+    scene = ""
+    if presents:
+        autres = "\n".join(f"- {p.get('nom')}, {p.get('metier')}. {p.get('apparence', '')}" for p in presents)
+        scene = f"""
+- Tu n'es pas seul avec le voyageur. Sont aussi présents :
+{autres}
+  Leurs répliques te parviennent précédées de leur nom (« Nom : … ») ; celles du voyageur, de « Voyageur : ».
+  Tu peux t'adresser à eux, les taquiner ou les contredire, selon ta personnalité.
+  Ne parle que pour toi : n'écris jamais leurs répliques, ne commence pas ta réponse par ton nom."""
     monde = load_scenario()["monde"]  # jamais les notes du MJ : elles peuvent contenir l'intrigue
     univers = (f"""Ce que tout habitant sait du monde :
 <univers>
@@ -511,41 +536,71 @@ Règles :
 - Reste toujours dans ton personnage. Tu ne sais rien du monde réel moderne.
 - Ne cite aucun lieu, personnage, faction ou événement absent de l'univers ci-dessus ou de ta fiche.
   Si on te demande quelque chose que tu ignores, dis-le à ta manière ou reste vague, sans inventer de nom propre.
-- Si c'est ton métier, tu peux proposer des marchandises avec des prix en pièces d'or ou d'argent."""
+- Si c'est ton métier, tu peux proposer des marchandises avec des prix en pièces d'or ou d'argent.{scene}"""
+
+
+# « Nom : » en tête de phrase : le modèle annonce qui parle (lui-même, un autre PNJ ou le voyageur)
+ETIQUETTE = re.compile(r"^\s*([^:.!?()]{1,40}?)\s*:\s*")
+
+
+def locuteur(phrase, noms):
+    """Le nom (parmi `noms`) annoncé en tête de phrase, ex. « Ysolde : » pour « Ysolde la Rousse »."""
+    m = ETIQUETTE.match(phrase)
+    if not m:
+        return None, phrase
+    etiquette = m[1].strip().lower()
+    nom = next((n for n in noms if n and (n.lower() == etiquette or n.lower().split()[0] == etiquette)), None)
+    return nom, phrase[m.end():] if nom else phrase
 
 
 @app.post("/api/npc/talk")
 def talk():
+    """Réplique de `npc`. `history` : [{speaker: nom du PNJ ou null pour le joueur, content}], la scène
+    entière ; `presents` : les autres PNJ de la scène. Chaque PNJ voit ses répliques comme les siennes
+    (assistant) et celles des autres comme des paroles entendues (user), précédées du nom de leur auteur."""
     data = request.json or {}
     npc = data.get("npc") or {}
-    message = (data.get("message") or "").strip()[:500]
-    if not npc or not message:
+    presents = [p for p in data.get("presents") or [] if isinstance(p, dict) and p.get("nom")][:4]
+    history = [m for m in data.get("history") or []
+               if isinstance(m, dict) and str(m.get("content") or "").strip()][-HISTORIQUE:]
+    if not npc.get("nom") or not history:
         return jsonify({"error": "Il manque le PNJ ou la question."}), 400
 
-    history = [m for m in data.get("history", [])
-               if m.get("role") in ("user", "assistant") and m.get("content")][-HISTORIQUE:]
+    nom = npc["nom"]
+    # À plusieurs (ou si un PNJ vient de quitter la scène), chacun doit savoir qui a parlé
+    groupe = bool(presents) or any(m.get("speaker") not in (None, nom) for m in history)
     # L'API attend un premier message « user » : on met en scène l'arrivée du joueur.
-    messages = [{"role": "user", "content": "(Un voyageur s'approche de toi.)"},
-                {"role": "assistant", "content": npc.get("salutation", "Bonjour.")}]
-    for m in history:  # fusionne d'éventuels messages consécutifs du même rôle
-        if messages[-1]["role"] == m["role"]:
-            messages[-1]["content"] += "\n" + m["content"]
+    messages = [{"role": "user", "content": "(Un voyageur s'approche.)"}]
+    for m in history:
+        texte = str(m["content"]).strip()[:1000]
+        if m.get("speaker") == nom:
+            role = "assistant"
         else:
-            messages.append({"role": m["role"], "content": m["content"]})
-    if messages[-1]["role"] == "user":
-        messages[-1]["content"] += "\n" + message
-    else:
-        messages.append({"role": "user", "content": message})
+            role = "user"
+            if groupe:
+                texte = f"{m.get('speaker') or 'Voyageur'} : {texte}"
+        if messages[-1]["role"] == role:  # fusionne les messages consécutifs du même rôle
+            messages[-1]["content"] += "\n" + texte
+        else:
+            messages.append({"role": role, "content": texte})
+    if messages[-1]["role"] == "assistant":  # le PNJ reprend la parole après lui-même
+        messages.append({"role": "user", "content": "(Le voyageur attend la suite.)"})
 
     try:
-        morceaux = moteurs.replique(npc_system_prompt(npc), messages)
+        morceaux = moteurs.replique(npc_system_prompt(npc, presents), messages)
     except MoteurIndisponible as e:
         return jsonify({"error": str(e)}), 503
+
+    autres = [p["nom"] for p in presents] + ["Voyageur"]
 
     def lignes():
         """Une ligne JSON par phrase prête à être lue : {"phrase": "..."}, ou {"error": "..."}."""
         try:
-            for phrase in map(clean_for_speech, phrases(morceaux)):
+            for phrase in phrases(morceaux):
+                qui, phrase = locuteur(phrase, [nom] + autres)
+                if qui in autres:  # le modèle se met à écrire la réplique d'un autre : on s'arrête là
+                    break
+                phrase = clean_for_speech(phrase)
                 if phrase:
                     yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
         except MoteurIndisponible as e:
@@ -560,8 +615,8 @@ def synthese():
     if not text:
         return jsonify({"error": "Rien à lire."}), 400
     voice = data.get("voice") or {}
-    if data.get("narrateur"):  # description entre parenthèses : voix neutre, autre que celle du PNJ
-        voice = voix.voix_narrateur(tts, voice)
+    if data.get("narrateur"):  # description entre parenthèses : voix neutre, autre que celles des PNJ
+        voice = voix.voix_narrateur(tts, [voice] + [v for v in data.get("eviter") or [] if isinstance(v, dict)])
         if voice is None:
             return jsonify({"error": "Synthèse vocale indisponible."}), 503
     try:

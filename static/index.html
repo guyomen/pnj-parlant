@@ -26,6 +26,25 @@
   .line .who { display: block; font: 700 .85rem var(--body); color: var(--glass); }
   .line.pj .who { color: var(--muted); }
   .line .narration { color: var(--muted); font-size: .9em; }
+  /* Un nom de couleur différente par PNJ de la scène */
+  .line.npc-1 .who { color: var(--wax); }
+  .line.npc-2 .who { color: var(--verdigris); }
+
+  /* Fiches des PNJ de la scène : la première en grand, les suivantes plus discrètes */
+  .pnj-card.second { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .npc .pnj-card.second h1 { font-size: 1.7rem; }
+  .pnj-card.second p { font-size: .95rem; }
+
+  /* Options */
+  .options { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .options h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
+  .options label { display: block; margin-bottom: .4rem; cursor: pointer; }
+  .options .sub { margin-left: 1.6rem; }
+  .options .sub[hidden], .options .gen[hidden] { display: none; }
+  .options .gen { margin-top: .4rem; }
+  .options .hint { color: var(--muted); font-size: .9rem; }
+  .actions { display: flex; flex-direction: column; gap: .4rem; }
+  .actions button[hidden] { display: none; }
   /* État de la machine */
   .sys { margin-top: 1rem; font-size: .85rem; color: var(--muted); display: grid; gap: .35rem; }
   .sys .bar { height: .4rem; background: var(--line); border-radius: .2rem; overflow: hidden; }
@@ -48,7 +67,7 @@
 <body>
 <main>
   <section class="npc" aria-live="polite">
-    <div id="card"><p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p></div>
+    <div id="cards"><p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p></div>
     <div class="gen">
       <input type="text" id="role" placeholder="Métier (ex. marchand de potions)" aria-label="Métier du PNJ">
       <button id="genBtn">Créer un PNJ</button>
@@ -58,13 +77,28 @@
       <div class="row">
         <select id="bankSel" aria-label="PNJ enregistrés"></select>
         <button id="loadBtn">Jouer</button>
+        <button class="ghost" id="addBtn" title="Le PNJ rejoint la conversation en cours">Ajouter à la scène</button>
       </div>
       <div class="row">
-        <button class="ghost" id="saveBtn">Sauvegarder ce PNJ</button>
+        <button class="ghost" id="saveBtn">Sauvegarder</button>
+        <button class="ghost" id="exportBtn">Exporter la conversation</button>
         <a class="link" href="creation.html">Préparer les PNJ et le scénario →</a>
       </div>
       <div class="row" id="modelRow" hidden>
         <select id="modelSel" aria-label="Modèle local"></select>
+      </div>
+    </div>
+    <div class="options">
+      <h2>Options</h2>
+      <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
+      <div class="sub" id="multiOpts">
+        <label><input type="checkbox" id="optIntervention"> Interventions spontanées
+          <span class="hint">: un autre PNJ réagit parfois de lui-même</span></label>
+        <label><input type="checkbox" id="optEntree"> Faire entrer un PNJ inventé d’après la conversation</label>
+        <div class="gen" id="entreeRow">
+          <input type="text" id="entree" placeholder="Qui ? (vide : au choix du modèle)" aria-label="PNJ à faire entrer">
+          <button class="ghost" id="entreeBtn">Faire entrer</button>
+        </div>
       </div>
     </div>
     <div class="sys" id="sys" aria-live="polite"></div>
@@ -75,7 +109,10 @@
     <div class="status" id="status"></div>
     <div class="controls">
       <button class="mic" id="micBtn" aria-pressed="false" disabled>Parler</button>
-      <button class="ghost" id="stopBtn" title="Interrompre le PNJ (Échap)" hidden>Stop</button>
+      <div class="actions">
+        <button class="ghost" id="stopBtn" title="Interrompre le PNJ (Échap)" hidden>Stop</button>
+        <button class="ghost" id="discuterBtn" title="Un autre PNJ répond à celui qui vient de parler" hidden>Laissez-les discuter</button>
+      </div>
       <form class="ask" id="askForm" onsubmit="return false">
         <input type="text" id="ask" placeholder="Ou tapez votre question…" aria-label="Question au PNJ" disabled>
         <button class="ghost" id="sendBtn" disabled>Envoyer</button>
@@ -86,13 +123,17 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-let cfg = { tts: null };
-let npc = null;
-let history = [];
+let cfg = { tts: null, intervention: 0.3 };
+let npcs = [];      // PNJ de la scène ; le premier est le principal
+let history = [];   // toute la scène : [{ speaker: nom du PNJ, ou null pour le joueur, content }]
+let dernier = null; // PNJ qui a parlé en dernier : il répond quand le joueur ne nomme personne
 let busy = false;
+const MAX_PNJ = 3;
 
 const status = (t) => { $("status").textContent = t || ""; };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();  // sans accents
+const hasard = (liste) => liste[Math.floor(Math.random() * liste.length)];
 
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
   const opts = { method, headers: { "Content-Type": "application/json" } };
@@ -124,33 +165,69 @@ async function apiStream(path, body, onItem, signal) {
   if (buf.trim()) onItem(JSON.parse(buf));
 }
 
-function addLine(role, text) {
+// --- Options (mémorisées dans ce navigateur) ----------------------------------
+const OPTIONS = ["optMulti", "optIntervention", "optEntree"];
+
+function loadOptions() {
+  for (const id of OPTIONS) {
+    let v = null;
+    try { v = localStorage.getItem(id); } catch {}
+    $(id).checked = v === null ? true : v === "1";  // tout est activé par défaut
+  }
+}
+
+function saveOptions() {
+  for (const id of OPTIONS) try { localStorage.setItem(id, $(id).checked ? "1" : "0"); } catch {}
+}
+
+// Une sous-option ne compte que si « Plusieurs PNJ dans la scène » est cochée
+const opt = (id) => $(id).checked && $("optMulti").checked;
+
+// --- Affichage ---------------------------------------------------------------
+// qui : le PNJ qui parle, ou null pour le joueur
+function addLine(qui, text) {
   const div = document.createElement("div");
-  div.className = "line " + (role === "assistant" ? "npc-line" : "pj");
-  div.innerHTML = `<span class="who">${role === "assistant" ? esc(npc.nom) : "Vous"}</span><span class="text">${formatLine(text)}</span>`;
+  div.className = qui ? `line npc-line npc-${Math.max(0, npcs.indexOf(qui)) % MAX_PNJ}` : "line pj";
+  div.innerHTML = `<span class="who">${qui ? esc(qui.nom) : "Vous"}</span><span class="text">${formatLine(text)}</span>`;
   $("log").appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
   return div;
 }
 
-function renderCard() {
-  $("card").innerHTML = `
-    <h1>${esc(npc.nom)}</h1>
-    <p class="metier">${esc(npc.metier)}</p>
-    <p>${esc(npc.apparence)}</p>
-    <p><span class="k">Caractère :</span> ${esc(npc.personnalite)}</p>
-    <p><span class="k">Humeur :</span> ${esc(npc.humeur)}</p>`;
+function renderCards() {
+  $("cards").innerHTML = npcs.length ? npcs.map((n, i) => `
+    <div class="pnj-card${i ? " second" : ""}">
+      <h1>${esc(n.nom)}</h1>
+      <p class="metier">${esc(n.metier)}</p>
+      <p>${esc(n.apparence)}</p>
+      <p><span class="k">Caractère :</span> ${esc(n.personnalite)}</p>
+      <p><span class="k">Humeur :</span> ${esc(n.humeur)}</p>
+      ${i ? `<button class="ghost" data-retirer="${i}">Retirer de la scène</button>` : ""}
+    </div>`).join("")
+    : `<p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p>`;
 }
 
 function setBusy(b) {
   busy = b;
-  for (const id of ["genBtn", "sendBtn", "ask"]) $(id).disabled = b || (id !== "genBtn" && !npc);
-  $("micBtn").disabled = b || !npc || !(cfg.stt_local || recognition);
-  $("saveBtn").disabled = b || !npc || !!npc.id;  // déjà dans la banque
+  const scene = npcs.length > 0, multi = $("optMulti").checked;
+  $("genBtn").disabled = b;
+  $("sendBtn").disabled = $("ask").disabled = b || !scene;
+  $("micBtn").disabled = b || !scene || !(cfg.stt_local || recognition);
+  $("saveBtn").disabled = b || !npcs.some(n => !n.id);  // tous déjà dans la banque
+  $("exportBtn").disabled = !scene;
   $("loadBtn").disabled = b || !$("bankSel").value;
+  $("addBtn").hidden = !multi;
+  $("addBtn").disabled = b || !scene || npcs.length >= MAX_PNJ || !$("bankSel").value
+                         || npcs.some(n => n.id === $("bankSel").value);
+  $("multiOpts").hidden = !multi;
+  $("entreeRow").hidden = !opt("optEntree");
+  $("entreeBtn").disabled = b || !scene || npcs.length >= MAX_PNJ;
+  $("discuterBtn").hidden = !multi || npcs.length < 2;
+  $("discuterBtn").disabled = b;
+  for (const btn of document.querySelectorAll("[data-retirer]")) btn.disabled = b;
 }
 
-// --- Voix du PNJ -------------------------------------------------------------
+// --- Voix des PNJ ------------------------------------------------------------
 // Le texte entre parenthèses décrit la scène (geste, ton…) : il est lu par une voix neutre de narrateur.
 const NARRATION = /(\([^)]*\)?)/;  // parenthèse fermante facultative : réponse coupée en cours de route
 
@@ -192,22 +269,24 @@ function stopNpc() {
 // Lance tout de suite la synthèse (Piper, Pocket TTS ou Edge) et renvoie une fonction qui joue
 // le son : la phrase suivante se prépare ainsi pendant que la précédente est lue.
 // onStart(morceau) est appelé au moment où chaque morceau commence à être dit (pour l'afficher).
-function prepareSpeech(text, p, onStart) {
-  const plays = segments(text).map(([t, narrateur]) => prepareSegment(t, narrateur, p, onStart));
+function prepareSpeech(text, p, onStart, n) {
+  const plays = segments(text).map(([t, narrateur]) => prepareSegment(t, narrateur, p, onStart, n));
   return async () => { for (const play of plays) await play(); };
 }
 
-function prepareSegment(text, narrateur, p, onStart) {
-  const audioFile = cfg.tts && npc.voix?.name
+function prepareSegment(text, narrateur, p, onStart, n) {
+  // eviter : le narrateur ne prend la voix d'aucun PNJ de la scène
+  const audioFile = cfg.tts && n.voix?.name
     ? fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ text, voice: npc.voix, narrateur }), signal: p.ctrl.signal })
+                          body: JSON.stringify({ text, voice: n.voix, narrateur, eviter: npcs.map(x => x.voix) }),
+                          signal: p.ctrl.signal })
         .then(r => r.ok ? r.blob() : null).catch(() => null)
     : Promise.resolve(null);
   return async () => {
     const blob = await audioFile;
     if (p.ctrl.signal.aborted) return;  // interrompu par Stop
     onStart?.(narrateur ? `(${text})` : text);
-    if (!blob) return browserSpeak(text, narrateur);  // repli sur la voix du navigateur
+    if (!blob) return browserSpeak(text, narrateur, n);  // repli sur la voix du navigateur
     const audio = new Audio(URL.createObjectURL(blob));
     await new Promise((res) => {
       p.stop = () => { audio.pause(); res(); };
@@ -217,48 +296,102 @@ function prepareSegment(text, narrateur, p, onStart) {
   };
 }
 
-const speak = (text, p, onStart) => prepareSpeech(text, p, onStart)();
+const speak = (text, p, onStart, n) => prepareSpeech(text, p, onStart, n)();
 
-async function browserSpeak(text, narrateur = false) {
+async function browserSpeak(text, narrateur, n) {
   if (!("speechSynthesis" in window)) return;
   await new Promise((res) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
-    u.pitch = narrateur ? 1 : npc.voix?.browser_pitch ?? 1;
-    u.rate = narrateur ? 1 : npc.voix?.browser_rate ?? 1;
+    u.pitch = narrateur ? 1 : n.voix?.browser_pitch ?? 1;
+    u.rate = narrateur ? 1 : n.voix?.browser_rate ?? 1;
     const fr = speechSynthesis.getVoices().filter(v => v.lang.startsWith("fr"));
-    // le narrateur prend la voix française suivante, pour se distinguer du PNJ
-    if (fr.length) u.voice = fr[(npc.nom.length + (narrateur ? 1 : 0)) % fr.length];
+    // le narrateur prend la première voix française, chaque PNJ une des suivantes
+    if (fr.length) u.voice = fr[narrateur ? 0 : (1 + Math.max(0, npcs.indexOf(n))) % fr.length];
     u.onend = res; u.onerror = res;
     speechSynthesis.speak(u);
   });
 }
 
-// --- Création et dialogue ----------------------------------------------------
-async function startNpc(newNpc) {
-  npc = newNpc;
-  history = [];
-  $("log").innerHTML = "";
-  renderCard();
-  status("");
-  setBusy(true);
+// --- Scène : arrivée des PNJ -------------------------------------------------
+// Le PNJ dit sa salutation ; chaque morceau s'affiche quand il est dit
+async function saluer(n) {
   const p = debutParole();
-  // Comme les répliques : chaque morceau s'affiche quand il est dit
   let line = null, said = "";
-  await speak(npc.salutation, p, (morceau) => {
-    line ??= addLine("assistant", "");
+  await speak(n.salutation, p, (morceau) => {
+    line ??= addLine(n, "");
     said += (said ? " " : "") + morceau;
     line.querySelector(".text").innerHTML = formatLine(said);
-  });
+    line.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, n);
   finParole(p);
+}
+
+// Nouvelle scène avec ce PNJ seul
+async function startScene(n) {
+  npcs = [n];
+  history = [{ speaker: n.nom, content: n.salutation }];
+  dernier = n;
+  $("log").innerHTML = "";
+  renderCards();
+  status("");
+  setBusy(true);
+  await saluer(n);
+}
+
+const memeVoix = (a, b) => !!a?.name && a.name === b?.name && (a.speaker ?? null) === (b?.speaker ?? null);
+
+// Le PNJ rejoint la scène en cours
+async function joinScene(n) {
+  if (npcs.some(x => x.nom === n.nom)) throw new Error(`${n.nom} est déjà dans la scène.`);
+  if (npcs.some(x => memeVoix(x.voix, n.voix))) {  // deux PNJ de la scène n'ont jamais la même voix
+    n.voix = await api("/api/voice", { ...n, eviter: npcs.map(x => x.voix) });
+  }
+  npcs.push(n);
+  history.push({ speaker: n.nom, content: n.salutation });
+  dernier = n;
+  renderCards();
+  status("");
+  setBusy(true);
+  await saluer(n);
+}
+
+function retirer(i) {
+  const [n] = npcs.splice(i, 1);
+  if (dernier === n) dernier = npcs[0];
+  renderCards();
+  setBusy(busy);
+  status(`${n.nom} quitte la scène.`);
 }
 
 async function generate() {
   setBusy(true); status("Le PNJ prend forme…");
-  try { await startNpc(await api("/api/npc/generate", { role: $("role").value })); }
+  try { await startScene(await api("/api/npc/generate", { role: $("role").value })); }
   catch (e) { status(e.message); }
   setBusy(false);
-  if (npc) $("ask").focus();
+  if (npcs.length) $("ask").focus();
+}
+
+// Un PNJ inventé d'après la conversation entre dans la scène
+async function faireEntrer() {
+  if (busy || !npcs.length || npcs.length >= MAX_PNJ) return;
+  const qui = $("entree").value.trim();
+  setBusy(true); status("Quelqu’un approche…");
+  const presents = npcs.map(n => `${n.nom} (${n.metier})`).join(" et ");
+  const conversation = history.slice(-12).map(m => `${m.speaker || "Voyageur"} : ${m.content}`).join("\n").slice(-2500);
+  const consignes = [
+    `Ce PNJ entre dans une scène déjà commencée, où se trouvent ${presents} et un voyageur.`,
+    qui ? `Qui entre : ${qui}.`
+        : "Qui entre : de préférence une personne évoquée dans la conversation, sinon quelqu'un qui a une bonne raison d'être là.",
+    "Si la conversation parle de cette personne, reprends son nom, son métier et tout ce qui en a été dit.",
+    "Sa salutation réagit à ce qui vient de se dire ; il peut interpeller les présents par leur nom.",
+    `Conversation jusqu'ici :\n${conversation}`,
+  ].join("\n");
+  try {
+    await joinScene(await api("/api/npc/generate", { consignes }));
+    $("entree").value = "";
+  } catch (e) { status(e.message); }
+  setBusy(false);
 }
 
 // --- Banque de PNJ -----------------------------------------------------------
@@ -271,53 +404,159 @@ async function refreshBank(selectId) {
   setBusy(busy);
 }
 
-async function loadFromBank() {
+// ajout : le PNJ rejoint la scène en cours au lieu d'en commencer une nouvelle
+async function loadFromBank(ajout) {
   setBusy(true); status("");
-  try { await startNpc(await api(`/api/bank/${encodeURIComponent($("bankSel").value)}`)); }
-  catch (e) { status(e.message); }
+  try {
+    const n = await api(`/api/bank/${encodeURIComponent($("bankSel").value)}`);
+    await (ajout ? joinScene(n) : startScene(n));
+  } catch (e) { status(e.message); }
   setBusy(false);
-  if (npc) $("ask").focus();
+  if (npcs.length) $("ask").focus();
 }
 
 async function saveToBank() {
   try {
-    const { id } = await api("/api/bank", npc);
-    npc.id = id;
-    await refreshBank(id);
-    status(`${npc.nom} est enregistré dans la banque.`);
+    const noms = [];
+    for (const n of npcs.filter(n => !n.id)) {
+      n.id = (await api("/api/bank", n)).id;
+      noms.push(n.nom);
+    }
+    await refreshBank(npcs[0].id);
+    status(`${noms.join(" et ")} ${noms.length > 1 ? "sont enregistrés" : "est enregistré"} dans la banque.`);
   } catch (e) { status(e.message); }
+}
+
+// --- Export de la conversation -----------------------------------------------
+// Télécharge un fichier texte avec le dialogue tel qu'il est affiché (descriptions comprises).
+function exportConversation() {
+  const date = new Date();
+  const lignes = [...$("log").querySelectorAll(".line")]
+    .map(l => `${l.querySelector(".who").textContent} : ${l.querySelector(".text").textContent}`);
+  const entete = [`Conversation avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}`,
+                  ...npcs.map(n => npcs.length > 1 ? `${n.nom} : ${n.apparence}` : n.apparence),
+                  date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })].join("\n");
+  const texte = `${entete}\n\n${"—".repeat(40)}\n\n${lignes.join("\n\n")}\n`;
+  const slug = norm(npcs.map(n => n.nom).join(" et ")).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "pnj";
+  const p2 = (n) => String(n).padStart(2, "0");
+  const horodatage = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}-${p2(date.getHours())}h${p2(date.getMinutes())}`;
+  // BOM : le Bloc-notes de Windows affiche alors correctement les accents
+  const bom = String.fromCharCode(0xFEFF);
+  const url = URL.createObjectURL(new Blob([bom + texte], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `conversation-${slug}-${horodatage}.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// --- Dialogue : qui répond ? --------------------------------------------------
+const MOTS_VIDES = new Set(["les", "des", "aux", "dit", "del", "van", "von"]);
+
+// Mots qui désignent un PNJ : les mots de son nom, et le premier mot de son métier (« forgeron »)
+function motsCles(n) {
+  const mots = norm(n.nom).split(/[^a-z0-9]+/);
+  mots.push(norm(n.metier).split(/[^a-z0-9]+/)[0]);
+  return mots.filter(m => m.length >= 3 && !MOTS_VIDES.has(m));
+}
+
+// PNJ nommés (ou désignés par leur métier) dans la phrase du joueur, dans l'ordre où ils sont cités
+function interpelles(text) {
+  const t = norm(text);
+  const position = (n) => Math.min(...motsCles(n).map(m => {
+    const i = t.search(new RegExp(`\\b${m}\\b`));
+    return i < 0 ? Infinity : i;
+  }));
+  return npcs.map(n => ({ n, pos: position(n) })).filter(x => x.pos < Infinity)
+    .sort((a, b) => a.pos - b.pos).map(x => x.n);
+}
+
+// Option « Interventions spontanées » : de temps en temps, un autre PNJ réagit à la suite
+function avecIntervention(ordre) {
+  const restants = npcs.filter(n => !ordre.includes(n));
+  if (opt("optIntervention") && restants.length && Math.random() < (cfg.intervention ?? 0.3)) {
+    ordre.push(hasard(restants));
+  }
+  return ordre;
 }
 
 async function send(text) {
   text = text.trim();
-  if (!text || !npc || busy) return;
+  if (!text || !npcs.length || busy) return;
   $("ask").value = "";
-  addLine("user", text);
-  setBusy(true); status(`${npc.nom} réfléchit…`);
-  let line = null, reply = "", said = "", voice = Promise.resolve();
+  addLine(null, text);
+  history.push({ speaker: null, content: text });
+  // Le PNJ cité répond (tous ceux cités, dans l'ordre) ; sinon, celui qui a parlé en dernier
+  const cites = interpelles(text);
+  await jouerTours(cites.length > 1 ? cites
+    : avecIntervention(cites.length ? cites : [npcs.includes(dernier) ? dernier : npcs[0]]));
+}
+
+// Bouton « Laissez-les discuter » : un autre PNJ répond à celui qui vient de parler
+async function discuter() {
+  if (busy || npcs.length < 2) return;
+  const autres = npcs.filter(n => n !== dernier);
+  await jouerTours(avecIntervention([hasard(autres)]));
+}
+
+// Les PNJ de `ordre` parlent l'un après l'autre. Chacun commence à écrire sa réplique pendant
+// que le précédent parle encore, et l'entend en entier avant de répondre.
+async function jouerTours(ordre) {
+  setBusy(true);
   const p = debutParole();
-  // Le texte s'affiche morceau par morceau, au moment où il est dit à voix haute
+  let voice = Promise.resolve();
+  const tours = [];
+  for (const n of ordre) {
+    if (p.ctrl.signal.aborted || !npcs.includes(n)) break;
+    const t = await tourDe(n, p, voice);
+    tours.push(t);
+    voice = t.voice;
+    if (t.erreur) break;
+  }
+  await voice;
+  // Interrompu : chacun « se souvient » seulement de ce qu'il a eu le temps de dire
+  if (p.ctrl.signal.aborted) tours.forEach(t => t.corriger());
+  finParole(p);
+  setBusy(false);
+}
+
+// Réplique d'un PNJ : préparée phrase par phrase dès qu'elle arrive, affichée quand elle est dite.
+// Renvoie quand le modèle a fini d'écrire ; t.voice se termine quand le PNJ a fini de parler.
+async function tourDe(n, p, voice) {
+  let line = null, reply = "", said = "", erreur = null;
+  const entry = { speaker: n.nom, content: "" };
+  voice = voice.then(() => {
+    if (!line && !erreur && !p.ctrl.signal.aborted) status(`${n.nom} réfléchit…`);
+  });
   const show = (morceau) => {
-    if (!line) { line = addLine("assistant", ""); status(""); }
+    if (!line) { line = addLine(n, ""); status(""); }
     said += (said ? " " : "") + morceau;
     line.querySelector(".text").innerHTML = formatLine(said);
     line.scrollIntoView({ behavior: "smooth", block: "end" });
   };
   try {
-    // Chaque phrase est préparée dès qu'elle arrive, pendant que le modèle écrit la suite
-    await apiStream("/api/npc/talk", { npc, history, message: text }, (item) => {
+    await apiStream("/api/npc/talk", { npc: n, presents: npcs.filter(x => x !== n), history }, (item) => {
       if (p.ctrl.signal.aborted) return;
       if (item.error) throw new Error(item.error);
       reply += (reply ? " " : "") + item.phrase;
-      voice = voice.then(prepareSpeech(item.phrase, p, show));
+      voice = voice.then(prepareSpeech(item.phrase, p, show, n));
     }, p.ctrl.signal);
-  } catch (e) { if (!p.ctrl.signal.aborted) status(e.message); }
-  await voice;
-  // Interrompu : le PNJ « se souvient » seulement de ce qu'il a eu le temps de dire
-  const content = p.ctrl.signal.aborted ? said : reply;
-  if (content) history.push({ role: "user", content: text }, { role: "assistant", content });
-  finParole(p);
-  setBusy(false);
+  } catch (e) {
+    if (!p.ctrl.signal.aborted) { erreur = e; status(e.message); }
+  }
+  if (reply) {
+    entry.content = reply;
+    history.push(entry);
+    dernier = n;
+  }
+  return {
+    voice, erreur,
+    corriger() {
+      if (!reply) return;
+      if (said) entry.content = said;
+      else history.splice(history.indexOf(entry), 1);
+    },
+  };
 }
 
 // --- Reconnaissance vocale du joueur ------------------------------------------
@@ -389,7 +628,7 @@ async function listenLocal() {
     try {
       const form = new FormData();
       form.append("audio", new Blob(chunks, { type: rec.mimeType }), "micro.webm");
-      form.append("indice", `Dialogue avec ${npc.nom}, ${npc.metier}.`);
+      form.append("indice", `Dialogue avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}.`);
       const r = await fetch("/api/stt", { method: "POST", body: form });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
@@ -437,8 +676,19 @@ $("micBtn").onclick = () => {
 $("stopBtn").onclick = stopNpc;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") stopNpc(); });
 $("genBtn").onclick = generate;
-$("loadBtn").onclick = loadFromBank;
+$("loadBtn").onclick = () => loadFromBank(false);
+$("addBtn").onclick = () => loadFromBank(true);
 $("saveBtn").onclick = saveToBank;
+$("exportBtn").onclick = exportConversation;
+$("discuterBtn").onclick = discuter;
+$("entreeBtn").onclick = faireEntrer;
+$("entree").addEventListener("keydown", (e) => { if (e.key === "Enter") faireEntrer(); });
+$("cards").onclick = (e) => {
+  const i = e.target.dataset?.retirer;
+  if (i !== undefined && !busy) retirer(Number(i));
+};
+for (const id of OPTIONS) $(id).onchange = () => { saveOptions(); setBusy(busy); };
+loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
 $("modelSel").onchange = async () => {
   const r = await fetch("/api/model", {method: "POST", headers: {"Content-Type": "application/json"},
