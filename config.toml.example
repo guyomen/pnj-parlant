@@ -3,7 +3,7 @@
 # puis renseignez cle_api dans config.toml (ce fichier-là n'est pas versionné).
 
 [moteurs]
-creation = "claude"        # création des fiches : "claude" (réseau nécessaire) ou "local"
+creation = "local"         # création des fiches : "claude" (réseau nécessaire) ou "local"
 dialogue = "local"         # répliques des PNJ : "claude" ou "local" (fonctionne sans réseau)
 
 [claude]
