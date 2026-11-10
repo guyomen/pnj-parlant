@@ -105,7 +105,8 @@ def create_app(cfg, **moteurs):
         installes = m.modeles_locaux() if "local" in m.choix.values() else []
         return jsonify({"moteurs": m.description(), "tts": ctx.tts.nom if ctx.tts.catalogue() else None,
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
-                        "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes)})
+                        "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes),
+                        "contexte_max": m.contexte_max()})
 
     @app.get("/api/etat")
     def etat():
@@ -248,23 +249,32 @@ def create_app(cfg, **moteurs):
         npc = data.get("npc") or {}
         presents = [p for p in data.get("presents") or [] if isinstance(p, dict) and p.get("nom")][:4]
         history = dialogue.nettoyer_historique(data.get("history"), ctx.historique)
+        longueur = data.get("longueur", "normal")
         if not npc.get("nom") or not history:
             return erreur("Il manque le PNJ ou la question.", 400)
+        if longueur not in ("short", "normal", "long"):
+            return erreur("Longueur de réponse inconnue.", 400)
+        phrases_max = {"short": 1, "normal": ctx.phrases_max,
+                       "long": max(ctx.phrases_max * 2, 6)}[longueur]
         lieux = ctx.banque.lieux()
         lieu = next((l for l in lieux if l["id"] == data.get("lieu")), None)  # lieu de la scène
-        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, ctx.phrases_max, lieu, lieux)
+        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, phrases_max, lieu, lieux)
         try:
+            usage = {}
             morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents),
-                                            dialogue.arrets(npc["nom"], presents))
+                                            dialogue.arrets(npc["nom"], presents), on_usage=usage.update,
+                                            longueur=longueur)
         except MoteurIndisponible as e:
             return erreur(str(e), 503)
 
         def lignes():
             try:
-                for phrase in dialogue.repliques(morceaux, npc["nom"], presents, ctx.phrases_max):
+                for phrase in dialogue.repliques(morceaux, npc["nom"], presents, phrases_max):
                     yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
             except MoteurIndisponible as e:
                 yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"
+            if usage:
+                yield json.dumps({"usage": usage}, ensure_ascii=False) + "\n"
         return Response(lignes(), mimetype="application/x-ndjson")
 
     @app.post("/api/stt")

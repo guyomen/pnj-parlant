@@ -23,6 +23,7 @@ class TestPages:
     def test_config(self, client):
         data = client.get("/api/config").get_json()
         assert data["tts"] == "faux" and data["stt_local"] is False and data["intervention"] == 0.3
+        assert data["contexte_max"] == 8192
 
 
 class TestCreation:
@@ -134,6 +135,32 @@ class TestDialogue:
         reponse = client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"content": "Salut."}]})
         assert lignes(reponse) == [{"phrase": "Bien le bonjour, voyageur égaré."}]
         assert "une phrase courte" in moteurs.appels[-1][0]
+
+    def test_longueur_courte_et_longue(self, client, moteurs, ctx):
+        ctx.phrases_max = 3
+        for longueur, phrases_max, consigne in (
+            ("short", 1, "une phrase courte"),
+            ("long", 6, "jusqu'à 6 phrases"),
+        ):
+            reponse = client.post("/api/npc/talk", json={
+                "npc": YSOLDE, "history": [{"content": "Salut."}], "longueur": longueur,
+            })
+            assert reponse.status_code == 200
+            assert moteurs.longueurs[-1] == longueur
+            assert consigne in moteurs.appels[-1][0]
+            assert len([item for item in lignes(reponse) if "phrase" in item]) <= phrases_max
+
+    def test_longueur_inconnue_refusee(self, client, moteurs):
+        reponse = client.post("/api/npc/talk", json={
+            "npc": YSOLDE, "history": [{"content": "Salut."}], "longueur": "immense",
+        })
+        assert reponse.status_code == 400
+        assert not moteurs.appels
+
+    def test_compteurs_usage_ajoutes_apres_le_stream(self, client, moteurs):
+        moteurs.usage = {"input_tokens": 120, "output_tokens": 15}
+        reponse = client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"content": "Salut."}]})
+        assert lignes(reponse) == [{"phrase": "Bonjour."}, {"usage": moteurs.usage}]
 
     def test_les_notes_du_mj_ne_sont_jamais_envoyees(self, client, moteurs):
         client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Le roi est un imposteur."})

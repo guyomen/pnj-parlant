@@ -27,11 +27,16 @@ class FauxMoteurs:
         self.local_cfg = {"url": "http://localhost:1", "modele": "faux"}
         self.fiche_json = json.dumps(FICHE, ensure_ascii=False)
         self.reponses = ["Bonjour."]
+        self.usage = None
         self.appels = []  # (system, messages) de chaque réplique demandée
         self.arrets = []  # séquences d'arrêt de chaque réplique demandée
+        self.longueurs = []
 
     def description(self):
         return {"creation": "local : faux", "dialogue": "local : faux"}
+
+    def contexte_max(self):
+        return 8192
 
     def modeles_locaux(self):
         return []
@@ -48,12 +53,17 @@ class FauxMoteurs:
             raise self.fiche_json
         return self.fiche_json
 
-    def replique(self, system, messages, arrets=()):
+    def replique(self, system, messages, arrets=(), on_usage=None, longueur="normal"):
         self.appels.append((system, messages))
         self.arrets.append(list(arrets))
+        self.longueurs.append(longueur)
         if isinstance(self.reponses, Exception):
             raise self.reponses
-        return iter(self.reponses)
+        def flux():
+            yield from self.reponses
+            if on_usage and self.usage:
+                on_usage(self.usage)
+        return flux()
 
 
 VOIX = [({"name": "alice", "label": "Alice"}, "feminin"), ({"name": "bea", "label": "Béa"}, "feminin"),

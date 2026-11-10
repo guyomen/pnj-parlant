@@ -9,6 +9,7 @@ dialogue = "local"         # répliques des PNJ : "claude" ou "local" (fonctionn
 [claude]
 cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
 modele = "claude-haiku-5-5"
+# contexte = 200000        # optionnel : taille de fenêtre du modèle choisi, à vérifier selon le modèle
 
 [claude.generation]        # création de la fiche du PNJ (JSON)
 max_tokens = 2000          # la réflexion du modèle compte dans cette limite

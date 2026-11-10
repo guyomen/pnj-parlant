@@ -36,7 +36,9 @@ def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, li
     lieux, ni le secret des autres PNJ."""
     infos = "\n".join(f"- {c}" for c in npc.get("connaissances", []))
     connus = f"Les lieux que tout habitant connaît :\n{liste_des_lieux(lieux)}\n" if lieux else ""
-    longueur = "une phrase courte" if phrases_max == 1 else f"1 à {phrases_max} phrases courtes"
+    longueur = ("une phrase courte" if phrases_max == 1 else
+                f"1 à {phrases_max} phrases courtes" if phrases_max <= PHRASES_MAX else
+                f"jusqu'à {phrases_max} phrases, en développant les détails utiles")
     scene = ""
     if presents:
         autres = "\n".join(f"- {p.get('nom')}, {p.get('metier')}. {p.get('apparence', '')}" for p in presents)

@@ -48,6 +48,12 @@
   /* Un nom de couleur différente par PNJ de la scène */
   .line.npc-1 .who { color: var(--wax); }
   .line.npc-2 .who { color: var(--verdigris); }
+  .usage { color: var(--muted); font-size: .85rem; margin-bottom: .75rem; }
+  .usage progress { display: block; width: 100%; height: .55rem; margin: .35rem 0; accent-color: var(--glass); }
+  .response-length { display: flex; align-items: center; gap: .4rem; margin-bottom: .75rem; flex-wrap: wrap; }
+  .response-length span { color: var(--muted); font-size: .9rem; }
+  .response-length button { padding: .3rem .7rem; font-size: .9rem; }
+  .response-length button[aria-pressed=true] { outline: 2px solid var(--verdigris); outline-offset: 1px; }
 
   /* Lieu de la scène, personnes présentes, narration */
   .lieu { margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
@@ -119,6 +125,17 @@
       <button id="propOui">Y aller</button>
       <button class="ghost" id="propNon">Rester ici</button>
     </div>
+    <div class="usage" id="usage" aria-live="polite">
+      <div id="contextLabel"></div>
+      <progress id="contextBar" max="1" value="0" aria-label="Utilisation de la fenêtre de contexte" hidden></progress>
+      <div id="usageTotals"></div>
+    </div>
+    <div class="response-length" role="group" aria-label="Longueur des réponses">
+      <span>Longueur :</span>
+      <button class="ghost" type="button" data-length="short" aria-pressed="false">Courte</button>
+      <button class="ghost" type="button" data-length="normal" aria-pressed="true">Normale</button>
+      <button class="ghost" type="button" data-length="long" aria-pressed="false">Détaillée</button>
+    </div>
     <div class="controls">
       <button class="mic" id="micBtn" aria-pressed="false" disabled>Parler</button>
       <div class="actions">
@@ -187,6 +204,9 @@ let history = [];   // toute la scène : [{ speaker: nom du PNJ, ou null pour le
 let dernier = null; // PNJ qui a parlé en dernier : il répond quand le joueur ne nomme personne
 let rencontres = []; // tous les PNJ croisés depuis le début de la conversation (pour l'export)
 let busy = false;
+let responseLength = "normal";
+let contextLimit = null;
+let tokenUsage = { input: 0, output: 0, lastInput: null, lastOutput: 0, available: false };
 const MAX_PNJ = 3;
 let lieux = [];        // lieux du scénario
 let lieuActuel = "";   // identifiant du lieu de la scène ("" : aucun)
@@ -197,6 +217,35 @@ let ici = [];          // PNJ présents dans le lieu, hors scène (boutons « Ab
 
 const status = (t) => { $("status").textContent = t || ""; };
 const hasard = (liste) => liste[Math.floor(Math.random() * liste.length)];
+
+function afficherUsage() {
+  const label = $("contextLabel"), bar = $("contextBar"), totals = $("usageTotals");
+  bar.hidden = true;
+  if (!tokenUsage.available) {
+    label.textContent = contextLimit
+      ? `Fenêtre de contexte : ${contextLimit.toLocaleString("fr-FR")} tokens (mesure au premier échange)`
+      : "";
+    totals.textContent = "";
+    return;
+  }
+  const utilises = tokenUsage.lastInput + tokenUsage.lastOutput;
+  if (contextLimit) {
+    bar.max = contextLimit;
+    bar.value = Math.min(utilises, contextLimit);
+    bar.hidden = false;
+    label.textContent = `Contexte (dernière requête + réponse) : ${utilises.toLocaleString("fr-FR")} / ` +
+      `${contextLimit.toLocaleString("fr-FR")} tokens · reste ~${Math.max(0, contextLimit - utilises).toLocaleString("fr-FR")}`;
+  } else {
+    label.textContent = `Contexte au dernier échange : ${tokenUsage.lastInput.toLocaleString("fr-FR")} tokens · limite inconnue`;
+  }
+  totals.textContent = `Cumul : ${tokenUsage.input.toLocaleString("fr-FR")} tokens en entrée + ` +
+    `${tokenUsage.output.toLocaleString("fr-FR")} en sortie`;
+}
+
+function reinitialiserUsage() {
+  tokenUsage = { input: 0, output: 0, lastInput: null, lastOutput: 0, available: false };
+  afficherUsage();
+}
 
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
   const opts = { method, headers: { "Content-Type": "application/json" } };
@@ -435,6 +484,7 @@ async function saluer(n) {
 
 // Nouvelle scène avec ce PNJ seul, dans son lieu habituel s'il en a un (on va le voir là où il est).
 async function startScene(n) {
+  reinitialiserUsage();
   npcs = [n];
   history = [{ speaker: n.nom, content: n.salutation }];
   dernier = n;
@@ -651,6 +701,7 @@ async function importerConversation(fichier) {
     for (const n of npcs) positions[n.nom] = lieuActuel || undefined;
     // sans PNJ dans la scène, la conversation repart de zéro (comme en arrivant seul dans un lieu)
     history = !npcs.length ? [] : lu.lignes.map(([qui, t]) => ({ speaker: qui && qui !== "Vous" ? qui : null, content: t }));
+    reinitialiserUsage();
     masquerProposition();
     $("log").innerHTML = "";
     for (const [qui, t] of lu.lignes) {
@@ -745,9 +796,19 @@ async function tourDe(n, p, voice) {
   };
   try {
     const corps = { npc: n, presents: npcs.filter(x => x !== n), history, lieu: lieuActuel };
+    corps.longueur = responseLength;
     await apiStream("/api/npc/talk", corps, (item) => {
       if (p.ctrl.signal.aborted) return;
       if (item.error) throw new Error(item.error);
+      if (item.usage) {
+        tokenUsage.lastInput = item.usage.input_tokens;
+        tokenUsage.lastOutput = item.usage.output_tokens;
+        tokenUsage.input += item.usage.input_tokens;
+        tokenUsage.output += item.usage.output_tokens;
+        tokenUsage.available = true;
+        afficherUsage();
+        return;
+      }
       reply += (reply ? " " : "") + item.phrase;
       voice = voice.then(prepareSpeech(item.phrase, p, show, n));
     }, p.ctrl.signal);
@@ -922,9 +983,19 @@ $("modelSel").onchange = async () => {
 };
 $("sendBtn").onclick = () => send($("ask").value);
 $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
+document.querySelectorAll("[data-length]").forEach((button) => {
+  button.onclick = () => {
+    responseLength = button.dataset.length;
+    document.querySelectorAll("[data-length]").forEach((option) => {
+      option.setAttribute("aria-pressed", option === button ? "true" : "false");
+    });
+  };
+});
 
 fetch("/api/config").then(r => r.json()).then(c => {
   cfg = c;
+  contextLimit = c.contexte_max;
+  afficherUsage();
   if (c.modeles_locaux.length) {
     $("modelSel").innerHTML = c.modeles_locaux.map(m =>
       `<option value="${esc(m.nom)}">${esc(m.nom)} (${(m.taille / 1e9).toFixed(1)} Go)</option>`).join("");

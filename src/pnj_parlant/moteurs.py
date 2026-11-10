@@ -29,6 +29,12 @@ class Moteurs:
         nom = lambda m: self.claude_cfg["modele"] if m == "claude" else f"local : {self.local_cfg.get('modele')}"
         return {"creation": nom(self.choix["creation"]), "dialogue": nom(self.choix["dialogue"])}
 
+    def contexte_max(self):
+        """Taille connue de la fenêtre de contexte du moteur de dialogue, en tokens."""
+        limite = (self.local_cfg.get("contexte", 8192) if self.choix["dialogue"] == "local"
+                  else self.claude_cfg.get("contexte"))
+        return limite if type(limite) is int and limite > 0 else None
+
     def modeles_locaux(self):
         """Modèles installés dans Ollama : [{"nom": ..., "taille": octets}]. Vide si Ollama ne répond pas."""
         url = f"{self.local_cfg.get('url', 'http://localhost:11434').rstrip('/')}/api/tags"
@@ -59,16 +65,19 @@ class Moteurs:
         return self._claude(system, messages, cfg["max_tokens"],
                             {"effort": cfg["effort"], "format": {"type": "json_schema", "schema": schema}})
 
-    def replique(self, system, messages, arrets=()):
+    def replique(self, system, messages, arrets=(), on_usage=None, longueur="normal"):
         """Réplique du PNJ dans le dialogue, morceau de texte par morceau de texte (générateur),
         pour commencer à la lire avant qu'elle soit finie. `arrets` : textes qui arrêtent net la génération
         (ex. « Léonard : », quand le modèle se met à écrire la réplique d'un autre).
         Lève MoteurIndisponible dès l'appel si le moteur ne répond pas ; pendant la lecture du
         générateur si la connexion se coupe en cours de route."""
+        multiplicateur = {"short": 0.5, "normal": 1, "long": 2}[longueur]
         if self.choix["dialogue"] == "local":
-            return self._local_flux(system, messages, self.local_cfg["dialogue"]["max_tokens"], arrets)
+            maximum = max(64, round(self.local_cfg["dialogue"]["max_tokens"] * multiplicateur))
+            return self._local_flux(system, messages, maximum, arrets, on_usage)
         cfg = self.claude_cfg["dialogue"]
-        return self._claude_flux(system, messages, cfg["max_tokens"], {"effort": cfg["effort"]}, arrets)
+        maximum = max(64, round(cfg["max_tokens"] * multiplicateur))
+        return self._claude_flux(system, messages, maximum, {"effort": cfg["effort"]}, arrets, on_usage)
 
     # --- Claude ---------------------------------------------------------------
     def _claude(self, system, messages, max_tokens, output_config):
@@ -83,7 +92,7 @@ class Moteurs:
             print(f"[claude] réponse coupée à max_tokens={max_tokens}")
         return "".join(b.text for b in msg.content if b.type == "text")
 
-    def _claude_flux(self, system, messages, max_tokens, output_config, arrets=()):
+    def _claude_flux(self, system, messages, max_tokens, output_config, arrets=(), on_usage=None):
         options = {"stop_sequences": list(arrets)} if arrets else {}
         try:  # la requête part ici : une erreur de connexion est levée avant de renvoyer le générateur
             flux = self.client.messages.create(model=self.claude_cfg["modele"], max_tokens=max_tokens,
@@ -95,16 +104,27 @@ class Moteurs:
             raise MoteurIndisponible(f"Claude a refusé la requête ({e.status_code}).") from e
 
         def morceaux():
+            usage = {}
             try:
                 for event in flux:
-                    if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                    if event.type == "message_start":
+                        compteurs = event.message.usage
+                        usage["input_tokens"] = sum(
+                            getattr(compteurs, cle, 0) or 0
+                            for cle in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+                    elif event.type == "content_block_delta" and event.delta.type == "text_delta":
                         yield event.delta.text
-                    elif event.type == "message_delta" and event.delta.stop_reason == "max_tokens":
-                        print(f"[claude] réponse coupée à max_tokens={max_tokens}")
+                    elif event.type == "message_delta":
+                        if event.delta.stop_reason == "max_tokens":
+                            print(f"[claude] réponse coupée à max_tokens={max_tokens}")
+                        if event.usage and hasattr(event.usage, "output_tokens"):
+                            usage["output_tokens"] = event.usage.output_tokens
             except anthropic.APIError as e:
                 raise MoteurIndisponible("La connexion à Claude s'est interrompue.") from e
             finally:
                 flux.close()  # réponse abandonnée en route (Stop, filtre) : Claude arrête d'écrire
+            if on_usage and {"input_tokens", "output_tokens"} <= usage.keys():
+                on_usage(usage)
         return morceaux()
 
     # --- Modèle local (API d'Ollama) ------------------------------------------
@@ -113,19 +133,28 @@ class Moteurs:
             data = json.loads(r.read())
         return data.get("message", {}).get("content", "")
 
-    def _local_flux(self, system, messages, max_tokens, arrets=()):
+    def _local_flux(self, system, messages, max_tokens, arrets=(), on_usage=None):
         r = self._ollama(system, messages, max_tokens, stream=True, arrets=arrets)
 
         def morceaux():
             # Ollama envoie une ligne JSON par morceau de texte, jusqu'à "done": true.
             # Réponse abandonnée en route (Stop, filtre) : fermer la connexion arrête la génération.
+            usage = {}
             try:
                 with r:
                     for ligne in r:
                         if ligne.strip():
-                            yield json.loads(ligne).get("message", {}).get("content", "")
+                            data = json.loads(ligne)
+                            if data.get("done"):
+                                if data.get("prompt_eval_count") is not None:
+                                    usage["input_tokens"] = data["prompt_eval_count"]
+                                if data.get("eval_count") is not None:
+                                    usage["output_tokens"] = data["eval_count"]
+                            yield data.get("message", {}).get("content", "")
             except (OSError, ValueError) as e:  # coupure réseau, délai dépassé, ligne illisible
                 raise MoteurIndisponible("Le modèle local s'est interrompu.") from e
+            if on_usage and {"input_tokens", "output_tokens"} <= usage.keys():
+                on_usage(usage)
         return morceaux()
 
     def _ollama(self, system, messages, max_tokens, schema=None, stream=False, arrets=()):
