@@ -75,6 +75,7 @@
     <div class="status" id="status"></div>
     <div class="controls">
       <button class="mic" id="micBtn" aria-pressed="false" disabled>Parler</button>
+      <button class="ghost" id="stopBtn" title="Interrompre le PNJ (Échap)" hidden>Stop</button>
       <form class="ask" id="askForm" onsubmit="return false">
         <input type="text" id="ask" placeholder="Ou tapez votre question…" aria-label="Question au PNJ" disabled>
         <button class="ghost" id="sendBtn" disabled>Envoyer</button>
@@ -103,9 +104,9 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
 }
 
 // Lit une réponse NDJSON (un objet JSON par ligne) au fur et à mesure qu'elle arrive
-async function apiStream(path, body, onItem) {
+async function apiStream(path, body, onItem, signal) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(body) });
+                                body: JSON.stringify(body), signal });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
     throw new Error(data.error || `Erreur serveur (${r.status})`);
@@ -162,28 +163,61 @@ const segments = (text) => text.split(NARRATION)
 const formatLine = (text) => text.split(NARRATION)
   .map(s => NARRATION.test(s) ? `<em class="narration">${esc(s)}</em>` : esc(s)).join("");
 
+// Prise de parole en cours : { ctrl, stop }. Le bouton Stop annule les requêtes (réponse du modèle,
+// synthèses en préparation) via ctrl, et coupe le son qui joue via stop().
+let parole = null;
+
+function debutParole() {
+  parole = { ctrl: new AbortController(), stop: null };
+  $("stopBtn").hidden = false;
+  return parole;
+}
+
+function finParole(p) {
+  if (parole !== p) return;
+  parole = null;
+  $("stopBtn").hidden = true;
+}
+
+function stopNpc() {
+  const p = parole;
+  if (!p) return;
+  finParole(p);
+  p.ctrl.abort();
+  p.stop?.();
+  if ("speechSynthesis" in window) speechSynthesis.cancel();  // repli navigateur : termine la lecture
+  status("");
+}
+
 // Lance tout de suite la synthèse (Piper, Pocket TTS ou Edge) et renvoie une fonction qui joue
 // le son : la phrase suivante se prépare ainsi pendant que la précédente est lue.
-function prepareSpeech(text) {
-  const plays = segments(text).map(([t, narrateur]) => prepareSegment(t, narrateur));
+// onStart(morceau) est appelé au moment où chaque morceau commence à être dit (pour l'afficher).
+function prepareSpeech(text, p, onStart) {
+  const plays = segments(text).map(([t, narrateur]) => prepareSegment(t, narrateur, p, onStart));
   return async () => { for (const play of plays) await play(); };
 }
 
-function prepareSegment(text, narrateur) {
+function prepareSegment(text, narrateur, p, onStart) {
   const audioFile = cfg.tts && npc.voix?.name
     ? fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ text, voice: npc.voix, narrateur }) })
+                          body: JSON.stringify({ text, voice: npc.voix, narrateur }), signal: p.ctrl.signal })
         .then(r => r.ok ? r.blob() : null).catch(() => null)
     : Promise.resolve(null);
   return async () => {
     const blob = await audioFile;
+    if (p.ctrl.signal.aborted) return;  // interrompu par Stop
+    onStart?.(narrateur ? `(${text})` : text);
     if (!blob) return browserSpeak(text, narrateur);  // repli sur la voix du navigateur
     const audio = new Audio(URL.createObjectURL(blob));
-    await new Promise((res) => { audio.onended = res; audio.onerror = res; audio.play().catch(res); });
+    await new Promise((res) => {
+      p.stop = () => { audio.pause(); res(); };
+      audio.onended = res; audio.onerror = res; audio.play().catch(res);
+    });
+    URL.revokeObjectURL(audio.src);
   };
 }
 
-const speak = (text) => prepareSpeech(text)();
+const speak = (text, p, onStart) => prepareSpeech(text, p, onStart)();
 
 async function browserSpeak(text, narrateur = false) {
   if (!("speechSynthesis" in window)) return;
@@ -206,10 +240,17 @@ async function startNpc(newNpc) {
   history = [];
   $("log").innerHTML = "";
   renderCard();
-  addLine("assistant", npc.salutation);
   status("");
   setBusy(true);
-  await speak(npc.salutation);
+  const p = debutParole();
+  // Comme les répliques : chaque morceau s'affiche quand il est dit
+  let line = null, said = "";
+  await speak(npc.salutation, p, (morceau) => {
+    line ??= addLine("assistant", "");
+    said += (said ? " " : "") + morceau;
+    line.querySelector(".text").innerHTML = formatLine(said);
+  });
+  finParole(p);
 }
 
 async function generate() {
@@ -253,20 +294,29 @@ async function send(text) {
   $("ask").value = "";
   addLine("user", text);
   setBusy(true); status(`${npc.nom} réfléchit…`);
-  let line = null, reply = "", voice = Promise.resolve();
+  let line = null, reply = "", said = "", voice = Promise.resolve();
+  const p = debutParole();
+  // Le texte s'affiche morceau par morceau, au moment où il est dit à voix haute
+  const show = (morceau) => {
+    if (!line) { line = addLine("assistant", ""); status(""); }
+    said += (said ? " " : "") + morceau;
+    line.querySelector(".text").innerHTML = formatLine(said);
+    line.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
   try {
-    // Chaque phrase est affichée et lue dès qu'elle arrive, pendant que le modèle écrit la suite
+    // Chaque phrase est préparée dès qu'elle arrive, pendant que le modèle écrit la suite
     await apiStream("/api/npc/talk", { npc, history, message: text }, (item) => {
+      if (p.ctrl.signal.aborted) return;
       if (item.error) throw new Error(item.error);
-      if (!line) { line = addLine("assistant", ""); status(""); }
       reply += (reply ? " " : "") + item.phrase;
-      line.querySelector(".text").innerHTML = formatLine(reply);
-      line.scrollIntoView({ behavior: "smooth", block: "end" });
-      voice = voice.then(prepareSpeech(item.phrase));
-    });
-  } catch (e) { status(e.message); }
-  if (reply) history.push({ role: "user", content: text }, { role: "assistant", content: reply });
+      voice = voice.then(prepareSpeech(item.phrase, p, show));
+    }, p.ctrl.signal);
+  } catch (e) { if (!p.ctrl.signal.aborted) status(e.message); }
   await voice;
+  // Interrompu : le PNJ « se souvient » seulement de ce qu'il a eu le temps de dire
+  const content = p.ctrl.signal.aborted ? said : reply;
+  if (content) history.push({ role: "user", content: text }, { role: "assistant", content });
+  finParole(p);
   setBusy(false);
 }
 
@@ -384,6 +434,8 @@ $("micBtn").onclick = () => {
   if (cfg.stt_local) listenLocal();
   else recognition?.start();
 };
+$("stopBtn").onclick = stopNpc;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") stopNpc(); });
 $("genBtn").onclick = generate;
 $("loadBtn").onclick = loadFromBank;
 $("saveBtn").onclick = saveToBank;
