@@ -46,7 +46,9 @@ Routes :
   historique côté navigateur (`[dialogue] historique`, 12 messages). Réponse en streaming NDJSON,
   une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`) ; le navigateur lit chaque phrase dès
   qu'elle arrive et prépare la voix de la suivante.
-- `POST /api/tts {text, voice}` : en cas d'échec (503), le navigateur utilise `speechSynthesis`.
+- `POST /api/tts {text, voice, narrateur}` : en cas d'échec (503), le navigateur utilise `speechSynthesis`.
+  Le texte entre parenthèses (description) est envoyé à part avec `narrateur: true` : voix neutre
+  (`narrateur` dans `[voix.<moteur>]`, jamais celle du PNJ), affichée en italique.
 - `POST /api/stt` (audio webm/opus + indice) : faster-whisper ; repli sur la Web Speech API.
 
 Le micro exige `localhost` ou HTTPS : `[serveur] https = true` crée un certificat auto-signé dans `certs/`.

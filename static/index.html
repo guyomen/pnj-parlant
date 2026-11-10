@@ -25,6 +25,7 @@
   .line.pj { align-self: flex-end; text-align: right; color: var(--muted); }
   .line .who { display: block; font: 700 .85rem var(--body); color: var(--glass); }
   .line.pj .who { color: var(--muted); }
+  .line .narration { color: var(--muted); font-size: .9em; }
   /* État de la machine */
   .sys { margin-top: 1rem; font-size: .85rem; color: var(--muted); display: grid; gap: .35rem; }
   .sys .bar { height: .4rem; background: var(--line); border-radius: .2rem; overflow: hidden; }
@@ -125,7 +126,7 @@ async function apiStream(path, body, onItem) {
 function addLine(role, text) {
   const div = document.createElement("div");
   div.className = "line " + (role === "assistant" ? "npc-line" : "pj");
-  div.innerHTML = `<span class="who">${role === "assistant" ? esc(npc.nom) : "Vous"}</span><span class="text">${esc(text)}</span>`;
+  div.innerHTML = `<span class="who">${role === "assistant" ? esc(npc.nom) : "Vous"}</span><span class="text">${formatLine(text)}</span>`;
   $("log").appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
   return div;
@@ -149,17 +150,34 @@ function setBusy(b) {
 }
 
 // --- Voix du PNJ -------------------------------------------------------------
+// Le texte entre parenthèses décrit la scène (geste, ton…) : il est lu par une voix neutre de narrateur.
+const NARRATION = /(\([^)]*\)?)/;  // parenthèse fermante facultative : réponse coupée en cours de route
+
+// [[morceau, narration ?], ...] : « (Il sourit.) Bienvenue ! » → [["Il sourit.", true], ["Bienvenue !", false]]
+const segments = (text) => text.split(NARRATION)
+  .map(s => NARRATION.test(s) ? [s.replace(/[()]/g, "").trim(), true] : [s.trim(), false])
+  .filter(([s]) => /[\p{L}\p{N}]/u.test(s));
+
+// Affichage : les descriptions en italique
+const formatLine = (text) => text.split(NARRATION)
+  .map(s => NARRATION.test(s) ? `<em class="narration">${esc(s)}</em>` : esc(s)).join("");
+
 // Lance tout de suite la synthèse (Piper, Pocket TTS ou Edge) et renvoie une fonction qui joue
 // le son : la phrase suivante se prépare ainsi pendant que la précédente est lue.
 function prepareSpeech(text) {
+  const plays = segments(text).map(([t, narrateur]) => prepareSegment(t, narrateur));
+  return async () => { for (const play of plays) await play(); };
+}
+
+function prepareSegment(text, narrateur) {
   const audioFile = cfg.tts && npc.voix?.name
     ? fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ text, voice: npc.voix }) })
+                          body: JSON.stringify({ text, voice: npc.voix, narrateur }) })
         .then(r => r.ok ? r.blob() : null).catch(() => null)
     : Promise.resolve(null);
   return async () => {
     const blob = await audioFile;
-    if (!blob) return browserSpeak(text);  // repli sur la voix du navigateur
+    if (!blob) return browserSpeak(text, narrateur);  // repli sur la voix du navigateur
     const audio = new Audio(URL.createObjectURL(blob));
     await new Promise((res) => { audio.onended = res; audio.onerror = res; audio.play().catch(res); });
   };
@@ -167,15 +185,16 @@ function prepareSpeech(text) {
 
 const speak = (text) => prepareSpeech(text)();
 
-async function browserSpeak(text) {
+async function browserSpeak(text, narrateur = false) {
   if (!("speechSynthesis" in window)) return;
   await new Promise((res) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
-    u.pitch = npc.voix?.browser_pitch ?? 1;
-    u.rate = npc.voix?.browser_rate ?? 1;
+    u.pitch = narrateur ? 1 : npc.voix?.browser_pitch ?? 1;
+    u.rate = narrateur ? 1 : npc.voix?.browser_rate ?? 1;
     const fr = speechSynthesis.getVoices().filter(v => v.lang.startsWith("fr"));
-    if (fr.length) u.voice = fr[(npc.nom.length) % fr.length];
+    // le narrateur prend la voix française suivante, pour se distinguer du PNJ
+    if (fr.length) u.voice = fr[(npc.nom.length + (narrateur ? 1 : 0)) % fr.length];
     u.onend = res; u.onerror = res;
     speechSynthesis.speak(u);
   });
@@ -241,7 +260,7 @@ async function send(text) {
       if (item.error) throw new Error(item.error);
       if (!line) { line = addLine("assistant", ""); status(""); }
       reply += (reply ? " " : "") + item.phrase;
-      line.querySelector(".text").textContent = reply;
+      line.querySelector(".text").innerHTML = formatLine(reply);
       line.scrollIntoView({ behavior: "smooth", block: "end" });
       voice = voice.then(prepareSpeech(item.phrase));
     });

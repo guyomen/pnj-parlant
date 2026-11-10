@@ -177,10 +177,12 @@ def phrases(morceaux):
     for morceau in morceaux:
         tampon += morceau
         while True:
-            # on ne coupe pas au milieu d'une didascalie *...*, que clean_for_speech retire en entier
+            # on ne coupe pas au milieu d'une didascalie *...*, que clean_for_speech retire en entier,
+            # ni d'une description (...), que le navigateur fait lire par la voix du narrateur
             fin = next((m.end() for m in FIN_DE_PHRASE.finditer(tampon)
                         if len(tampon[:m.end()].strip()) >= PHRASE_MIN
-                        and tampon[:m.end()].count("*") % 2 == 0), None)
+                        and tampon[:m.end()].count("*") % 2 == 0
+                        and tampon[:m.end()].count("(") <= tampon[:m.end()].count(")")), None)
             if fin is None:
                 break
             yield tampon[:fin]
@@ -540,8 +542,13 @@ def synthese():
     text = chiffres_en_lettres(clean_for_speech(data.get("text", "")))[:600]
     if not text:
         return jsonify({"error": "Rien à lire."}), 400
+    voice = data.get("voice") or {}
+    if data.get("narrateur"):  # description entre parenthèses : voix neutre, autre que celle du PNJ
+        voice = voix.voix_narrateur(tts, voice)
+        if voice is None:
+            return jsonify({"error": "Synthèse vocale indisponible."}), 503
     try:
-        audio, mimetype = tts.synthese(text, data.get("voice") or {})
+        audio, mimetype = tts.synthese(text, voice)
     except voix.VoixIndisponible as e:
         app.logger.warning("Synthèse vocale : %s", e)
         return jsonify({"error": "Synthèse vocale indisponible."}), 503

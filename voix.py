@@ -24,6 +24,10 @@ class VoixIndisponible(Exception):
 
 MOTEURS = ("piper", "pocket", "edge")
 
+# Voix du narrateur, qui lit les descriptions entre parenthèses ; à changer avec
+# narrateur = "..." dans [voix.piper], [voix.pocket] ou [voix.edge] de config.toml.
+NARRATEUR = {"piper": "fr_FR-siwis-medium", "pocket": "estelle", "edge": "fr-FR-VivienneMultilingualNeural"}
+
 
 def charger(config, base_dir, moteur=None):
     """Le moteur demandé, ou celui de config.toml. Seul celui-là est importé (Pocket TTS charge PyTorch)."""
@@ -32,7 +36,27 @@ def charger(config, base_dir, moteur=None):
     classes = {"piper": Piper, "pocket": Pocket, "edge": Edge}
     if moteur not in classes:
         raise ValueError(f"Moteur de voix « {moteur} » inconnu : choisissez piper, pocket ou edge.")
-    return classes[moteur](cfg.get(moteur, {}), base_dir)
+    sous_cfg = cfg.get(moteur, {})
+    instance = classes[moteur](sous_cfg, base_dir)
+    instance.narrateur = sous_cfg.get("narrateur", NARRATEUR[moteur])
+    instance.narrateur_locuteur = sous_cfg.get("narrateur_locuteur")  # voix Piper à plusieurs locuteurs
+    return instance
+
+
+def voix_narrateur(moteur, eviter=None):
+    """Voix neutre pour les descriptions entre parenthèses : celle de config.toml, sauf si c'est
+    justement celle du PNJ (`eviter`) ; on prend alors une autre voix du même genre. None si aucune voix."""
+    eviter = eviter or {}
+    pris = (eviter.get("name"), eviter.get("speaker"))
+    catalogue = [(v, g) for v, g in moteur.catalogue() if (v["name"], v.get("speaker")) != pris]
+    if not catalogue:
+        return None
+    voulue = lambda v: v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))
+    genre = next((g for v, g in moteur.catalogue() if voulue(v)), None)
+    choisie = (next((v for v, _ in catalogue if voulue(v)), None)
+               or next((v for v, g in catalogue if genre and g == genre), None)
+               or catalogue[0][0])
+    return {**choisie, "length_scale": 1.0, "timbre": "moyen"}
 
 
 def _wav(samples_int16, sample_rate):

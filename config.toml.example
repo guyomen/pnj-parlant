@@ -42,6 +42,12 @@ moteur = "pocket"          # "pocket" : Pocket TTS de Kyutai, local, naturel, ~1
                            # "edge"   : voix de Microsoft Edge, les plus naturelles, mais réseau nécessaire.
                            # Changer de moteur donne une nouvelle voix aux PNJ (la même à chaque chargement).
 
+# Le texte entre parenthèses (« (Il se gratte la tête.) ») est lu par une voix neutre de narrateur.
+# Par défaut : estelle (pocket), fr-FR-VivienneMultilingualNeural (edge), fr_FR-siwis-medium (piper).
+# Pour en changer : narrateur = "..." dans [voix.pocket], [voix.edge] ou [voix.piper]
+# (et narrateur_locuteur = 1 pour une voix Piper à plusieurs locuteurs).
+# Si le PNJ a lui-même cette voix, le narrateur en prend une autre du même genre.
+
 # Pocket TTS : 22 voix intégrées. Pour changer leur liste ou corriger un genre, recopiez-les toutes ici :
 # [voix.pocket.genres]
 # estelle = "feminin"
