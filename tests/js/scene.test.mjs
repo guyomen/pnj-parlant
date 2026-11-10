@@ -107,4 +107,40 @@ test("export : en-tête, répliques et nom de fichier", () => {
   assert.ok(texte.endsWith("Ysolde la Rousse : (Elle rit.) Oui.\n\nVous : Merci.\n"));
   assert.ok(scene.texteExport([["", "(Vous arrivez : Forge.)"]], [YSOLDE], date).endsWith("\n\n(Vous arrivez : Forge.)\n"));
   assert.equal(scene.nomFichierExport([YSOLDE], date), "conversation-ysolde-la-rousse-2026-11-10-18h05.txt");
+  assert.match(scene.texteExport([], [YSOLDE], date, "Forge de Brom"), /Trapue\.\nLieu : Forge de Brom\n/);
+});
+
+test("lireExport : relit un export (aller-retour)", () => {
+  const date = new Date(2026, 10, 10, 18, 5);
+  const lignes = [["Ysolde la Rousse", "(Elle rit.) Bienvenue !"], ["Vous", "Brom, une épée ?"],
+                  ["Brom Œil-de-Fer", "Ysolde la Rousse : ce nom ne commence pas une réplique de Brom."],
+                  ["", "(Ysolde la Rousse reste derrière. Vous arrivez : Forge de Brom. Il fait chaud.)"]];
+  const lu = scene.lireExport(String.fromCharCode(0xFEFF)
+    + scene.texteExport(lignes, [YSOLDE, BROM], date, "Forge de Brom").replace(/\n/g, "\r\n"));
+  assert.deepEqual(lu.pnjs, [{ nom: "Ysolde la Rousse", metier: "aubergiste", apparence: "Trapue." },
+                             { nom: "Brom Œil-de-Fer", metier: "forgeron du village", apparence: "Immense." }]);
+  assert.deepEqual(lu.lignes, lignes);
+  assert.equal(lu.lieu, "Forge de Brom");
+  // un seul PNJ : l'apparence est la ligne suivante ; sans ligne « Lieu », celui de la dernière arrivée
+  const seul = scene.lireExport(scene.texteExport([["", "(Vous arrivez : Porte nord.)"], ["Ysolde la Rousse", "Ah."]],
+                                                  [YSOLDE], date));
+  assert.deepEqual(seul.pnjs, [{ nom: "Ysolde la Rousse", metier: "aubergiste", apparence: "Trapue." }]);
+  assert.equal(seul.lieu, "Porte nord");
+  assert.throws(() => scene.lireExport("Liste de courses\n\npain"), /pas une conversation exportée/);
+});
+
+test("sceneImportee : qui est encore là à la fin de la conversation", () => {
+  const L = (...qui) => qui.map(q => q.startsWith("(") ? ["", q] : [q, "…"]);
+  assert.deepEqual(scene.sceneImportee(L("A", "Vous", "B", "A")), ["A", "B"]);
+  assert.deepEqual(scene.sceneImportee(L("A", "B", "(A reste derrière. Vous arrivez : Forge.)", "Vous", "B")), ["B"]);
+  assert.deepEqual(scene.sceneImportee(L("A", "(Vous arrivez : Forge.)", "Vous")), []);  // arrivé seul
+  assert.deepEqual(scene.sceneImportee(L("A", "B", "C", "D", "B"), 3), ["B", "C", "D"]);
+});
+
+test("consignesRecreation : nom, métier, apparence et répliques du PNJ", () => {
+  const texte = scene.consignesRecreation(YSOLDE, [["Ysolde la Rousse", "La bière est bonne."], ["Vous", "Merci."]]);
+  assert.match(texte, /garde exactement son nom \(Ysolde la Rousse\) et son métier \(aubergiste\)/);
+  assert.match(texte, /Apparence : Trapue\./);
+  assert.match(texte, /- La bière est bonne\./);
+  assert.doesNotMatch(texte, /Merci/);
 });

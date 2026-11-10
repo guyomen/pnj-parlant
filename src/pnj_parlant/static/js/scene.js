@@ -105,12 +105,75 @@ export function consignesEntree(history, npcs, qui = "") {
 
 // --- Export de la conversation ----------------------------------------------------------
 // lignes : [[qui, texte], ...] tel qu'affiché (qui vide : narration, par exemple l'arrivée dans un lieu)
-export function texteExport(lignes, npcs, date) {
+// lieu : nom du lieu de la scène au moment de l'export ("" : aucun)
+export function texteExport(lignes, npcs, date, lieu = "") {
   const entete = [`Conversation avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}`,
                   ...npcs.map(n => npcs.length > 1 ? `${n.nom} : ${n.apparence}` : n.apparence),
+                  ...(lieu ? [`Lieu : ${lieu}`] : []),
                   date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })].join("\n");
   const corps = lignes.map(([qui, t]) => qui ? `${qui} : ${t}` : t).join("\n\n");
-  return `${entete}\n\n${"—".repeat(40)}\n\n${corps}\n`;
+  return `${entete}\n\n${SEPARATEUR}\n\n${corps}\n`;
+}
+
+const SEPARATEUR = "—".repeat(40);
+const VOUS = "Vous";
+
+// --- Import d'une conversation exportée ---------------------------------------------------
+// Relit le texte de texteExport (anciens exports compris, sans ligne « Lieu »).
+// → { pnjs: [{nom, metier, apparence}], lignes: [[qui, texte]] (qui : nom, "Vous" ou "" pour une
+//     narration), lieu: nom du lieu ou "" }. Lève une erreur si ce n'est pas une conversation exportée.
+export function lireExport(texte) {
+  const propre = (texte.charCodeAt(0) === 0xFEFF ? texte.slice(1) : texte).replace(/\r\n?/g, "\n");
+  const coupure = propre.indexOf(`\n${SEPARATEUR}\n`);
+  const entete = propre.slice(0, coupure).split("\n");
+  if (coupure < 0 || !entete[0].startsWith("Conversation avec ")) {
+    throw new Error("Ce fichier n’est pas une conversation exportée.");
+  }
+  const pnjs = entete[0].slice("Conversation avec ".length).split(" ; ").map(p => {
+    const i = p.indexOf(", ");
+    return i < 0 ? { nom: p.trim(), metier: "", apparence: "" }
+                 : { nom: p.slice(0, i).trim(), metier: p.slice(i + 2).trim(), apparence: "" };
+  });
+  let lieu = "";
+  for (const l of entete.slice(1)) {
+    const p = pnjs.find(n => l.startsWith(`${n.nom} : `));
+    if (pnjs.length > 1 && p) p.apparence = l.slice(p.nom.length + 3);
+    else if (l.startsWith("Lieu : ")) lieu = l.slice(7);
+  }
+  if (pnjs.length === 1) pnjs[0].apparence = entete[1] ?? "";
+  // le nom le plus long d'abord : « Brom le Jeune » avant « Brom »
+  const auteurs = [...pnjs.map(p => p.nom), VOUS].sort((a, b) => b.length - a.length);
+  const lignes = propre.slice(coupure + SEPARATEUR.length + 2).split(/\n\n+/).map(b => b.trim()).filter(Boolean)
+    .map(b => {
+      const qui = auteurs.find(a => b.startsWith(`${a} : `));
+      return qui ? [qui, b.slice(qui.length + 3)] : ["", b];
+    });
+  if (!lieu) {  // ancien export : le dernier lieu où le narrateur a mené le voyageur
+    for (const [qui, t] of lignes) {
+      const m = !qui && t.match(/Vous arrivez : ([^.]+)\./);
+      if (m) lieu = m[1];
+    }
+  }
+  return { pnjs, lignes, lieu };
+}
+
+// PNJ encore dans la scène à la fin d'une conversation importée : ceux qui ont parlé depuis la dernière
+// arrivée dans un lieu (ou depuis le début), les `max` derniers, dans l'ordre où ils ont parlé la première fois.
+export function sceneImportee(lignes, max = 3) {
+  let debut = 0;
+  lignes.forEach(([qui, t], i) => { if (!qui && t.includes("Vous arrivez : ")) debut = i + 1; });
+  const parlent = lignes.slice(debut).map(([qui]) => qui).filter(qui => qui && qui !== VOUS);
+  const recents = [...new Set([...parlent].reverse())].slice(0, max);
+  return [...new Set(parlent)].filter(qui => recents.includes(qui));
+}
+
+// Consignes pour recréer un PNJ d'une conversation importée qui n'est pas dans la banque
+export function consignesRecreation(pnj, lignes) {
+  const dits = lignes.filter(([qui]) => qui === pnj.nom).slice(-6).map(([, t]) => `- ${t}`);
+  return [`Ce personnage existe déjà : garde exactement son nom (${pnj.nom}) et son métier (${pnj.metier}).`,
+          pnj.apparence && `Apparence : ${pnj.apparence}`,
+          dits.length && `Il a dit dans une conversation (garde la même personnalité) :\n${dits.join("\n")}`]
+    .filter(Boolean).join("\n");
 }
 
 export function nomFichierExport(npcs, date) {

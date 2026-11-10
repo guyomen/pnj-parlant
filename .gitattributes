@@ -1,2 +1,4 @@
 # Scripts Windows : fins de ligne CRLF
 *.bat text eol=crlf
+# Export de conversation tel que Windows l'enregistre (BOM, CRLF) : à garder tel quel pour le test
+tests/e2e/donnees/conversation-import.txt -text

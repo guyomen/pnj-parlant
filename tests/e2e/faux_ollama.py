@@ -1,4 +1,5 @@
-"""Faux Ollama pour tests/e2e : répond en citant le PNJ et le lieu trouvés dans ses consignes, et les note."""
+"""Faux Ollama pour tests/e2e : répond en citant le PNJ et le lieu trouvés dans ses consignes, et les note.
+Crée aussi des fiches de PNJ (toujours la même)."""
 import json, re, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -15,6 +16,13 @@ class Gestion(BaseHTTPRequestHandler):
         system = req["messages"][0]["content"]
         with open(JOURNAL, "a", encoding="utf-8") as f:
             f.write(json.dumps({"system": system, "stop": req["options"].get("stop")}, ensure_ascii=False) + "\n")
+        if "format" in req:  # création d'une fiche : toujours la même, le nom vient de la demande
+            fiche = {"nom": "Inventé", "metier": "inconnu", "apparence": "", "personnalite": "Rusé.",
+                     "humeur": "calme", "connaissances": [], "secret": "", "salutation": "Salut.",
+                     "genre": "masculin", "timbre": "moyen", "debit": "normal"}
+            with open(JOURNAL, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"demande": req["messages"][-1]["content"]}, ensure_ascii=False) + "\n")
+            return self.repondre(json.dumps({"message": {"content": json.dumps(fiche)}}).encode())
         nom = re.search(r"Tu es ([^,]+),", system)[1]
         lieu = re.search(r"Tu te trouves en ce moment ici : ([^.]+)\.", system)
         texte = f"Moi, {nom}, je suis bien à {lieu[1] if lieu else 'nulle part'}, voyageur. Que veux-tu ?"

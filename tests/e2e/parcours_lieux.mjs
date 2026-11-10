@@ -1,7 +1,7 @@
 // Pilote Edge (protocole DevTools) comme un joueur : lieux, aborder, déplacement à la voix, compagnon.
 import { spawn } from "node:child_process";
 
-const [edge, profil] = process.argv.slice(2);
+const [edge, profil, conversation] = process.argv.slice(2);
 const navigateur = spawn(edge, ["--headless=new", "--disable-gpu", "--no-first-run", "--remote-debugging-port=9333",
                                 `--user-data-dir=${profil}`, "about:blank"], { stdio: "ignore" });
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
@@ -64,6 +64,17 @@ verifier("banque regroupée par lieu, Ysolde avec Brom à la forge", await js(`[
 // Ysolde est restée à la forge : on l'y retrouve
 await js(`(() => { const s = document.getElementById("lieuSel"); s.value = "forge-de-brom"; s.dispatchEvent(new Event("change")); })()`);
 verifier("Ysolde retrouvée à la forge, avec Brom", await quand(`(() => { const t = document.getElementById("ici").textContent; return t.includes("Ysolde") && t.includes("Brom"); })()`));
+
+// Import d'une conversation exportée : Ysolde vient de la banque, Gaspard est recréé par le modèle
+await js(`window.confirm = () => true`);
+const racine = (await cdp("DOM.getDocument")).result.root.nodeId;
+const champ = (await cdp("DOM.querySelector", { nodeId: racine, selector: "#importFichier" })).result.nodeId;
+await cdp("DOM.setFileInputFiles", { nodeId: champ, files: [conversation] });
+verifier("import : dialogue et narration affichés", await quand(`(() => { const t = document.getElementById("log").textContent; return t.includes("Des rubans et des secrets.") && document.querySelector(".narration-line")?.textContent.includes("Vous arrivez : Forge de Brom"); })()`));
+verifier("import : Ysolde et Gaspard en scène, à la forge", await quand(`[...document.querySelectorAll(".pnj-card h1")].map(h => h.textContent).join(", ") === "Ysolde, Gaspard le Colporteur" && document.getElementById("lieuSel").value === "forge-de-brom"`));
+await quand(`!document.getElementById("ask").disabled`);
+await js(`(() => { document.getElementById("ask").value = "Gaspard, tu as encore soif ?"; document.getElementById("sendBtn").click(); })()`);
+verifier("import : Gaspard reprend la conversation", await quand(`document.getElementById("log").textContent.includes("Moi, Gaspard le Colporteur, je suis bien à Forge de Brom")`));
 
 console.log(resultats.join("\n"));
 ws.close(); navigateur.kill();

@@ -76,6 +76,9 @@ Routes :
   (PNJ créé par `/api/npc/generate` avec la conversation dans `consignes`). Réponse en streaming NDJSON,
   une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`) ; le navigateur lit chaque phrase dès
   qu'elle arrive et prépare la voix de la suivante.
+  Export de la conversation en texte lisible (`texteExport`, avec le lieu) et import (`lireExport`, anciens
+  exports compris) : PNJ repris de la banque, sinon recréés par `/api/npc/generate` (`consignesRecreation`) ;
+  restent en scène ceux qui ont parlé depuis la dernière arrivée dans un lieu (`sceneImportee`).
 - `POST /api/tts {text, voice, narrateur}` : en cas d'échec (503), le navigateur utilise `speechSynthesis`.
   Le texte entre parenthèses (description) est envoyé à part avec `narrateur: true` : voix neutre
   (`narrateur` dans `[voix.<moteur>]`, jamais celle du PNJ), affichée en italique.

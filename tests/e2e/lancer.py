@@ -1,6 +1,7 @@
 """
 Test de bout en bout de la page de jeu : un vrai navigateur (Edge ou Chrome, sans écran) joue comme un
-joueur avec les lieux (arrivée, aborder un PNJ, « allons à la forge », compagnon qui suit ou reste).
+joueur avec les lieux (arrivée, aborder un PNJ, « allons à la forge », compagnon qui suit ou reste),
+puis importe une conversation exportée.
 
     python tests/e2e/lancer.py                 # depuis la racine du projet (Node 22+ et Edge ou Chrome)
     NAVIGATEUR=/chemin/vers/chrome python tests/e2e/lancer.py
@@ -60,7 +61,8 @@ def main():
             attendre("http://127.0.0.1:5918/api/tags")
             attendre("http://127.0.0.1:5917/")
             code = subprocess.run(["node", str(ICI / "parcours_lieux.mjs"), navigateur(),
-                                   str(Path(tmp) / "profil")], timeout=120).returncode
+                                   str(Path(tmp) / "profil"),
+                                   str(dossier / "conversation-import.txt")], timeout=120).returncode
         finally:
             for p in processus:
                 p.kill()
