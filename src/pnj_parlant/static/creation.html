@@ -38,6 +38,13 @@
   .bank-list .who small { display: block; color: var(--muted); }
   .bank-list button { padding: .3rem .7rem; font-size: .9rem; }
   .bank-list li.current .who { font-weight: 700; }
+
+  .lieu-fiche { border-top: 1px solid var(--line); padding: .6rem 0 .8rem; }
+  .lieu-fiche:first-child { border-top: none; padding-top: 0; }
+  .lieu-fiche .titre { display: flex; gap: .5rem; align-items: center; }
+  .lieu-fiche .titre input { flex: 1; font-weight: 700; }
+  .lieu-fiche .titre button { padding: .3rem .7rem; font-size: .9rem; }
+  .lieu-fiche textarea { margin-top: .4rem; }
 </style>
 </head>
 <body>
@@ -61,6 +68,17 @@
     </section>
 
     <section class="panel">
+      <h2>Lieux</h2>
+      <p class="hint">Où se passent les scènes. La description est lue par le narrateur à l’arrivée et connue de tous les PNJ ; les notes du MJ servent seulement à créer des PNJ cohérents.</p>
+      <div id="lieuxListe"></div>
+      <div class="actions">
+        <button class="ghost" id="ajoutLieuBtn">Ajouter un lieu</button>
+        <button id="saveLieuxBtn">Enregistrer les lieux</button>
+        <span class="status" id="lieuxStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>Banque de PNJ</h2>
       <ul class="bank-list" id="bankList"></ul>
     </section>
@@ -80,6 +98,8 @@
             <option value="">Au choix</option><option value="feminin">Féminin</option>
             <option value="masculin">Masculin</option><option value="neutre">Neutre</option>
           </select></div>
+        <div><label for="reqLieu">Lieu habituel <small>(ses notes du MJ guident la création)</small></label>
+          <select id="reqLieu" class="lieux-sel"></select></div>
       </div>
       <label for="reqConsignes">Rôle dans le scénario <small>— ce qu’il sait, ce qu’il cache, son lien avec l’intrigue</small></label>
       <textarea id="reqConsignes" rows="4" placeholder="Ex. : Tient l’auberge du port. A vu des lumières sur l’îlot la nuit des disparitions, mais a peur du bourgmestre."></textarea>
@@ -101,6 +121,7 @@
           <select id="f-timbre"><option value="grave">Grave</option><option value="moyen">Moyen</option><option value="aigu">Aigu</option></select></div>
         <div><label for="f-debit">Débit</label>
           <select id="f-debit"><option value="lent">Lent</option><option value="normal">Normal</option><option value="rapide">Rapide</option></select></div>
+        <div><label for="f-lieu">Lieu habituel</label><select id="f-lieu" class="lieux-sel"></select></div>
       </div>
       <label for="f-apparence">Apparence</label><textarea id="f-apparence" rows="2"></textarea>
       <label for="f-personnalite">Personnalité</label><textarea id="f-personnalite" rows="2"></textarea>
@@ -131,7 +152,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "apparence", "personnalite",
+const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "lieu", "apparence", "personnalite",
                 "connaissances", "secret", "salutation"];
 let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
 let dirty = false;    // modifications non enregistrées
@@ -223,13 +244,81 @@ async function saveScenario() {
   } catch (e) { $("scenarioStatus").textContent = e.message; }
 }
 
+// --- Lieux -------------------------------------------------------------------
+let lieux = [];          // lieux enregistrés (menus « Lieu habituel »)
+let lieuxEdit = [];      // lieux en cours d'édition dans le panneau
+let lieuxDirty = false;
+
+async function loadLieux() {
+  lieux = await api("/api/lieux").catch(() => []);
+  lieuxEdit = lieux.map(l => ({ ...l }));
+  renderLieux();
+  fillLieuOptions();
+}
+
+function renderLieux() {
+  $("lieuxListe").innerHTML = lieuxEdit.length ? lieuxEdit.map((l, i) => `
+    <div class="lieu-fiche">
+      <div class="titre">
+        <input type="text" data-i="${i}" data-champ="nom" value="${esc(l.nom)}" placeholder="Nom du lieu (ex. Auberge du Sanglier)" aria-label="Nom du lieu">
+        <button class="ghost" data-suppr="${i}" aria-label="Supprimer ${esc(l.nom)}">Supprimer</button>
+      </div>
+      <textarea rows="2" data-i="${i}" data-champ="description" placeholder="Description lue par le narrateur, connue des PNJ" aria-label="Description">${esc(l.description)}</textarea>
+      <textarea rows="2" data-i="${i}" data-champ="notes_mj" placeholder="Notes du MJ (secrets du lieu)" aria-label="Notes du MJ">${esc(l.notes_mj)}</textarea>
+    </div>`).join("") : `<p class="hint">Aucun lieu : les PNJ ne sont rattachés à aucun endroit.</p>`;
+}
+
+// Menus « Lieu habituel » de la demande et de la fiche
+function fillLieuOptions() {
+  for (const sel of document.querySelectorAll(".lieux-sel")) {
+    const valeur = sel.id === "f-lieu" ? (current.lieu ?? "") : sel.value;
+    sel.innerHTML = `<option value="">— Aucun —</option>`
+      + lieux.map(l => `<option value="${esc(l.id)}">${esc(l.nom)}</option>`).join("");
+    sel.value = lieux.some(l => l.id === valeur) ? valeur : "";
+  }
+}
+
+$("lieuxListe").oninput = (e) => {
+  const { i, champ } = e.target.dataset;
+  if (i === undefined) return;
+  lieuxEdit[Number(i)][champ] = e.target.value;
+  lieuxDirty = true;
+};
+$("lieuxListe").onclick = (e) => {
+  const i = e.target.dataset.suppr;
+  if (i === undefined) return;
+  const l = lieuxEdit[Number(i)];
+  if (l.nom && !confirm(`Supprimer « ${l.nom} » ? Les PNJ qui y vivent n’auront plus de lieu habituel.`)) return;
+  lieuxEdit.splice(Number(i), 1);
+  lieuxDirty = true;
+  renderLieux();
+};
+$("ajoutLieuBtn").onclick = () => {
+  lieuxEdit.push({ nom: "", description: "", notes_mj: "" });
+  lieuxDirty = true;
+  renderLieux();
+  $("lieuxListe").querySelector(".lieu-fiche:last-child input")?.focus();
+};
+$("saveLieuxBtn").onclick = async () => {
+  try {
+    lieux = await api("/api/lieux", lieuxEdit, "PUT");  // les lieux sans nom sont ignorés
+    lieuxEdit = lieux.map(l => ({ ...l }));
+    lieuxDirty = false;
+    renderLieux();
+    fillLieuOptions();
+    renderBank();
+    $("lieuxStatus").textContent = `${lieux.length} lieu${lieux.length > 1 ? "x" : ""} enregistré${lieux.length > 1 ? "s" : ""}.`;
+  } catch (e) { $("lieuxStatus").textContent = e.message; }
+};
+
 // --- Banque ------------------------------------------------------------------
 let bank = [];
 async function refreshBank() { bank = await api("/api/bank").catch(() => []); renderBank(); }
 function renderBank() {
+  const lieuDe = (n) => lieux.find(l => l.id === n.lieu)?.nom;
   $("bankList").innerHTML = bank.length ? bank.map(n => `
     <li class="${n.id === current.id ? "current" : ""}">
-      <span class="who">${esc(n.nom)}<small>${esc(n.metier)}</small></span>
+      <span class="who">${esc(n.nom)}<small>${esc(n.metier)}${lieuDe(n) ? " · " + esc(lieuDe(n)) : ""}</small></span>
       <button class="ghost" data-edit="${esc(n.id)}">Modifier</button>
       <button class="ghost" data-del="${esc(n.id)}" aria-label="Supprimer ${esc(n.nom)}">Supprimer</button>
     </li>`).join("") : `<li class="hint">Aucun PNJ enregistré.</li>`;
@@ -254,7 +343,8 @@ async function generate() {
   $("genBtn").disabled = true; $("genStatus").textContent = "Le PNJ prend forme…";
   try {
     fillForm(await api("/api/npc/generate", { role: $("reqRole").value, nom: $("reqNom").value,
-                                              genre: $("reqGenre").value, consignes: $("reqConsignes").value }));
+                                              genre: $("reqGenre").value, consignes: $("reqConsignes").value,
+                                              lieu: $("reqLieu").value }));
     $("genStatus").textContent = "Proposition prête : relisez et ajustez la fiche ci-dessous.";
   } catch (e) { $("genStatus").textContent = e.message; }
   $("genBtn").disabled = false;
@@ -310,12 +400,12 @@ $("listenBtn").onclick = listen;
 $("saveScenarioBtn").onclick = saveScenario;
 document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
 $("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
-window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
+window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty) e.preventDefault(); });
 
 loadEngine();
 fillForm({});
 loadScenario();
-refreshBank();
+loadLieux().then(refreshBank);
 </script>
 </body>
 </html>

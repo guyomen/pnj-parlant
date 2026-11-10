@@ -44,5 +44,29 @@ def test_liste_ignore_le_scenario_et_les_fichiers_abimes(banque):
     assert [n["nom"] for n in banque.liste()] == ["Brom"]
 
 
+class TestLieux:
+    def test_identifiants_tires_du_nom_et_uniques(self, banque):
+        lieux = banque.enregistrer_lieux([{"nom": "Forge"}, {"nom": "Forge"}, {"nom": "  "}, "pas un lieu",
+                                          {"nom": "Porte nord", "description": "x" * 3000}])
+        assert [l["id"] for l in lieux] == ["forge", "forge-2", "porte-nord"]
+        assert len(lieux[2]["description"]) == 2000
+
+    def test_un_lieu_renomme_garde_son_identifiant(self, banque):
+        [forge] = banque.enregistrer_lieux([{"nom": "Forge"}])
+        [renomme] = banque.enregistrer_lieux([{**forge, "nom": "Forge de Brom"}])
+        assert renomme["id"] == "forge" and banque.lieu("forge")["nom"] == "Forge de Brom"
+
+    def test_identifiant_dangereux_remplace(self, banque):
+        assert banque.enregistrer_lieux([{"id": "../x", "nom": "Égouts"}])[0]["id"] == "egouts"
+
+    def test_sans_lieux(self, banque):
+        assert banque.lieux() == [] and banque.lieu("forge") is None and banque.lieu("") is None
+
+    def test_lieux_ignores_par_la_liste_des_pnj(self, banque):
+        banque.enregistrer_lieux([{"nom": "Forge"}])
+        banque.ajouter({"nom": "Brom", "lieu": "forge"})
+        assert [(n["nom"], n["lieu"]) for n in banque.liste()] == [("Brom", "forge")]
+
+
 def test_banque_absente(banque):
     assert banque.liste() == []

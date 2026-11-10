@@ -8,8 +8,9 @@ Routes :
     GET  /api/config                  moteurs utilisés, voix, reconnaissance locale, modèles Ollama
     GET  /api/etat                    carte graphique et Ollama
     POST /api/model                   change de modèle local (jusqu'au redémarrage)
-    POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes}
-    POST /api/npc/talk                réplique d'un PNJ {npc, presents, history} (NDJSON, phrase par phrase)
+    POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes, lieu}
+    POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu} (NDJSON, phrase par phrase)
+    GET|PUT /api/lieux                lieux du scénario
     GET|PUT /api/scenario             univers et notes du MJ
     GET|POST /api/bank, GET|PUT|DELETE /api/bank/<id>   banque de PNJ
     POST /api/voice                   autre voix pour un PNJ ; GET /api/voices : voix du moteur
@@ -66,9 +67,11 @@ class Contexte:
             threading.Thread(target=moteur.prechauffer, daemon=True).start()
         self.tts = moteur
 
-    def creer_pnj(self, role="", nom="", genre="", consignes=""):
-        """Fiche d'un nouveau PNJ, avec sa voix. Lève ValueError ou MoteurIndisponible."""
-        npc = fiches.creer(self.moteurs, self.banque.scenario(), role, nom, genre, consignes)
+    def creer_pnj(self, role="", nom="", genre="", consignes="", lieu=""):
+        """Fiche d'un nouveau PNJ, avec sa voix, rattaché au lieu `lieu` (identifiant) s'il existe.
+        Lève ValueError ou MoteurIndisponible."""
+        npc = fiches.creer(self.moteurs, self.banque.scenario(), role, nom, genre, consignes,
+                           lieu=self.banque.lieu(lieu), lieux=self.banque.lieux())
         npc["voix"] = voix.attribuer(self.tts, npc)
         return npc
 
@@ -127,7 +130,7 @@ def create_app(cfg, **moteurs):
         d = request.json or {}
         try:
             return jsonify(ctx.creer_pnj(d.get("role", ""), d.get("nom", ""), d.get("genre", ""),
-                                         d.get("consignes", "")))
+                                         d.get("consignes", ""), d.get("lieu", "")))
         except ValueError:
             return erreur("Le modèle n'a pas renvoyé de JSON valide. Relancez la génération.", 502)
         except MoteurIndisponible as e:
@@ -141,6 +144,15 @@ def create_app(cfg, **moteurs):
     @app.put("/api/scenario")
     def scenario_put():
         return jsonify(ctx.banque.enregistrer_scenario(request.json or {}))
+
+    @app.get("/api/lieux")
+    def lieux_get():
+        return jsonify(ctx.banque.lieux())
+
+    @app.put("/api/lieux")
+    def lieux_put():
+        """Remplace la liste des lieux : [{id (absent pour un nouveau lieu), nom, description, notes_mj}]."""
+        return jsonify(ctx.banque.enregistrer_lieux(request.json or []))
 
     @app.get("/api/bank")
     def bank_list():
@@ -238,7 +250,9 @@ def create_app(cfg, **moteurs):
         history = dialogue.nettoyer_historique(data.get("history"), ctx.historique)
         if not npc.get("nom") or not history:
             return erreur("Il manque le PNJ ou la question.", 400)
-        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, ctx.phrases_max)
+        lieux = ctx.banque.lieux()
+        lieu = next((l for l in lieux if l["id"] == data.get("lieu")), None)  # lieu de la scène
+        system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, ctx.phrases_max, lieu, lieux)
         try:
             morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents),
                                             dialogue.arrets(npc["nom"], presents))

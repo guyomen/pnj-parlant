@@ -47,7 +47,7 @@ class TestBanque:
         assert client.post("/api/bank", json={"nom": "Brom"}).status_code == 400  # pas de salutation
         npc_id = client.post("/api/bank", json={"nom": "Brom", "salutation": "*Grogne.* Salut.",
                                                 "genre": "masculin"}).get_json()["id"]
-        assert client.get("/api/bank").get_json() == [{"id": npc_id, "nom": "Brom", "metier": ""}]
+        assert client.get("/api/bank").get_json() == [{"id": npc_id, "nom": "Brom", "metier": "", "lieu": ""}]
         npc = client.get(f"/api/bank/{npc_id}").get_json()
         assert npc["salutation"] == "Salut." and npc["voix"]["name"] in {"bob", "carl"}
         npc["metier"] = "forgeron"
@@ -60,6 +60,43 @@ class TestBanque:
     def test_scenario(self, client):
         client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret."})
         assert client.get("/api/scenario").get_json() == {"monde": "Valmer.", "notes_mj": "Secret."}
+
+
+LIEUX = [{"nom": "Auberge du Sanglier", "description": "Une salle enfumée.", "notes_mj": "Une trappe mène aux égouts."},
+         {"nom": "Forge de Brom", "description": "Une chaleur d'enfer.", "notes_mj": ""}]
+
+
+class TestLieux:
+    def test_enregistrer_et_relire(self, client):
+        lieux = client.put("/api/lieux", json=LIEUX).get_json()
+        assert [l["id"] for l in lieux] == ["auberge-du-sanglier", "forge-de-brom"]
+        assert client.get("/api/lieux").get_json() == lieux
+
+    def test_creation_d_un_pnj_dans_un_lieu(self, client, moteurs):
+        client.put("/api/lieux", json=LIEUX)
+        npc = client.post("/api/npc/generate", json={"lieu": "auberge-du-sanglier"}).get_json()
+        assert npc["lieu"] == "auberge-du-sanglier"
+        assert "<lieu_du_pnj>\nAuberge du Sanglier\nUne salle enfumée.\n" in moteurs.derniere_demande
+        assert "Une trappe mène aux égouts." in moteurs.derniere_demande  # notes du MJ : pour la création
+        assert "- Forge de Brom : Une chaleur d'enfer." in moteurs.derniere_demande
+
+    def test_lieu_inconnu_ignore(self, client):
+        assert "lieu" not in client.post("/api/npc/generate", json={"lieu": "nulle-part"}).get_json()
+
+    def test_dialogue_dans_un_lieu(self, client, moteurs):
+        client.put("/api/lieux", json=LIEUX)
+        npc = {**YSOLDE, "lieu": "auberge-du-sanglier"}
+        client.post("/api/npc/talk", json={"npc": npc, "lieu": "forge-de-brom", "history": [{"content": "Salut."}]})
+        system, _ = moteurs.appels[-1]
+        assert "Tu te trouves en ce moment ici : Forge de Brom. Une chaleur d'enfer." in system
+        assert "Ce n'est pas ton lieu habituel (Auberge du Sanglier)" in system
+        assert "- Auberge du Sanglier : Une salle enfumée." in system  # lieux connus de tous
+        assert "trappe" not in system  # jamais les notes du MJ pendant les dialogues
+
+    def test_dialogue_sans_lieu(self, client, moteurs):
+        client.put("/api/lieux", json=LIEUX)
+        client.post("/api/npc/talk", json={"npc": YSOLDE, "history": [{"content": "Salut."}]})
+        assert "Tu te trouves en ce moment" not in moteurs.appels[-1][0]
 
 
 class TestDialogue:

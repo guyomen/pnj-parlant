@@ -9,6 +9,7 @@ des autres comme des paroles entendues (rôle « user »), précédées du nom d
 plusieurs.
 """
 from . import texte
+from .fiches import liste_des_lieux
 
 VOYAGEUR = "Voyageur"
 
@@ -16,10 +17,25 @@ VOYAGEUR = "Voyageur"
 PHRASES_MAX = 3  # par réplique, réglable dans [dialogue] phrases_max de config.toml
 
 
-def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX):
-    """Prompt système du PNJ : sa fiche, l'univers connu de tous, les autres PNJ présents.
-    Jamais les notes du MJ (elles peuvent contenir l'intrigue), ni le secret des autres PNJ."""
+def situation(npc, lieu=None, lieux=()):
+    """Où se trouve le PNJ, et s'il est loin de son lieu habituel (il accompagne le voyageur)."""
+    if not lieu:
+        return ""
+    texte_lieu = f"\nTu te trouves en ce moment ici : {lieu['nom']}."
+    if lieu.get("description"):
+        texte_lieu += f" {lieu['description']}"
+    habituel = next((l for l in lieux if l["id"] == npc.get("lieu")), None)
+    if habituel and habituel["id"] != lieu["id"]:
+        texte_lieu += f"\nCe n'est pas ton lieu habituel ({habituel['nom']}) : tu accompagnes le voyageur."
+    return texte_lieu + "\n"
+
+
+def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, lieux=()):
+    """Prompt système du PNJ : sa fiche, l'univers et les lieux connus de tous, le lieu où il se trouve,
+    les autres PNJ présents. Jamais les notes du MJ (elles peuvent contenir l'intrigue), ni celles des
+    lieux, ni le secret des autres PNJ."""
     infos = "\n".join(f"- {c}" for c in npc.get("connaissances", []))
+    connus = f"Les lieux que tout habitant connaît :\n{liste_des_lieux(lieux)}\n" if lieux else ""
     longueur = "une phrase courte" if phrases_max == 1 else f"1 à {phrases_max} phrases courtes"
     scene = ""
     if presents:
@@ -36,18 +52,18 @@ def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX):
 {monde}
 </univers>
 """ if monde else "")
-    return f"""{univers}Tu es {npc.get('nom')}, {npc.get('metier')}, dans un monde médiéval-fantastique.
+    return f"""{univers}{connus}Tu es {npc.get('nom')}, {npc.get('metier')}, dans un monde médiéval-fantastique.
 Apparence : {npc.get('apparence')}
 Personnalité : {npc.get('personnalite')} Humeur du jour : {npc.get('humeur')}.
 Ce que tu sais et peux révéler :
 {infos}
 Ton secret (ne le révèle que si le voyageur gagne vraiment ta confiance ou te paie bien) : {npc.get('secret')}
-
+{situation(npc, lieu, lieux)}
 Règles :
 - Tes réponses sont LUES À VOIX HAUTE : {longueur}, langage parlé.
 - Aucun markdown, aucun emoji, aucune action entre astérisques.
 - Reste toujours dans ton personnage. Tu ne sais rien du monde réel moderne.
-- Ne cite aucun lieu, personnage, faction ou événement absent de l'univers ci-dessus ou de ta fiche.
+- Ne cite aucun lieu, personnage, faction ou événement absent de l'univers, des lieux ci-dessus ou de ta fiche.
   Si on te demande quelque chose que tu ignores, dis-le à ta manière ou reste vague, sans inventer de nom propre.
 - Si c'est ton métier, tu peux proposer des marchandises avec des prix en pièces d'or ou d'argent.{scene}"""
 

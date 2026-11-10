@@ -47,6 +47,19 @@ Ouvrez **http://localhost:5000/creation.html** (lien « Préparer les PNJ et le 
 
 Sur la page de jeu, choisissez un PNJ dans la banque et cliquez sur **Jouer**.
 
+### Lieux
+
+Dans la page de préparation, le panneau **Lieux** décrit les endroits du scénario (auberge, forge, porte nord…) :
+un nom, une **description** (lue par le narrateur quand on y arrive, et connue de tous les PNJ) et des **notes
+du MJ** (secrets du lieu : elles servent seulement à créer des PNJ cohérents, jamais pendant les dialogues).
+Chaque PNJ peut avoir un **lieu habituel**, choisi dans sa fiche ou dans la demande de création.
+
+En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouvent apparaissent dessous :
+**Aborder** les fait entrer dans la scène. Pour changer de lieu, choisissez-le dans le menu, ou dites-le
+(« allons à la forge ») : la page propose d'y aller. Les PNJ de la scène restent sur place, sauf ceux dont la
+case « Vous accompagne » est cochée ; on les retrouve là où on les a laissés. Chaque PNJ sait où il se trouve
+et connaît les lieux du scénario.
+
 Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario, puis un fichier JSON par PNJ, lisible et modifiable à la main. Copier ce dossier suffit pour emporter un scénario complet.
 
 Pour remplir la banque en lot (le scénario est pris en compte) :
@@ -167,6 +180,7 @@ le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/co
 pip install -e ".[dev]"
 pytest                      # tests Python
 node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
+python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons)
 ```
 
 ## Pistes pour la suite

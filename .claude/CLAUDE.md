@@ -30,7 +30,8 @@ src/pnj_parlant/
   systeme.py         # état GPU (nvidia-smi) et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
   static/            # index.html (jeu, <script type="module">), creation.html, js/scene.js (fonctions pures)
-tests/               # pytest (faux moteurs dans conftest.py) ; tests/js/*.test.mjs (node --test)
+tests/               # pytest (faux moteurs dans conftest.py) ; tests/js/*.test.mjs (node --test) ;
+                     # tests/e2e/lancer.py : vrai serveur + faux Ollama + Edge/Chrome sans écran (CDP)
 config.toml(.example)# tous les réglages ; config.toml (clé API) n'est pas versionné
 docker-compose.yml   # Ollama dans Docker (carte NVIDIA)
 lancer.bat, lancerAMD.bat, ecran.sh  # lanceurs Windows (python -m pnj_parlant) ; ecran.sh libère la VRAM sous Linux
@@ -51,6 +52,12 @@ Routes :
   Le serveur ajoute `voix` (voix du genre du PNJ + réglages, et pitch/rate pour le repli navigateur).
 - `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues) et `notes_mj`
   (servent seulement à la création, jamais envoyées pendant les dialogues).
+- `GET|PUT /api/lieux` : lieux du scénario (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. La
+  description est connue de tous les PNJ et lue par le narrateur ; les notes du MJ ne servent qu'à la création
+  (`/api/npc/generate {..., lieu}` rattache le PNJ à son lieu habituel, champ `lieu` de la fiche).
+  `/api/npc/talk {..., lieu}` : le PNJ sait où il est (et s'il accompagne le voyageur hors de son lieu).
+  Côté navigateur : menu du lieu, PNJ présents (« Aborder »), compagnons (case « Vous accompagne »),
+  positions des PNJ pendant la partie, « allons à la forge » → proposition (`lieuEvoque`).
 - `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>`, `POST /api/voice` (autre voix pour un PNJ).
   `ensure_voice` réattribue une voix stable (graine = nom) si celle du PNJ manque sur la machine.
 - `POST /api/npc/talk {npc, presents, history}` : fiche + univers = prompt système ; serveur sans état,

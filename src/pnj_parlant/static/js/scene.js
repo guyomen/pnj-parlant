@@ -46,6 +46,31 @@ export function questionnes(reply, auteur, npcs) {
   return questions ? interpelles(questions, npcs.filter(n => n !== auteur)) : [];
 }
 
+// --- Lieux ------------------------------------------------------------------------------
+// Verbes de déplacement (sans accents) : « allons à la forge », « emmène-moi au port »…
+const DEPLACEMENT = /\b(allons|allez|aller|va|vais|partons|partir|rendons|rendez|rends|rendre|retournons|retourner|rejoignons|rejoindre|emmene|emmenez|emmener|conduis|conduisez|conduire|menez|mene|direction)\b/;
+const MOTS_VIDES_LIEU = new Set(["dans", "pour", "avec", "chez", "vers", "sous", "entre", "petit", "petite", "grand", "grande", "vieux", "vieille"]);
+
+// Le lieu (autre que `actuel`) où le joueur propose d'aller, ou null : il faut un verbe de déplacement
+// et un mot du nom du lieu (« Allons voir Brom à la forge » → « Forge de Brom »).
+export function lieuEvoque(text, lieux, actuel) {
+  const t = norm(text);
+  if (!DEPLACEMENT.test(t)) return null;
+  const position = (lieu) => Math.min(...norm(lieu.nom).split(/[^a-z0-9]+/)
+    .filter(m => m.length >= 4 && !MOTS_VIDES_LIEU.has(m))
+    .map(m => { const i = t.search(new RegExp(`\\b${m}\\b`)); return i < 0 ? Infinity : i; }));
+  const candidats = lieux.filter(l => l.id !== actuel).map(l => ({ l, pos: position(l) }))
+    .filter(x => x.pos < Infinity).sort((a, b) => a.pos - b.pos);
+  return candidats.length ? candidats[0].l : null;
+}
+
+// Texte lu par le narrateur en arrivant dans un lieu ; `restent` : PNJ laissés derrière
+export function arrivee(lieu, restent = []) {
+  const depart = restent.length
+    ? `${restent.map(n => n.nom).join(" et ")} ${restent.length > 1 ? "restent" : "reste"} derrière. ` : "";
+  return `(${depart}Vous arrivez : ${lieu.nom}.${lieu.description ? " " + lieu.description : ""})`;
+}
+
 // Deux voix identiques (même nom de voix et même locuteur)
 export const memeVoix = (a, b) => !!a?.name && a.name === b?.name && (a.speaker ?? null) === (b?.speaker ?? null);
 
@@ -65,12 +90,13 @@ export function consignesEntree(history, npcs, qui = "") {
 }
 
 // --- Export de la conversation ----------------------------------------------------------
-// lignes : [[qui, texte], ...] tel qu'affiché
+// lignes : [[qui, texte], ...] tel qu'affiché (qui vide : narration, par exemple l'arrivée dans un lieu)
 export function texteExport(lignes, npcs, date) {
   const entete = [`Conversation avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}`,
                   ...npcs.map(n => npcs.length > 1 ? `${n.nom} : ${n.apparence}` : n.apparence),
                   date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })].join("\n");
-  return `${entete}\n\n${"—".repeat(40)}\n\n${lignes.map(([qui, t]) => `${qui} : ${t}`).join("\n\n")}\n`;
+  const corps = lignes.map(([qui, t]) => qui ? `${qui} : ${t}` : t).join("\n\n");
+  return `${entete}\n\n${"—".repeat(40)}\n\n${corps}\n`;
 }
 
 export function nomFichierExport(npcs, date) {

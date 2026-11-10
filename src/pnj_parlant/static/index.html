@@ -30,6 +30,24 @@
   .line.npc-1 .who { color: var(--wax); }
   .line.npc-2 .who { color: var(--verdigris); }
 
+  /* Lieu de la scène, personnes présentes, narration */
+  .lieu { margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+  .lieu label { display: block; font: 400 1.3rem var(--display); margin-bottom: .4rem; }
+  .lieu select { width: 100%; }
+  .lieu-desc { color: var(--muted); font-style: italic; margin: .5rem 0 0; }
+  .lieu-desc:empty { display: none; }
+  .ici { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; align-items: center; }
+  .ici:empty { display: none; }
+  .ici .k { color: var(--muted); font-size: .9rem; }
+  .ici button { padding: .3rem .7rem; font-size: .9rem; }
+  .line.narration-line { align-self: center; text-align: center; max-width: 34rem; }
+  .line.narration-line .text { color: var(--muted); font-style: italic; }
+  .pnj-card .suit { display: block; margin: .3rem 0; color: var(--muted); font-size: .95rem; cursor: pointer; }
+  .proposition { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem;
+                 padding: .6rem .8rem; background: var(--surface); border-radius: 8px; }
+  .proposition[hidden] { display: none; }
+  .proposition span { flex: 1; min-width: 12rem; }
+
   /* Fiches des PNJ de la scène : la première en grand, les suivantes plus discrètes */
   .pnj-card.second { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .npc .pnj-card.second h1 { font-size: 1.7rem; }
@@ -67,6 +85,12 @@
 <body>
 <main>
   <section class="npc" aria-live="polite">
+    <div class="lieu" id="lieuBloc" hidden>
+      <label for="lieuSel">Lieu</label>
+      <select id="lieuSel"></select>
+      <p class="lieu-desc" id="lieuDesc"></p>
+      <div class="ici" id="ici"></div>
+    </div>
     <div id="cards"><p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p></div>
     <div class="gen">
       <input type="text" id="role" placeholder="Métier (ex. marchand de potions)" aria-label="Métier du PNJ">
@@ -107,6 +131,11 @@
   <section class="talk">
     <div class="log" id="log" aria-live="polite"></div>
     <div class="status" id="status"></div>
+    <div class="proposition" id="proposition" hidden>
+      <span id="propTexte"></span>
+      <button id="propOui">Y aller</button>
+      <button class="ghost" id="propNon">Rester ici</button>
+    </div>
     <div class="controls">
       <button class="mic" id="micBtn" aria-pressed="false" disabled>Parler</button>
       <div class="actions">
@@ -123,15 +152,22 @@
 
 <script type="module">
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
-         nomFichierExport } from "./js/scene.js";
+         nomFichierExport, lieuEvoque, arrivee } from "./js/scene.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
 let npcs = [];      // PNJ de la scène ; le premier est le principal
 let history = [];   // toute la scène : [{ speaker: nom du PNJ, ou null pour le joueur, content }]
 let dernier = null; // PNJ qui a parlé en dernier : il répond quand le joueur ne nomme personne
+let rencontres = []; // tous les PNJ croisés depuis le début de la conversation (pour l'export)
 let busy = false;
 const MAX_PNJ = 3;
+let lieux = [];        // lieux du scénario
+let lieuActuel = "";   // identifiant du lieu de la scène ("" : aucun)
+let banque = [];       // PNJ de la banque : [{id, nom, metier, lieu}]
+let proposition = null; // lieu où le joueur a proposé d'aller
+let positions = {};    // nom du PNJ → lieu où il se trouve pendant la partie (sinon : son lieu habituel)
+let ici = [];          // PNJ présents dans le lieu, hors scène (boutons « Aborder »)
 
 const status = (t) => { $("status").textContent = t || ""; };
 const hasard = (liste) => liste[Math.floor(Math.random() * liste.length)];
@@ -195,6 +231,17 @@ function addLine(qui, text) {
   return div;
 }
 
+// Narration (arrivée dans un lieu…) : ni nom, ni bulle, lue par la voix du narrateur
+function addNarration() {
+  const div = document.createElement("div");
+  div.className = "line narration-line";
+  div.innerHTML = `<span class="text"></span>`;
+  $("log").appendChild(div);
+  return div;
+}
+
+const nomDuLieu = (id) => lieux.find(l => l.id === id)?.nom;
+
 function renderCards() {
   $("cards").innerHTML = npcs.length ? npcs.map((n, i) => `
     <div class="pnj-card${i ? " second" : ""}">
@@ -203,9 +250,30 @@ function renderCards() {
       <p>${esc(n.apparence)}</p>
       <p><span class="k">Caractère :</span> ${esc(n.personnalite)}</p>
       <p><span class="k">Humeur :</span> ${esc(n.humeur)}</p>
+      ${nomDuLieu(n.lieu) ? `<p><span class="k">Lieu habituel :</span> ${esc(nomDuLieu(n.lieu))}</p>` : ""}
+      ${lieux.length ? `<label class="suit"><input type="checkbox" data-suit="${i}" ${n.suit ? "checked" : ""}>
+        Vous accompagne quand vous changez de lieu</label>` : ""}
       ${i ? `<button class="ghost" data-retirer="${i}">Retirer de la scène</button>` : ""}
     </div>`).join("")
     : `<p class="empty">Aucun PNJ pour l’instant. Choisissez un métier ou laissez le hasard décider.</p>`;
+}
+
+// Bloc « Lieu » : menu, description, PNJ de la banque qui se trouvent ici
+function renderLieu() {
+  $("lieuBloc").hidden = !lieux.length;
+  $("lieuSel").innerHTML = `<option value="">— Aucun lieu —</option>`
+    + lieux.map(l => `<option value="${esc(l.id)}">${esc(l.nom)}</option>`).join("");
+  $("lieuSel").value = lieuActuel;
+  const lieu = lieux.find(l => l.id === lieuActuel);
+  $("lieuDesc").textContent = lieu?.description ?? "";
+  // PNJ de la banque, et PNJ croisés pendant la partie (même inventés, pas encore enregistrés)
+  const connus = [...banque, ...rencontres.filter(r => !banque.some(b => b.nom === r.nom))];
+  ici = lieu ? connus.filter(c => (positions[c.nom] ?? c.lieu) === lieu.id && !npcs.some(n => n.nom === c.nom)) : [];
+  $("ici").innerHTML = !lieu ? ""
+    : ici.length ? `<span class="k">Ici :</span>` + ici.map((c, i) =>
+        `<button class="ghost" data-aborder="${i}">${esc(c.nom)} — ${esc(c.metier)}</button>`).join("")
+    : `<span class="k">Personne d’autre ici.</span>`;
+  setBusy(busy);
 }
 
 function setBusy(b) {
@@ -215,7 +283,12 @@ function setBusy(b) {
   $("sendBtn").disabled = $("ask").disabled = b || !scene;
   $("micBtn").disabled = b || !scene || !(cfg.stt_local || recognition);
   $("saveBtn").disabled = b || !npcs.some(n => !n.id);  // tous déjà dans la banque
-  $("exportBtn").disabled = !scene;
+  $("exportBtn").disabled = !rencontres.length;
+  $("lieuSel").disabled = b;
+  $("propOui").disabled = b;
+  for (const btn of document.querySelectorAll("[data-aborder]")) {
+    btn.disabled = b || (npcs.length >= MAX_PNJ && multi);
+  }
   $("loadBtn").disabled = b || !$("bankSel").value;
   $("addBtn").hidden = !multi;
   $("addBtn").disabled = b || !scene || npcs.length >= MAX_PNJ || !$("bankSel").value
@@ -263,11 +336,13 @@ function prepareSpeech(text, p, onStart, n) {
   return async () => { for (const play of plays) await play(); };
 }
 
+// n : le PNJ qui parle, ou null pour une narration seule (arrivée dans un lieu)
 function prepareSegment(text, narrateur, p, onStart, n) {
   // eviter : le narrateur ne prend la voix d'aucun PNJ de la scène
-  const audioFile = cfg.tts && n.voix?.name
+  const audioFile = cfg.tts && (narrateur || n?.voix?.name)
     ? fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ text, voice: n.voix, narrateur, eviter: npcs.map(x => x.voix) }),
+                          body: JSON.stringify({ text, voice: n?.voix ?? {}, narrateur,
+                                                 eviter: npcs.map(x => x.voix).filter(Boolean) }),
                           signal: p.ctrl.signal })
         .then(r => r.ok ? r.blob() : null).catch(() => null)
     : Promise.resolve(null);
@@ -292,8 +367,8 @@ async function browserSpeak(text, narrateur, n) {
   await new Promise((res) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
-    u.pitch = narrateur ? 1 : n.voix?.browser_pitch ?? 1;
-    u.rate = narrateur ? 1 : n.voix?.browser_rate ?? 1;
+    u.pitch = narrateur ? 1 : n?.voix?.browser_pitch ?? 1;
+    u.rate = narrateur ? 1 : n?.voix?.browser_rate ?? 1;
     const fr = speechSynthesis.getVoices().filter(v => v.lang.startsWith("fr"));
     // le narrateur prend la première voix française, chaque PNJ une des suivantes
     if (fr.length) u.voice = fr[narrateur ? 0 : (1 + Math.max(0, npcs.indexOf(n))) % fr.length];
@@ -316,13 +391,18 @@ async function saluer(n) {
   finParole(p);
 }
 
-// Nouvelle scène avec ce PNJ seul
+// Nouvelle scène avec ce PNJ seul, dans son lieu habituel s'il en a un (on va le voir là où il est).
 async function startScene(n) {
   npcs = [n];
   history = [{ speaker: n.nom, content: n.salutation }];
   dernier = n;
+  rencontres = [n];
+  masquerProposition();
+  if (nomDuLieu(positions[n.nom] ?? n.lieu)) lieuActuel = positions[n.nom] ?? n.lieu;
+  if (lieuActuel) positions[n.nom] = lieuActuel;
   $("log").innerHTML = "";
   renderCards();
+  renderLieu();
   status("");
   setBusy(true);
   await saluer(n);
@@ -337,7 +417,10 @@ async function joinScene(n) {
   npcs.push(n);
   history.push({ speaker: n.nom, content: n.salutation });
   dernier = n;
+  if (!rencontres.some(x => x.nom === n.nom)) rencontres.push(n);
+  if (lieuActuel) positions[n.nom] = lieuActuel;
   renderCards();
+  renderLieu();
   status("");
   setBusy(true);
   await saluer(n);
@@ -347,13 +430,78 @@ function retirer(i) {
   const [n] = npcs.splice(i, 1);
   if (dernier === n) dernier = npcs[0];
   renderCards();
-  setBusy(busy);
+  renderLieu();
   status(`${n.nom} quitte la scène.`);
+}
+
+// --- Lieux -------------------------------------------------------------------
+// Change de lieu : les PNJ qui n'accompagnent pas le voyageur restent sur place, le narrateur décrit
+// le nouveau lieu. Les compagnons gardent le souvenir de la conversation ; sans compagnon, elle repart à zéro.
+async function changerLieu(id) {
+  if (busy || id === lieuActuel) return;
+  const lieu = lieux.find(l => l.id === id);
+  masquerProposition();
+  const restent = npcs.filter(n => !n.suit);
+  npcs = npcs.filter(n => n.suit);
+  if (!npcs.includes(dernier)) dernier = npcs[0] ?? null;
+  if (lieuActuel) for (const n of restent) positions[n.nom] = lieuActuel;  // ils restent là où on les quitte
+  lieuActuel = lieu ? id : "";
+  for (const n of npcs) positions[n.nom] = lieuActuel || undefined;      // les compagnons suivent
+  if (!npcs.length) history = [];
+  else if (lieu) history.push({ speaker: null, content: `(Le voyageur et ses compagnons arrivent : ${lieu.nom}.)` });
+  renderCards();
+  renderLieu();
+  if (!lieu) return;
+  setBusy(true);
+  const p = debutParole();
+  let line = null, said = "";
+  await speak(arrivee(lieu, restent), p, (morceau) => {
+    line ??= addNarration();
+    said += (said ? " " : "") + morceau;
+    line.querySelector(".text").innerHTML = formatLine(said);
+    line.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, null);
+  finParole(p);
+  setBusy(false);
+}
+
+// Aborder un PNJ qui se trouve dans le lieu (`i` : rang dans `ici`) : il rejoint la scène (ou la remplace,
+// sans l'option « Plusieurs PNJ »), sans effacer ce qui a été dit jusque-là.
+async function aborder(i) {
+  const c = ici[i];
+  if (busy || !c) return;
+  setBusy(true); status("");
+  try {
+    // déjà croisé pendant la partie : on reprend sa fiche (voix, compagnon…) ; sinon, celle de la banque
+    const n = rencontres.find(r => r.nom === c.nom) ?? await api(`/api/bank/${encodeURIComponent(c.id)}`);
+    if (!$("optMulti").checked) { npcs = []; history = []; }
+    await joinScene(n);
+  } catch (e) { status(e.message); }
+  setBusy(false);
+  if (npcs.length) $("ask").focus();
+}
+
+function proposer(lieu) {
+  proposition = lieu;
+  $("propTexte").textContent = `Aller à : ${lieu.nom} ?`;
+  $("proposition").hidden = false;
+}
+
+function masquerProposition() {
+  proposition = null;
+  $("proposition").hidden = true;
+}
+
+async function chargerLieux() {
+  lieux = await api("/api/lieux").catch(() => []);
+  if (!lieux.some(l => l.id === lieuActuel)) lieuActuel = "";
+  renderLieu();
+  renderCards();
 }
 
 async function generate() {
   setBusy(true); status("Le PNJ prend forme…");
-  try { await startScene(await api("/api/npc/generate", { role: $("role").value })); }
+  try { await startScene(await api("/api/npc/generate", { role: $("role").value, lieu: lieuActuel })); }
   catch (e) { status(e.message); }
   setBusy(false);
   if (npcs.length) $("ask").focus();
@@ -366,7 +514,7 @@ async function faireEntrer() {
   setBusy(true); status("Quelqu’un approche…");
   const consignes = consignesEntree(history, npcs, qui);
   try {
-    await joinScene(await api("/api/npc/generate", { consignes }));
+    await joinScene(await api("/api/npc/generate", { consignes, lieu: lieuActuel }));  // un habitué du lieu
     $("entree").value = "";
   } catch (e) { status(e.message); }
   setBusy(false);
@@ -374,12 +522,12 @@ async function faireEntrer() {
 
 // --- Banque de PNJ -----------------------------------------------------------
 async function refreshBank(selectId) {
-  const list = await api("/api/bank").catch(() => []);
-  $("bankSel").innerHTML = list.length
-    ? list.map(n => `<option value="${esc(n.id)}">${esc(n.nom)} — ${esc(n.metier)}</option>`).join("")
+  banque = await api("/api/bank").catch(() => []);
+  $("bankSel").innerHTML = banque.length
+    ? banque.map(n => `<option value="${esc(n.id)}">${esc(n.nom)} — ${esc(n.metier)}</option>`).join("")
     : `<option value="">Banque vide</option>`;
   if (selectId) $("bankSel").value = selectId;
-  setBusy(busy);
+  renderLieu();
 }
 
 // ajout : le PNJ rejoint la scène en cours au lieu d'en commencer une nouvelle
@@ -410,14 +558,14 @@ async function saveToBank() {
 function exportConversation() {
   const date = new Date();
   const lignes = [...$("log").querySelectorAll(".line")]
-    .map(l => [l.querySelector(".who").textContent, l.querySelector(".text").textContent]);
-  const texte = texteExport(lignes, npcs, date);
+    .map(l => [l.querySelector(".who")?.textContent ?? "", l.querySelector(".text").textContent]);
+  const texte = texteExport(lignes, rencontres, date);
   // BOM : le Bloc-notes de Windows affiche alors correctement les accents
   const bom = String.fromCharCode(0xFEFF);
   const url = URL.createObjectURL(new Blob([bom + texte], { type: "text/plain;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = nomFichierExport(npcs, date);
+  a.download = nomFichierExport(rencontres, date);
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -438,6 +586,9 @@ async function send(text) {
   $("ask").value = "";
   addLine(null, text);
   history.push({ speaker: null, content: text });
+  // « Allons à la forge » : on propose d'y aller (les PNJ répondent quand même, ils peuvent réagir)
+  const evoque = lieuEvoque(text, lieux, lieuActuel);
+  if (evoque) proposer(evoque); else masquerProposition();
   // Le PNJ cité répond (tous ceux cités, dans l'ordre) ; sinon, celui qui a parlé en dernier
   const cites = interpelles(text, npcs);
   await jouerTours(cites.length > 1 ? cites
@@ -496,7 +647,8 @@ async function tourDe(n, p, voice) {
     line.scrollIntoView({ behavior: "smooth", block: "end" });
   };
   try {
-    await apiStream("/api/npc/talk", { npc: n, presents: npcs.filter(x => x !== n), history }, (item) => {
+    const corps = { npc: n, presents: npcs.filter(x => x !== n), history, lieu: lieuActuel };
+    await apiStream("/api/npc/talk", corps, (item) => {
       if (p.ctrl.signal.aborted) return;
       if (item.error) throw new Error(item.error);
       reply += (reply ? " " : "") + item.phrase;
@@ -648,6 +800,14 @@ $("cards").onclick = (e) => {
   const i = e.target.dataset?.retirer;
   if (i !== undefined && !busy) retirer(Number(i));
 };
+$("cards").onchange = (e) => {  // case « Vous accompagne »
+  const i = e.target.dataset?.suit;
+  if (i !== undefined && npcs[Number(i)]) npcs[Number(i)].suit = e.target.checked;
+};
+$("lieuSel").onchange = () => changerLieu($("lieuSel").value);
+$("ici").onclick = (e) => { if (e.target.dataset?.aborder !== undefined) aborder(Number(e.target.dataset.aborder)); };
+$("propOui").onclick = () => { if (proposition) changerLieu(proposition.id); };
+$("propNon").onclick = masquerProposition;
 for (const id of OPTIONS) $(id).onchange = () => { saveOptions(); setBusy(busy); };
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
@@ -693,7 +853,7 @@ async function refreshSys() {
 refreshSys();
 setInterval(() => { if (!document.hidden) refreshSys(); }, 3000);
 setBusy(false);
-refreshBank();
+chargerLieux().then(() => refreshBank());
 </script>
 </body>
 </html>

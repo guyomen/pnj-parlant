@@ -48,6 +48,27 @@ test("questionnes : le PNJ à qui un autre pose une question", () => {
   assert.deepEqual(noms("Léonard, viens ici."), []);
 });
 
+test("lieuEvoque : un verbe de déplacement et un lieu cité", () => {
+  const lieux = [{ id: "auberge", nom: "Auberge du Sanglier" }, { id: "forge", nom: "Forge de Brom" },
+                 { id: "porte", nom: "La porte nord" }];
+  const ou = (texte, actuel = "auberge") => scene.lieuEvoque(texte, lieux, actuel)?.id ?? null;
+  assert.equal(ou("Allons voir Brom à la forge !"), "forge");
+  assert.equal(ou("Emmène-moi à la porte nord, vite."), "porte");
+  assert.equal(ou("Je vais à la Forge."), "forge");
+  assert.equal(ou("La forge est loin ?"), null);              // pas de déplacement demandé
+  assert.equal(ou("Retournons à l'auberge."), null);          // on y est déjà
+  assert.equal(ou("Retournons à l'auberge.", "forge"), "auberge");
+  assert.equal(ou("Allons dans la cave."), null);             // lieu inconnu
+  assert.equal(ou("Allons au sanglier puis à la forge.", "porte"), "auberge", "le premier cité");
+});
+
+test("arrivee : texte du narrateur", () => {
+  const lieu = { nom: "Forge de Brom", description: "Une chaleur d'enfer." };
+  assert.equal(scene.arrivee(lieu), "(Vous arrivez : Forge de Brom. Une chaleur d'enfer.)");
+  assert.equal(scene.arrivee({ nom: "Porte nord" }, [{ nom: "Ysolde" }]), "(Ysolde reste derrière. Vous arrivez : Porte nord.)");
+  assert.equal(scene.arrivee(lieu, [{ nom: "A" }, { nom: "B" }]).slice(0, 26), "(A et B restent derrière. ");
+});
+
 test("memeVoix : même nom et même locuteur", () => {
   assert.ok(scene.memeVoix({ name: "a" }, { name: "a" }));
   assert.ok(!scene.memeVoix({ name: "a", speaker: 0 }, { name: "a", speaker: 1 }));
@@ -70,5 +91,6 @@ test("export : en-tête, répliques et nom de fichier", () => {
   assert.ok(texte.startsWith("Conversation avec Ysolde la Rousse, aubergiste ; Brom Œil-de-Fer, forgeron du village\n"
     + "Ysolde la Rousse : Trapue.\nBrom Œil-de-Fer : Immense.\n"));
   assert.ok(texte.endsWith("Ysolde la Rousse : (Elle rit.) Oui.\n\nVous : Merci.\n"));
+  assert.ok(scene.texteExport([["", "(Vous arrivez : Forge.)"]], [YSOLDE], date).endsWith("\n\n(Vous arrivez : Forge.)\n"));
   assert.equal(scene.nomFichierExport([YSOLDE], date), "conversation-ysolde-la-rousse-2026-11-10-18h05.txt");
 });

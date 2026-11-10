@@ -64,13 +64,29 @@ def parse_json(text):
     return json.loads(text[start:end + 1])
 
 
-def demande(scenario, role="", nom="", genre="", consignes="", rng=random):
-    """Message envoyé au modèle pour créer la fiche : univers, notes du MJ, consignes, tirages au sort."""
+def liste_des_lieux(lieux):
+    """« - Forge de Brom : Une forge enfumée… », une ligne par lieu (description publique seulement)."""
+    return "\n".join(f"- {l['nom']}" + (f" : {l['description']}" if l.get("description") else "") for l in lieux)
+
+
+def demande(scenario, role="", nom="", genre="", consignes="", rng=random, lieu=None, lieux=()):
+    """Message envoyé au modèle pour créer la fiche : univers, lieux, notes du MJ, consignes, tirages au sort.
+    `lieu` : lieu habituel du PNJ (avec ses notes du MJ) ; `lieux` : tous les lieux du scénario."""
     parts = []
     if scenario.get("monde"):
         parts.append(f"<univers>\n{scenario['monde']}\n</univers>")
+    if lieux:
+        parts.append(f"<lieux>\n{liste_des_lieux(lieux)}\n</lieux>")
     if scenario.get("notes_mj"):
         parts.append(f"<notes_du_mj>\n{scenario['notes_mj']}\n</notes_du_mj>")
+    if lieu:
+        details = [lieu["nom"]]
+        if lieu.get("description"):
+            details.append(lieu["description"])
+        if lieu.get("notes_mj"):
+            details.append(f"Notes du MJ sur ce lieu : {lieu['notes_mj']}")
+        parts.append("<lieu_du_pnj>\n" + "\n".join(details) + "\n</lieu_du_pnj>\n"
+                     "Le PNJ vit ou travaille habituellement dans ce lieu.")
     if consignes.strip():
         parts.append(f"<consignes_pour_ce_pnj>\n{consignes.strip()[:4000]}\n</consignes_pour_ce_pnj>")
     if role.strip():
@@ -93,14 +109,18 @@ def demande(scenario, role="", nom="", genre="", consignes="", rng=random):
     return "\n\n".join(parts)
 
 
-def creer(moteurs, scenario, role="", nom="", genre="", consignes=""):
-    """Fait inventer un PNJ par le moteur de création. Renvoie la fiche, sans voix (voir voix.attribuer).
-    Lève ValueError si la fiche reçue est invalide, MoteurIndisponible si le moteur ne répond pas."""
-    reponse = moteurs.fiche(GEN_SYSTEM, demande(scenario, role, nom, genre, consignes), NPC_SCHEMA)
+def creer(moteurs, scenario, role="", nom="", genre="", consignes="", lieu=None, lieux=()):
+    """Fait inventer un PNJ par le moteur de création. Renvoie la fiche, sans voix (voir voix.attribuer),
+    rattachée à `lieu` s'il est donné. Lève ValueError si la fiche reçue est invalide,
+    MoteurIndisponible si le moteur ne répond pas."""
+    texte_demande = demande(scenario, role, nom, genre, consignes, lieu=lieu, lieux=lieux)
+    reponse = moteurs.fiche(GEN_SYSTEM, texte_demande, NPC_SCHEMA)
     try:
         npc = parse_json(reponse)
     except (ValueError, IndexError) as e:
         log.warning("JSON PNJ invalide : %r", reponse[:500])
         raise ValueError("fiche invalide") from e
     npc["salutation"] = texte.nettoyer(npc.get("salutation") or "Bonjour, voyageur.")
+    if lieu:
+        npc["lieu"] = lieu["id"]
     return npc
