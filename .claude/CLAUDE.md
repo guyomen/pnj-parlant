@@ -56,8 +56,11 @@ Routes :
   historique côté navigateur (`[dialogue] historique`, 12 messages) : toute la scène,
   `[{speaker: nom du PNJ ou null pour le joueur, content}]`, salutations comprises. Scène à plusieurs PNJ
   (`presents`, jusqu'à 3 en tout) : chaque PNJ voit ses répliques en `assistant` et celles des autres en
-  `user` préfixées « Nom : » ; le serveur coupe la réponse si le modèle écrit la réplique d'un autre.
-  Côté navigateur : répond le PNJ cité (nom ou métier), sinon le dernier à avoir parlé ; options
+  `user` préfixées par le nom de l'auteur, plus un rappel en fin de dernier message. Les petits modèles
+  écrivent quand même la suite de la scène : `texte.sans_autres_locuteurs` coupe le flux dès qu'une étiquette
+  (autre PNJ, « Voyageur », « Nom ») suit une fin de phrase, même au milieu d'un morceau.
+  Côté navigateur : répond le PNJ cité (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un
+  autre pose une question répond juste après (`questionnes`, 4 répliques d'affilée au plus) ; options
   « Interventions spontanées » (`[dialogue] intervention`), « Laissez-les discuter » et « Faire entrer »
   (PNJ créé par `/api/npc/generate` avec la conversation dans `consignes`). Réponse en streaming NDJSON,
   une ligne `{"phrase": ...}` par phrase (ou `{"error": ...}`) ; le navigateur lit chaque phrase dès

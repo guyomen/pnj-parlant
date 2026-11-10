@@ -1,4 +1,4 @@
-from pnj_parlant.texte import chiffres_en_lettres, locuteur, nettoyer, phrases
+from pnj_parlant.texte import chiffres_en_lettres, nettoyer, phrases, sans_autres_locuteurs
 
 
 class TestNettoyer:
@@ -46,14 +46,32 @@ class TestPhrases:
         assert decouper("") == []
 
 
-class TestLocuteur:
-    NOMS = ["Ysolde la Rousse", "Brom", "Voyageur"]
+class TestSansAutresLocuteurs:
+    AUTRES = ["Léonard le Sage", "Voyageur", "Le voyageur", "Nom"]
 
-    def test_reconnait_le_nom_complet_ou_le_premier_mot(self):
-        assert locuteur("Ysolde : (Elle rit.) Oui !", self.NOMS) == ("Ysolde la Rousse", "(Elle rit.) Oui !")
-        assert locuteur("Ysolde la Rousse: Ha.", self.NOMS) == ("Ysolde la Rousse", "Ha.")
-        assert locuteur("Brom : Tais-toi.", self.NOMS) == ("Brom", "Tais-toi.")
+    def filtrer(self, texte, moi="Berthe la joyeuse", taille=5):
+        """Texte gardé, quelle que soit la façon dont le modèle le découpe en morceaux."""
+        resultats = {"".join(sans_autres_locuteurs([texte], moi, self.AUTRES))}
+        for t in (1, 3, taille):
+            morceaux = (texte[i:i + t] for i in range(0, len(texte), t))
+            resultats.add("".join(sans_autres_locuteurs(morceaux, moi, self.AUTRES)))
+        assert len(resultats) == 1, resultats
+        return resultats.pop()
+
+    def test_cas_reel_nom_recopie_puis_replique_d_un_autre_en_pleine_phrase(self):
+        texte = ("Je vais très bien, merci. Et toi-même ? (À Léonard) Et pour toi, Léonard ? Toujours à rechercher "
+                 "des ingrédients rares pour tes potions ? Nom : Léonard le Sage Léonard le Sage : En effet, Berthe.")
+        assert self.filtrer(texte) == ("Je vais très bien, merci. Et toi-même ? (À Léonard) Et pour toi, Léonard ? "
+                                       "Toujours à rechercher des ingrédients rares pour tes potions ? ")
+
+    def test_s_arrete_sur_le_premier_mot_du_nom_ou_le_voyageur(self):
+        assert self.filtrer("Bien sûr.\nLéonard : Mensonge !") == "Bien sûr.\n"
+        assert self.filtrer("Une bière ? Voyageur : Oui.") == "Une bière ? "
+        assert self.filtrer("léonard : coupé dès le début") == ""
+
+    def test_retire_sa_propre_etiquette(self):
+        assert self.filtrer("Berthe : Bonjour ! Berthe la joyeuse : Encore moi.") == "Bonjour ! Encore moi."
 
     def test_ignore_les_deux_points_ordinaires(self):
-        for phrase in ["Écoute bien : je ne sais rien.", "Dis, Brom : ça va ?", "Bonjour."]:
-            assert locuteur(phrase, self.NOMS) == (None, phrase)
+        for texte in ["Écoute bien : je ne sais rien.", "Dis-le à Léonard : il saura.", "Le prix : 3 pièces."]:
+            assert self.filtrer(texte) == texte

@@ -122,7 +122,7 @@
 </main>
 
 <script type="module">
-import { esc, norm, segments, formatLine, interpelles, memeVoix, consignesEntree, texteExport,
+import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport } from "./js/scene.js";
 
 const $ = (id) => document.getElementById(id);
@@ -453,17 +453,26 @@ async function discuter() {
 
 // Les PNJ de `ordre` parlent l'un après l'autre. Chacun commence à écrire sa réplique pendant
 // que le précédent parle encore, et l'entend en entier avant de répondre.
+// Un PNJ à qui un autre pose une question répond juste après (au plus MAX_TOURS répliques d'affilée).
+const MAX_TOURS = 4;
+
 async function jouerTours(ordre) {
   setBusy(true);
   const p = debutParole();
   let voice = Promise.resolve();
-  const tours = [];
-  for (const n of ordre) {
+  const tours = [], file = [...ordre];
+  while (file.length && tours.length < MAX_TOURS) {
+    const n = file.shift();
     if (p.ctrl.signal.aborted || !npcs.includes(n)) break;
     const t = await tourDe(n, p, voice);
     tours.push(t);
     voice = t.voice;
     if (t.erreur) break;
+    for (const appele of questionnes(t.reply, n, npcs).reverse()) {
+      const deja = file.indexOf(appele);
+      if (deja >= 0) file.splice(deja, 1);
+      file.unshift(appele);  // il répond avant les suivants prévus, une seule fois
+    }
   }
   await voice;
   // Interrompu : chacun « se souvient » seulement de ce qu'il a eu le temps de dire
@@ -502,7 +511,7 @@ async function tourDe(n, p, voice) {
     dernier = n;
   }
   return {
-    voice, erreur,
+    voice, erreur, reply,
     corriger() {
       if (!reply) return;
       if (said) entry.content = said;

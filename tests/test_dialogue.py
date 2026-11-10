@@ -24,8 +24,13 @@ class TestMessages:
         assert msgs == [
             {"role": "user", "content": "(Un voyageur s'approche.)\nYsolde : Bienvenue !"},
             {"role": "assistant", "content": "Salut."},
-            {"role": "user", "content": "Voyageur : Brom, ça va ?"},
+            {"role": "user", "content": "Voyageur : Brom, ça va ?\n(Réponds seulement en tant que Brom, "
+                                        "sans écrire de nom suivi de deux-points.)"},
         ]
+
+    def test_seul_pas_de_rappel(self):
+        msgs = dialogue.messages("Ysolde", [entree("Ysolde", "Bienvenue !"), entree(None, "Salut.")])
+        assert "Réponds seulement" not in msgs[-1]["content"]
 
     def test_les_roles_alternent_et_commencent_par_user(self):
         history = [entree("Ysolde", "A."), entree("Brom", "B."), entree(None, "C."), entree("Brom", "D.")]
@@ -41,7 +46,7 @@ class TestMessages:
     def test_un_pnj_parti_reste_nomme(self):
         # Brom a quitté la scène : Ysolde est seule, mais doit savoir que ces paroles étaient les siennes
         msgs = dialogue.messages("Ysolde", [entree("Brom", "Je m'en vais."), entree(None, "Et toi ?")])
-        assert msgs[-1]["content"].endswith("Brom : Je m'en vais.\nVoyageur : Et toi ?")
+        assert "Brom : Je m'en vais.\nVoyageur : Et toi ?\n" in msgs[-1]["content"]
 
 
 def test_nettoyer_historique_garde_les_derniers_messages_valides():
@@ -77,3 +82,12 @@ class TestRepliques:
             "Ce forgeron raconte n'importe quoi, crois-moi."]
         texte = "Je te sers une bière tout de suite, voyageur.\nVoyageur : Merci !"
         assert list(dialogue.repliques(iter([texte]), "Ysolde")) == ["Je te sers une bière tout de suite, voyageur."]
+
+    def test_le_format_des_consignes_recopie(self):
+        texte = "Et toi, Brom, toujours à la forge du matin au soir ? Nom : Brom Brom : Oui."
+        assert list(dialogue.repliques(iter(texte), "Ysolde", [BROM])) == [
+            "Et toi, Brom, toujours à la forge du matin au soir ?"]
+
+    def test_consignes_donnent_un_vrai_nom_en_exemple(self):
+        system = dialogue.consignes(YSOLDE, presents=[BROM])
+        assert "« Brom : … »" in system and "Nom :" not in system

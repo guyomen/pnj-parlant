@@ -39,6 +39,13 @@ export function interpelles(text, npcs) {
     .sort((a, b) => a.pos - b.pos).map(x => x.n);
 }
 
+// PNJ à qui `auteur` vient de poser une question (« Et pour toi, Léonard ? ») : ils répondront eux-mêmes.
+// Seules comptent les phrases interrogatives : « Léonard est un idiot. Une bière ? » n'appelle pas Léonard.
+export function questionnes(reply, auteur, npcs) {
+  const questions = reply.split(/(?<=[.!?…])\s+/).filter(phrase => phrase.includes("?")).join(" ");
+  return questions ? interpelles(questions, npcs.filter(n => n !== auteur)) : [];
+}
+
 // Deux voix identiques (même nom de voix et même locuteur)
 export const memeVoix = (a, b) => !!a?.name && a.name === b?.name && (a.speaker ?? null) === (b?.speaker ?? null);
 

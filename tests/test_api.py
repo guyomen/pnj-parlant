@@ -79,7 +79,7 @@ class TestDialogue:
         assert lignes(reponse) == [{"phrase": "Ce forgeron raconte n'importe quoi, crois-moi."}]
         system, messages = moteurs.appels[-1]
         assert "Brom, forgeron. Immense." in system and BROM["secret"] not in system
-        assert messages[-1] == {"role": "user", "content": "Brom : Salut.\nVoyageur : Ysolde, Brom dit que tu triches."}
+        assert messages[-1]["content"].startswith("Brom : Salut.\nVoyageur : Ysolde, Brom dit que tu triches.\n")
 
     def test_les_notes_du_mj_ne_sont_jamais_envoyees(self, client, moteurs):
         client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Le roi est un imposteur."})

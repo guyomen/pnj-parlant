@@ -37,6 +37,17 @@ test("interpelles : par le nom ou le métier, dans l'ordre cité", () => {
   assert.deepEqual(noms("YSOLDE !"), ["Ysolde la Rousse"]);
 });
 
+test("questionnes : le PNJ à qui un autre pose une question", () => {
+  const LEONARD = { nom: "Léonard le Sage", metier: "alchimiste" };
+  const BERTHE = { nom: "Berthe la joyeuse", metier: "aubergiste" };
+  const noms = (reply) => scene.questionnes(reply, BERTHE, [BERTHE, LEONARD]).map(n => n.nom);
+  assert.deepEqual(noms("Et toi-même ? (À Léonard) Et pour toi, Léonard ? Toujours tes potions ?"), ["Léonard le Sage"]);
+  assert.deepEqual(noms("Léonard est un vieux fou. Une bière, voyageur ?"), []);  // la question n'est pas pour lui
+  assert.deepEqual(noms("L'alchimiste te le dira, hein ?"), ["Léonard le Sage"]);
+  assert.deepEqual(noms("Berthe ? C'est moi."), []);  // pas soi-même
+  assert.deepEqual(noms("Léonard, viens ici."), []);
+});
+
 test("memeVoix : même nom et même locuteur", () => {
   assert.ok(scene.memeVoix({ name: "a" }, { name: "a" }));
   assert.ok(!scene.memeVoix({ name: "a", speaker: 0 }, { name: "a", speaker: 1 }));

@@ -64,16 +64,52 @@ def phrases(morceaux):
         yield tampon
 
 
-# « Nom : » en tête de phrase : le modèle annonce qui parle (lui-même, un autre PNJ ou le voyageur)
-ETIQUETTE = re.compile(r"^\s*([^:.!?()]{1,40}?)\s*:\s*")
+# --- Qui parle ? -------------------------------------------------------------------
+# À plusieurs, un petit modèle a tendance à écrire la suite de la scène à la place des autres
+# (« … tes potions ? Léonard : En effet. »), voire à recopier le format des consignes (« Nom : »).
+FIN = r"(?:[.!?…]+[»”\"')]*\s+|\n)"                        # fin de phrase ou de ligne, avant une étiquette
+FIN_EMISE = re.compile(r"(?:[.!?…]+[»”\"')]*\s*|\n\s*)$")  # le texte déjà envoyé finit une phrase
 
 
-def locuteur(phrase, noms):
-    """(nom annoncé en tête de phrase parmi `noms`, ou None ; phrase sans cette étiquette).
-    « Ysolde : » désigne « Ysolde la Rousse » (premier mot du nom)."""
-    m = ETIQUETTE.match(phrase)
-    if not m:
-        return None, phrase
-    etiquette = m[1].strip().lower()
-    nom = next((n for n in noms if n and etiquette in (n.lower(), n.lower().split()[0])), None)
-    return nom, phrase[m.end():] if nom else phrase
+def etiquettes(noms):
+    """Façons d'annoncer chaque nom : complet, ou premier mot (« Ysolde » pour « Ysolde la Rousse »)."""
+    variantes = {v for n in noms if n for v in (n, n.split()[0]) if len(v) >= 3}
+    return sorted(variantes, key=len, reverse=True)  # les plus longues d'abord
+
+
+def sans_autres_locuteurs(morceaux, moi, autres):
+    """Le texte du PNJ `moi`, morceau par morceau, débarrassé des étiquettes à son nom (« Berthe : ») et
+    arrêté dès qu'il annonce un autre locuteur (« Léonard : », « Voyageur : », « Nom : »).
+    Une étiquette n'est reconnue qu'en début de réponse, de ligne ou de phrase : « Dis-le à Léonard : il
+    saura » reste intact."""
+    miennes = {e.lower() for e in etiquettes([moi])}
+    toutes = etiquettes([moi, *autres])
+    motif = "|".join(map(re.escape, toutes))
+    au_debut = re.compile(rf"\s*({motif})\s*:\s*", re.IGNORECASE)
+    apres_une_fin = re.compile(rf"{FIN}\s*({motif})\s*:\s*", re.IGNORECASE)
+    garde = max(map(len, toutes), default=0) + 8  # une étiquette peut arriver en plusieurs morceaux
+
+    tampon, debut, flux = "", True, iter(morceaux)  # debut : le tampon commence une phrase
+    while True:
+        morceau = next(flux, None)
+        tampon += morceau or ""
+        while True:
+            m = (au_debut.match(tampon) if debut else None) or apres_une_fin.search(tampon)
+            if m is None:
+                break
+            a_moi = m[1].lower() in miennes
+            if a_moi and m.end() == len(tampon) and morceau is not None:
+                break  # sa propre étiquette, peut-être suivie d'espaces encore à venir : on attend la suite
+            if m.start(1) > 0:
+                yield tampon[:m.start(1)]  # ce qui précède l'étiquette
+            if not a_moi:
+                return  # le modèle fait parler quelqu'un d'autre : la réplique s'arrête là
+            tampon, debut = tampon[m.end():], False  # sa propre étiquette : retirée
+        if morceau is None:  # fin du flux
+            if tampon:
+                yield tampon
+            return
+        if len(tampon) > garde:  # on garde la fin, qui pourrait être le début d'une étiquette
+            envoye, tampon = tampon[:-garde], tampon[-garde:]
+            debut = bool(FIN_EMISE.search(envoye))
+            yield envoye

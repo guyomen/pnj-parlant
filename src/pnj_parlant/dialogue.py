@@ -23,9 +23,10 @@ def consignes(npc, monde="", presents=()):
         scene = f"""
 - Tu n'es pas seul avec le voyageur. Sont aussi présents :
 {autres}
-  Leurs répliques te parviennent précédées de leur nom (« Nom : … ») ; celles du voyageur, de « {VOYAGEUR} : ».
-  Tu peux t'adresser à eux, les taquiner ou les contredire, selon ta personnalité.
-  Ne parle que pour toi : n'écris jamais leurs répliques, ne commence pas ta réponse par ton nom."""
+  Tu entends leurs paroles précédées de leur nom (« {presents[0].get('nom')} : … ») et celles du voyageur
+  précédées de « {VOYAGEUR} : ». Tu peux t'adresser à eux, les taquiner ou les contredire, selon ta personnalité.
+  Mais tu n'écris que TA réplique : jamais celle d'un autre, jamais un nom suivi de deux-points.
+  Si tu poses une question à quelqu'un, arrête-toi là : il répondra lui-même."""
     univers = (f"""Ce que tout habitant sait du monde :
 <univers>
 {monde}
@@ -73,17 +74,21 @@ def messages(nom, history, presents=()):
             resultat.append({"role": role, "content": contenu})
     if resultat[-1]["role"] == "assistant":  # le PNJ reprend la parole après lui-même
         resultat.append({"role": "user", "content": "(Le voyageur attend la suite.)"})
+    if groupe:  # rappel juste avant la réponse : c'est là qu'un petit modèle y fait le plus attention
+        resultat[-1]["content"] += f"\n({RAPPEL.format(nom=nom)})"
     return resultat
+
+
+RAPPEL = "Réponds seulement en tant que {nom}, sans écrire de nom suivi de deux-points."
+# Étiquettes qui, en début de phrase, annoncent que le modèle fait parler quelqu'un d'autre
+AUTRES_LOCUTEURS = [VOYAGEUR, "Le voyageur", "Nom"]
 
 
 def repliques(morceaux, nom, presents=()):
     """Phrases de la réponse du PNJ `nom`, nettoyées et prêtes à être lues, au fil de l'écriture du modèle.
     S'arrête si le modèle se met à écrire la réplique d'un autre (« Brom : … », « Voyageur : … »)."""
-    autres = [p["nom"] for p in presents] + [VOYAGEUR]
-    for phrase in texte.phrases(morceaux):
-        qui, phrase = texte.locuteur(phrase, [nom] + autres)
-        if qui in autres:
-            return
+    autres = [p["nom"] for p in presents] + AUTRES_LOCUTEURS
+    for phrase in texte.phrases(texte.sans_autres_locuteurs(morceaux, nom, autres)):
         phrase = texte.nettoyer(phrase)
         if phrase:
             yield phrase
