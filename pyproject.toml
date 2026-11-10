@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pnj-parlant"
+version = "0.2.0"
+description = "Générateur de PNJ parlants pour jeu de rôle médiéval-fantastique, avec voix de synthèse"
+readme = "README.md"
+requires-python = ">=3.11"          # tomllib
+dependencies = [
+    "flask>=3.0",
+    "anthropic>=2.4",               # output_config (effort, sorties structurées)
+    "num2words>=0.5",               # nombres en toutes lettres avant la synthèse vocale
+    "pyopenssl",                    # https = true dans config.toml (certificat auto-signé)
+]
+
+[project.optional-dependencies]
+# Synthèse vocale sur le serveur ; sans elle, le navigateur lit les répliques lui-même
+voix = [
+    "piper-tts>=1.3",
+    "pocket-tts>=4.0",              # voix locale plus naturelle (installe PyTorch, ~1 Go)
+    "edge-tts>=7.0",                # voix de Microsoft Edge (en ligne)
+]
+# Reconnaissance vocale locale ; sans elle, le navigateur s'en charge (en ligne)
+stt = [
+    "faster-whisper>=1.2",
+    "av>=11,<19",                   # faster-whisper 1.2.x utilise une option supprimée dans PyAV 19
+    # sur carte NVIDIA (appareil = "cuda") : CUDA 12 et cuDNN 9 pour CTranslate2
+    # "nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10",
+]
+tout = ["pnj-parlant[voix,stt]"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+pnj-parlant = "pnj_parlant.serveur:main"   # le serveur
+pnj-banque = "pnj_parlant.generer:main"    # remplit la banque de PNJ en lot
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pnj_parlant = ["static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]   # les tests tournent aussi sans installer le paquet
+
+[tool.pylint.format]
+max-line-length = 120

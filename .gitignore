@@ -12,3 +12,8 @@ voices/
 
 # Modèles Whisper (reconnaissance vocale) : se retéléchargent, voir README
 modeles-stt/
+
+# Paquet installé en mode éditable, tests
+*.egg-info/
+build/
+.pytest_cache/

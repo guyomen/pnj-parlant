@@ -8,12 +8,17 @@ Le choix se fait dans la section [voix] de config.toml :
 Sans moteur disponible, le navigateur lit le texte lui-même (speechSynthesis).
 
 Chaque moteur expose :
+    nom                    -> "piper", "pocket" ou "edge"
     catalogue()            -> [(voix, genre)], voix = {"name": ..., "label": ...} (+ "speaker" pour Piper)
     synthese(texte, voix)  -> (octets audio, type MIME) ; lève VoixIndisponible
     prechauffer()          -> charge le modèle à l'avance (au démarrage, dans un fil séparé)
+
+La voix d'un PNJ (champ "voix" de sa fiche) est choisie par attribuer() : une voix du moteur, du genre
+du PNJ, plus les réglages de débit et de hauteur (et ceux de la voix du navigateur, en repli).
 """
 import io
 import json
+import random
 import threading
 import wave
 
@@ -43,11 +48,47 @@ def charger(config, base_dir, moteur=None):
     return instance
 
 
+def cle(voix):
+    """Identité d'une voix : nom + locuteur (Piper)."""
+    return (voix.get("name"), voix.get("speaker"))
+
+
+def attribuer(moteur, npc, rng=random, eviter=()):
+    """Choisit une voix du moteur, du genre du PNJ, réglée d'après son timbre et son débit
+    (avec aussi un réglage pour la voix du navigateur, en repli).
+    `eviter` : voix déjà prises par les autres PNJ de la scène, écartées tant qu'il en reste d'autres."""
+    genre = npc.get("genre")
+    debit = {"lent": 1.2, "normal": 1.0, "rapide": 0.85}.get(npc.get("debit"), 1.0)
+    pitch = {"grave": 0.7, "moyen": 1.0, "aigu": 1.35}.get(npc.get("timbre"), 1.0)
+    pitch *= {"feminin": 1.25, "masculin": 0.85}.get(genre, 1.0)  # voix du navigateur
+    voice = {"length_scale": round(debit * rng.uniform(0.95, 1.05), 2), "timbre": npc.get("timbre"),
+             "browser_pitch": round(pitch, 2), "browser_rate": round(1 / debit, 2)}
+    prises = {cle(v) for v in eviter if isinstance(v, dict)}
+    catalogue = [(v, g) for v, g in moteur.catalogue() if cle(v) not in prises] or moteur.catalogue()
+    if catalogue:
+        # Voix du bon genre ; à défaut (PNJ neutre ou aucune voix de ce genre), n'importe laquelle.
+        matching = [v for v, g in catalogue if g == genre]
+        voice.update(rng.choice(matching or [v for v, _ in catalogue]))
+    voice["genre"] = genre
+    voice["moteur"] = moteur.nom
+    return voice
+
+
+def verifier(moteur, npc):
+    """Réattribue une voix si celle du PNJ vient d'un autre moteur, manque sur cette machine ou ne
+    correspond plus à son genre. Le tirage est fixé par le nom : le PNJ retrouve la même voix à chaque fois."""
+    v = npc.get("voix") or {}
+    connues = [cle(c) for c, _ in moteur.catalogue()]
+    if v.get("moteur", "piper") != moteur.nom or cle(v) not in connues or v.get("genre") != npc.get("genre"):
+        npc["voix"] = attribuer(moteur, npc, random.Random(npc.get("nom", "")))
+    return npc
+
+
 def voix_narrateur(moteur, eviter=()):
     """Voix neutre pour les descriptions entre parenthèses : celle de config.toml, sauf si c'est
     celle d'un PNJ de la scène (`eviter`) ; on prend alors une autre voix du même genre. None si aucune voix."""
-    pris = {(v.get("name"), v.get("speaker")) for v in eviter}
-    catalogue = [(v, g) for v, g in moteur.catalogue() if (v["name"], v.get("speaker")) not in pris]
+    pris = {cle(v) for v in eviter}
+    catalogue = [(v, g) for v, g in moteur.catalogue() if cle(v) not in pris]
     if not catalogue:
         return None
     voulue = lambda v: v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))

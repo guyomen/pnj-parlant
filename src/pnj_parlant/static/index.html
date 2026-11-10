@@ -121,7 +121,10 @@
   </section>
 </main>
 
-<script>
+<script type="module">
+import { esc, norm, segments, formatLine, interpelles, memeVoix, consignesEntree, texteExport,
+         nomFichierExport } from "./js/scene.js";
+
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
 let npcs = [];      // PNJ de la scène ; le premier est le principal
@@ -131,8 +134,6 @@ let busy = false;
 const MAX_PNJ = 3;
 
 const status = (t) => { $("status").textContent = t || ""; };
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const norm = (s) => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();  // sans accents
 const hasard = (liste) => liste[Math.floor(Math.random() * liste.length)];
 
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
@@ -228,18 +229,6 @@ function setBusy(b) {
 }
 
 // --- Voix des PNJ ------------------------------------------------------------
-// Le texte entre parenthèses décrit la scène (geste, ton…) : il est lu par une voix neutre de narrateur.
-const NARRATION = /(\([^)]*\)?)/;  // parenthèse fermante facultative : réponse coupée en cours de route
-
-// [[morceau, narration ?], ...] : « (Il sourit.) Bienvenue ! » → [["Il sourit.", true], ["Bienvenue !", false]]
-const segments = (text) => text.split(NARRATION)
-  .map(s => NARRATION.test(s) ? [s.replace(/[()]/g, "").trim(), true] : [s.trim(), false])
-  .filter(([s]) => /[\p{L}\p{N}]/u.test(s));
-
-// Affichage : les descriptions en italique
-const formatLine = (text) => text.split(NARRATION)
-  .map(s => NARRATION.test(s) ? `<em class="narration">${esc(s)}</em>` : esc(s)).join("");
-
 // Prise de parole en cours : { ctrl, stop }. Le bouton Stop annule les requêtes (réponse du modèle,
 // synthèses en préparation) via ctrl, et coupe le son qui joue via stop().
 let parole = null;
@@ -339,8 +328,6 @@ async function startScene(n) {
   await saluer(n);
 }
 
-const memeVoix = (a, b) => !!a?.name && a.name === b?.name && (a.speaker ?? null) === (b?.speaker ?? null);
-
 // Le PNJ rejoint la scène en cours
 async function joinScene(n) {
   if (npcs.some(x => x.nom === n.nom)) throw new Error(`${n.nom} est déjà dans la scène.`);
@@ -377,16 +364,7 @@ async function faireEntrer() {
   if (busy || !npcs.length || npcs.length >= MAX_PNJ) return;
   const qui = $("entree").value.trim();
   setBusy(true); status("Quelqu’un approche…");
-  const presents = npcs.map(n => `${n.nom} (${n.metier})`).join(" et ");
-  const conversation = history.slice(-12).map(m => `${m.speaker || "Voyageur"} : ${m.content}`).join("\n").slice(-2500);
-  const consignes = [
-    `Ce PNJ entre dans une scène déjà commencée, où se trouvent ${presents} et un voyageur.`,
-    qui ? `Qui entre : ${qui}.`
-        : "Qui entre : de préférence une personne évoquée dans la conversation, sinon quelqu'un qui a une bonne raison d'être là.",
-    "Si la conversation parle de cette personne, reprends son nom, son métier et tout ce qui en a été dit.",
-    "Sa salutation réagit à ce qui vient de se dire ; il peut interpeller les présents par leur nom.",
-    `Conversation jusqu'ici :\n${conversation}`,
-  ].join("\n");
+  const consignes = consignesEntree(history, npcs, qui);
   try {
     await joinScene(await api("/api/npc/generate", { consignes }));
     $("entree").value = "";
@@ -432,45 +410,19 @@ async function saveToBank() {
 function exportConversation() {
   const date = new Date();
   const lignes = [...$("log").querySelectorAll(".line")]
-    .map(l => `${l.querySelector(".who").textContent} : ${l.querySelector(".text").textContent}`);
-  const entete = [`Conversation avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}`,
-                  ...npcs.map(n => npcs.length > 1 ? `${n.nom} : ${n.apparence}` : n.apparence),
-                  date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })].join("\n");
-  const texte = `${entete}\n\n${"—".repeat(40)}\n\n${lignes.join("\n\n")}\n`;
-  const slug = norm(npcs.map(n => n.nom).join(" et ")).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "pnj";
-  const p2 = (n) => String(n).padStart(2, "0");
-  const horodatage = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}-${p2(date.getHours())}h${p2(date.getMinutes())}`;
+    .map(l => [l.querySelector(".who").textContent, l.querySelector(".text").textContent]);
+  const texte = texteExport(lignes, npcs, date);
   // BOM : le Bloc-notes de Windows affiche alors correctement les accents
   const bom = String.fromCharCode(0xFEFF);
   const url = URL.createObjectURL(new Blob([bom + texte], { type: "text/plain;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = `conversation-${slug}-${horodatage}.txt`;
+  a.download = nomFichierExport(npcs, date);
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // --- Dialogue : qui répond ? --------------------------------------------------
-const MOTS_VIDES = new Set(["les", "des", "aux", "dit", "del", "van", "von"]);
-
-// Mots qui désignent un PNJ : les mots de son nom, et le premier mot de son métier (« forgeron »)
-function motsCles(n) {
-  const mots = norm(n.nom).split(/[^a-z0-9]+/);
-  mots.push(norm(n.metier).split(/[^a-z0-9]+/)[0]);
-  return mots.filter(m => m.length >= 3 && !MOTS_VIDES.has(m));
-}
-
-// PNJ nommés (ou désignés par leur métier) dans la phrase du joueur, dans l'ordre où ils sont cités
-function interpelles(text) {
-  const t = norm(text);
-  const position = (n) => Math.min(...motsCles(n).map(m => {
-    const i = t.search(new RegExp(`\\b${m}\\b`));
-    return i < 0 ? Infinity : i;
-  }));
-  return npcs.map(n => ({ n, pos: position(n) })).filter(x => x.pos < Infinity)
-    .sort((a, b) => a.pos - b.pos).map(x => x.n);
-}
-
 // Option « Interventions spontanées » : de temps en temps, un autre PNJ réagit à la suite
 function avecIntervention(ordre) {
   const restants = npcs.filter(n => !ordre.includes(n));
@@ -487,7 +439,7 @@ async function send(text) {
   addLine(null, text);
   history.push({ speaker: null, content: text });
   // Le PNJ cité répond (tous ceux cités, dans l'ordre) ; sinon, celui qui a parlé en dernier
-  const cites = interpelles(text);
+  const cites = interpelles(text, npcs);
   await jouerTours(cites.length > 1 ? cites
     : avecIntervention(cites.length ? cites : [npcs.includes(dernier) ? dernier : npcs[0]]));
 }

@@ -42,7 +42,7 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
    cd C:\PNJ
    py -3.13 -m venv .venv
    .venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
+   pip install -e ".[tout]"
    ```
 
    Si PowerShell refuse d'exécuter `Activate.ps1` (« l'exécution de scripts est désactivée »), autorisez les scripts pour votre compte, puis recommencez :
@@ -51,7 +51,7 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
    ```
 
-   Si l'installation de `piper-tts` échoue, installez le reste avec `pip install flask anthropic pyopenssl faster-whisper` : l'application fonctionnera avec la voix du navigateur à la place de Piper.
+   Si l'installation des voix (`piper-tts`, `pocket-tts`) échoue, installez le reste avec `pip install -e ".[stt]"` : l'application fonctionnera avec la voix du navigateur.
 3. Si vous choisissez les voix Piper (voir l'étape 3), téléchargez-les :
 
    ```powershell
@@ -170,7 +170,7 @@ Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un r
 
 Avec le réseau, vérifiez que tout est sur le PC :
 
-- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `python generer_banque.py 20`. La création passe par Claude, donc demande le réseau.
+- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `pnj-banque 20`. La création passe par Claude, donc demande le réseau.
 - [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
 - [ ] Les voix sont téléchargées : avec `moteur = "pocket"`, l'application a été lancée une fois avec le réseau et la fenêtre n'affiche aucune « voix indisponible » ; avec `moteur = "piper"`, les voix sont dans `voices\`. Le moteur `edge` ne marche pas sans réseau.
 - [ ] Le modèle de reconnaissance vocale est dans `modeles-stt\small\` (étape 2.4), et `config.toml` contient la section `[reconnaissance]` avec `moteur = "local"`.

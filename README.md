@@ -8,7 +8,7 @@ Sous Windows, suivez plutôt le guide pas à pas [HOWTO.md](HOWTO.md).
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[tout]"             # le paquet pnj_parlant, avec voix et reconnaissance locales
 cp config.toml.example config.toml   # puis renseignez cle_api = "sk-ant-..."
 
 # Voix françaises Piper, si vous choisissez ce moteur de voix (une ou plusieurs, tirées au sort)
@@ -19,14 +19,14 @@ cd ..
 # Modèle Whisper pour la reconnaissance vocale (environ 500 Mo)
 python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
 
-python app.py
+pnj-parlant                          # ou : python -m pnj_parlant
 ```
 
 Ouvrez ensuite http://localhost:5000 dans Chrome ou Edge.
 
 ## Accès depuis une autre machine (ex. le téléphone d'un joueur)
 
-Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `python app.py`, puis ouvrez `https://<ip-du-pc>:5000` et acceptez l'avertissement de certificat.
+Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `pnj-parlant`, puis ouvrez `https://<ip-du-pc>:5000` et acceptez l'avertissement de certificat.
 
 ## Comment ça marche
 
@@ -52,8 +52,8 @@ Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario, puis un fichi
 Pour remplir la banque en lot (le scénario est pris en compte) :
 
 ```bash
-python generer_banque.py 20                       # 20 PNJ aux métiers tirés au sort
-python generer_banque.py 5 --metier "aubergiste"  # 5 aubergistes
+pnj-banque 20                       # 20 PNJ aux métiers tirés au sort
+pnj-banque 5 --metier "aubergiste"  # 5 aubergistes
 ```
 
 Si la voix d'un PNJ n'existe pas sur la machine qui l'ouvre, ou vient d'un autre moteur de voix, une autre voix du même genre est choisie, toujours la même pour ce PNJ.
@@ -113,7 +113,7 @@ Trois moteurs, au choix dans la section `[voix]` de `config.toml` (`moteur = ...
 
 - **Pocket TTS** télécharge son modèle (environ 250 Mo) et ses voix au premier lancement : lancez l'application une fois avec le réseau, et attendez que la console n'affiche plus rien. Une voix qui n'a pas pu être téléchargée est signalée dans la console et n'est pas attribuée. Le débit du PNJ (`lent`, `rapide`) n'est pas appliqué, ni le timbre.
 - **Edge** applique le débit et le timbre du PNJ. Sans réseau, c'est la voix du navigateur qui prend le relais. Le service est gratuit mais non officiel : Microsoft peut le changer ou le couper.
-- Les genres des voix Pocket et Edge sont fixés dans [voix.py](voix.py) ; on peut les remplacer dans `config.toml` (voir les commentaires de `config.toml.example`).
+- Les genres des voix Pocket et Edge sont fixés dans [voix.py](src/pnj_parlant/voix.py) ; on peut les remplacer dans `config.toml` (voir les commentaires de `config.toml.example`).
 
 Les répliques sont lues phrase par phrase, une phrase étant regroupée avec la suivante tant qu'elle fait moins de 40 caractères (« Ah ! »), pour éviter des blancs entre deux sons trop courts.
 
@@ -131,9 +131,43 @@ Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dan
 
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, hôte, port et HTTPS. Relancez `python app.py` après une modification.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, hôte, port et HTTPS. Relancez `pnj-parlant` après une modification.
 
 `config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
+
+## Organisation du code et tests
+
+L'application est un paquet Python, `pnj_parlant`, installé par `pip install -e ".[tout]"` (mode éditable :
+les modifications du code sont prises en compte sans réinstaller). Les commandes `pnj-parlant` et `pnj-banque`
+cherchent `config.toml` dans le dossier courant ; `--config chemin/vers/config.toml` en désigne un autre.
+Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté de `config.toml`.
+
+```
+pyproject.toml              paquet, dépendances (options : voix, stt, tout, dev), commandes
+src/pnj_parlant/
+  serveur.py                application Flask (routes) et lancement
+  config.py                 lecture de config.toml
+  fiches.py                 création des fiches de PNJ
+  dialogue.py               consignes du PNJ, mise en scène de la conversation à un ou plusieurs PNJ
+  texte.py                  nettoyage du texte, nombres en lettres, découpage en phrases
+  moteurs.py                modèles de langage : Claude ou Ollama
+  voix.py                   synthèse vocale (Pocket TTS, Piper, Edge) et attribution des voix
+  stt.py                    reconnaissance vocale (faster-whisper)
+  banque.py                 banque de PNJ et scénario (fichiers JSON)
+  systeme.py                état de la carte graphique et d'Ollama
+  generer.py                remplissage de la banque en lot (pnj-banque)
+  static/                   pages web : index.html (jeu), creation.html, js/scene.js
+tests/                      tests Python (pytest) et tests/js/ (Node)
+```
+
+Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de faux moteurs remplacent
+le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/conftest.py`).
+
+```bash
+pip install -e ".[dev]"
+pytest                      # tests Python
+node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
+```
 
 ## Pistes pour la suite
 

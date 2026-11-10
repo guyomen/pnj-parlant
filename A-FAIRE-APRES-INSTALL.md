@@ -63,7 +63,7 @@ Pour être à 100 % GPU sur la T400 (4 Go), il faut aussi :
 ```bash
 cd /workspace/ggabriel/TO_REMOVE/Agent_parlant/files
 source .venv/bin/activate
-python app.py
+pnj-parlant
 ```
 
 Puis ouvrez https://localhost:7800 dans Chrome ou Edge.

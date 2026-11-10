@@ -58,7 +58,7 @@ moteur = "pocket"          # "pocket" : Pocket TTS de Kyutai, local, naturel, ~1
 # (noms complets, ex. "fr-FR-HenriNeural" = "masculin").
 
 [voix.piper]
-dossier = "voices"         # dossier des voix Piper (relatif à app.py, ou chemin absolu)
+dossier = "voices"         # dossier des voix Piper (relatif à config.toml, ou chemin absolu)
 
 # Genre de chaque voix Piper, pour donner au PNJ une voix de son genre.
 # Une voix absente de cette liste ne sert que pour les PNJ « neutre ».

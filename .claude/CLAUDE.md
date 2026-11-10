@@ -13,16 +13,26 @@ un navigateur, le PNJ répond dans son personnage, à voix haute. Langue : fran�
 - Réponses courtes (1-3 phrases), sans markdown/emoji/astérisques, car lues à voix haute ; latence faible.
 
 ## Architecture
+Paquet Python `pnj_parlant` (layout src/, `pyproject.toml`), installé par `pip install -e ".[tout]"`.
 ```
-app.py               # Flask : routes, prompts, banque de PNJ, reconnaissance vocale
-moteurs.py           # LLM : Claude (API Anthropic) ou modèle local (Ollama)
-voix.py              # synthèse vocale : Pocket TTS, Piper ou Edge
-generer_banque.py    # remplit la banque en lot : python generer_banque.py 20 [--metier ...]
+pyproject.toml       # dépendances (options voix, stt, tout, dev) ; commandes pnj-parlant et pnj-banque
+src/pnj_parlant/
+  serveur.py         # Flask : create_app(cfg, moteurs=, tts=, reconnaissance=) + main() (Ctrl+C, HTTPS)
+  config.py          # config.toml du dossier courant, PNJ_CONFIG ou --config ; chemins relatifs à son dossier
+  fiches.py          # création des fiches (prompt, schéma JSON, tirages au sort)
+  dialogue.py        # consignes du PNJ, scène vue par chaque PNJ, découpage de sa réponse
+  texte.py           # nettoyage pour la voix, nombres en lettres, phrases, « Nom : » en tête
+  moteurs.py         # LLM : Claude (API Anthropic) ou modèle local (Ollama)
+  voix.py            # synthèse : Pocket TTS, Piper ou Edge ; attribuer/verifier la voix d'un PNJ ; narrateur
+  stt.py             # reconnaissance vocale faster-whisper
+  banque.py          # banque de PNJ et scénario (JSON)
+  systeme.py         # état GPU (nvidia-smi) et Ollama
+  generer.py         # pnj-banque 20 [--metier ...]
+  static/            # index.html (jeu, <script type="module">), creation.html, js/scene.js (fonctions pures)
+tests/               # pytest (faux moteurs dans conftest.py) ; tests/js/*.test.mjs (node --test)
 config.toml(.example)# tous les réglages ; config.toml (clé API) n'est pas versionné
 docker-compose.yml   # Ollama dans Docker (carte NVIDIA)
-lancer.bat, lancerAMD.bat, ecran.sh  # lanceurs Windows ; ecran.sh libère la mémoire vidéo sous Linux
-static/index.html    # page de jeu (HTML/CSS/JS vanilla, aucun build)
-static/creation.html # préparation : scénario + banque de PNJ
+lancer.bat, lancerAMD.bat, ecran.sh  # lanceurs Windows (python -m pnj_parlant) ; ecran.sh libère la VRAM sous Linux
 pnj/                 # banque : _scenario.json + un JSON par PNJ (créé à l'usage)
 voices/, modeles-stt/  # voix Piper et modèle Whisper, téléchargés, non versionnés
 ```
@@ -63,15 +73,17 @@ Le micro exige `localhost` ou HTTPS : `[serveur] https = true` crée un certific
 Voir README.md (Linux) et HOWTO.md (Windows, cartes NVIDIA ou AMD).
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[tout,dev]"
 cp config.toml.example config.toml   # cle_api, ou variable ANTHROPIC_API_KEY
-python app.py                        # port dans [serveur] port (5000 par défaut)
+pnj-parlant                          # ou python -m pnj_parlant ; port dans [serveur] port (5000)
+pytest && node --test tests/js/      # tests, sans réseau ni modèle
 ```
 
 ## État
 - Machine de dev en tout-local (`qwen3:4b-instruct`, NVIDIA T400 4 Go, port 7800 en HTTPS).
   Ollama y tourne encore sur le processeur : installer le pilote NVIDIA, voir A-FAIRE-APRES-INSTALL.md.
-- Aucun test automatisé.
+- Tests : `pytest` (Python) et `node --test tests/js/` (fonctions de la page de jeu). Ajouter un test à chaque
+  changement de logique ; une fonction JS testable va dans `static/js/scene.js`.
 
 ## Pistes pour la suite
 - Contexte de monde plus riche (ville, rumeurs du jour) et inventaire/prix fixes pour les marchands.
