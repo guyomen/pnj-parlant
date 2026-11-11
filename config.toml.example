@@ -3,8 +3,8 @@
 # puis renseignez cle_api dans config.toml (ce fichier-là n'est pas versionné).
 
 [moteurs]
-creation = "local"         # création des fiches : "claude" (réseau nécessaire) ou "local"
-dialogue = "local"         # répliques des PNJ : "claude" ou "local" (fonctionne sans réseau)
+creation = "local"         # création des fiches : "claude" (réseau nécessaire), "local" ou "lmstudio"
+dialogue = "local"         # répliques des PNJ : "claude", "local" (Ollama) ou "lmstudio" (sans réseau)
 
 [claude]
 cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
@@ -32,6 +32,19 @@ delai_max = 180            # secondes ; le tout premier appel charge le modèle 
 max_tokens = 1500
 
 [local.dialogue]
+max_tokens = 200
+
+[lmstudio]                 # modèle local servi par LM Studio (serveur local, onglet Developer)
+url = "http://localhost:1234"
+modele = ""                # vide = le modèle chargé dans LM Studio ; sinon son identifiant, ex. "qwen/qwen3-8b"
+reflexion = false          # coupe le mode réflexion (Qwen 3…) : bien plus rapide, et évite les réponses vides
+temperature = 0.8
+delai_max = 180            # secondes ; le tout premier appel peut charger le modèle
+
+[lmstudio.generation]
+max_tokens = 1500
+
+[lmstudio.dialogue]
 max_tokens = 200
 
 [dialogue]

@@ -144,3 +144,93 @@ def test_compteurs_usage_claude(monkeypatch):
     assert "".join(moteurs.replique("s", [{"role": "user", "content": "a"}],
                                     on_usage=usage.update)) == "Salut."
     assert usage == {"input_tokens": 13, "output_tokens": 4}
+
+
+class FausseReponseLMStudio(FausseReponseOllama):
+    """Réponse HTTP de LM Studio : flux SSE au format OpenAI, ou JSON d'un bloc (`corps`)."""
+
+    def __init__(self, morceaux=(), usage=None, corps=None):
+        super().__init__([])
+        self.corps = corps
+        self.lignes = [b"data: " + json.dumps({"choices": [{"delta": {"content": m}}]}).encode() + b"\n\n"
+                       for m in morceaux]
+        if usage:
+            self.lignes.append(b"data: " + json.dumps({"choices": [], "usage": usage}).encode() + b"\n\n")
+        self.lignes.append(b"data: [DONE]\n\n")
+
+    def read(self):
+        return json.dumps(self.corps).encode()
+
+
+MODELES_LMSTUDIO = {"data": [
+    {"id": "nomic-embed", "type": "embeddings", "state": "loaded"},
+    {"id": "gemma-pas-charge", "type": "llm", "state": "not-loaded"},
+    {"id": "qwen-charge", "type": "llm", "state": "loaded", "loaded_context_length": 32768},
+]}
+
+
+@pytest.fixture
+def lmstudio(monkeypatch):
+    """Remplace les appels HTTP à LM Studio ; garde le corps de chaque requête de dialogue."""
+    etat = {"requetes": [], "modeles": MODELES_LMSTUDIO,
+            "reponse": FausseReponseLMStudio(["Bonjour, ", "voyageur."])}
+
+    def urlopen(req, timeout=None):
+        if isinstance(req, str):  # liste des modèles
+            return FausseReponseLMStudio(corps=etat["modeles"])
+        etat["requetes"].append(json.loads(req.data))
+        return etat["reponse"]
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+    config = json.loads(json.dumps(CONFIG))
+    config["moteurs"] = {"creation": "lmstudio", "dialogue": "lmstudio"}
+    config["lmstudio"] = {"url": "http://lmstudio:1234", "modele": "", "reflexion": False,
+                          "generation": {"max_tokens": 1500}, "dialogue": {"max_tokens": 200}}
+    etat["moteurs"] = Moteurs(config)
+    return etat
+
+
+class TestLMStudio:
+    def test_replique_en_flux_avec_le_modele_charge(self, lmstudio):
+        assert "".join(lmstudio["moteurs"].replique("Tu es Berthe.", [{"role": "user", "content": "Salut"}],
+                                                    ARRETS)) == "Bonjour, voyageur."
+        corps = lmstudio["requetes"][-1]
+        assert corps["model"] == "qwen-charge"  # ni le modèle d'embedding, ni un modèle non chargé
+        assert corps["stop"] == ARRETS and corps["stream"] is True and corps["max_tokens"] == 200
+        assert corps["reasoning_effort"] == "none"
+        assert corps["messages"][0] == {"role": "system", "content": "Tu es Berthe."}
+
+    def test_compteurs_usage_lmstudio(self, lmstudio):
+        lmstudio["reponse"] = FausseReponseLMStudio(["Salut."], {"prompt_tokens": 50, "completion_tokens": 3})
+        usage = {}
+        list(lmstudio["moteurs"].replique("s", [{"role": "user", "content": "a"}], on_usage=usage.update))
+        assert usage == {"input_tokens": 50, "output_tokens": 3}
+
+    def test_reponse_abandonnee_la_connexion_est_fermee(self, lmstudio):
+        flux = lmstudio["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+        next(flux)
+        flux.close()
+        assert lmstudio["reponse"].fermee
+
+    def test_fiche_au_schema_json_sans_raisonnement(self, lmstudio):
+        lmstudio["reponse"] = FausseReponseLMStudio(corps={"choices": [
+            {"finish_reason": "stop", "message": {"content": '<think>hmm</think>{"nom": "Brom"}'}}]})
+        assert lmstudio["moteurs"].fiche("s", "Un forgeron", {"type": "object"}) == '{"nom": "Brom"}'
+        corps = lmstudio["requetes"][-1]
+        assert corps["response_format"]["json_schema"]["schema"] == {"type": "object"}
+        assert corps["stream"] is False and corps["max_tokens"] == 1500
+
+    def test_taille_de_contexte_du_modele_charge(self, lmstudio):
+        assert lmstudio["moteurs"].contexte_max() == 32768
+
+    def test_aucun_modele_charge(self, lmstudio):
+        lmstudio["modeles"] = {"data": [MODELES_LMSTUDIO["data"][1]]}
+        with pytest.raises(MoteurIndisponible, match="Aucun modèle chargé"):
+            lmstudio["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+
+    def test_lmstudio_injoignable(self, monkeypatch, lmstudio):
+        def urlopen(req, timeout=None):
+            raise module.urllib.error.URLError("refusé")
+        monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+        with pytest.raises(MoteurIndisponible, match="LM Studio injoignable"):
+            lmstudio["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+        assert lmstudio["moteurs"].contexte_max() is None

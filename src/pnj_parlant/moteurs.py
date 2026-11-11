@@ -1,12 +1,15 @@
 """
-Moteurs de langage : Claude (API Anthropic) ou modèle local (Ollama, dans Docker).
+Moteurs de langage : Claude (API Anthropic), modèle local (Ollama, dans Docker)
+ou modèle local servi par LM Studio (API compatible OpenAI).
 
 Le choix se fait dans la section [moteurs] de config.toml, séparément pour la création
 des fiches et pour les dialogues :
-    creation = "claude"   # meilleure inventivité, demande le réseau
-    dialogue = "local"    # fonctionne sans réseau
+    creation = "claude"     # meilleure inventivité, demande le réseau
+    dialogue = "local"      # fonctionne sans réseau (Ollama)
+    dialogue = "lmstudio"   # fonctionne sans réseau (LM Studio, sans Docker)
 """
 import json
+import re
 import urllib.error
 import urllib.request
 
@@ -22,17 +25,29 @@ class Moteurs:
         self.choix = config.get("moteurs", {"creation": "claude", "dialogue": "claude"})
         self.claude_cfg = config["claude"]
         self.local_cfg = config.get("local", {})
+        self.lmstudio_cfg = config.get("lmstudio", {})
         # Clé de config.toml ; si elle est vide, le SDK lit ANTHROPIC_API_KEY dans l'environnement.
         self.client = anthropic.Anthropic(api_key=self.claude_cfg.get("cle_api") or None)
 
     def description(self):
-        nom = lambda m: self.claude_cfg["modele"] if m == "claude" else f"local : {self.local_cfg.get('modele')}"
+        def nom(m):
+            if m == "claude":
+                return self.claude_cfg["modele"]
+            if m == "lmstudio":
+                return f"LM Studio : {self.lmstudio_cfg.get('modele') or 'modèle chargé'}"
+            return f"local : {self.local_cfg.get('modele')}"
         return {"creation": nom(self.choix["creation"]), "dialogue": nom(self.choix["dialogue"])}
 
     def contexte_max(self):
         """Taille connue de la fenêtre de contexte du moteur de dialogue, en tokens."""
-        limite = (self.local_cfg.get("contexte", 8192) if self.choix["dialogue"] == "local"
-                  else self.claude_cfg.get("contexte"))
+        if self.choix["dialogue"] == "lmstudio":
+            try:
+                limite = self._lmstudio_modele().get("loaded_context_length")
+            except MoteurIndisponible:
+                limite = None
+        else:
+            limite = (self.local_cfg.get("contexte", 8192) if self.choix["dialogue"] == "local"
+                      else self.claude_cfg.get("contexte"))
         return limite if type(limite) is int and limite > 0 else None
 
     def modeles_locaux(self):
@@ -61,6 +76,8 @@ class Moteurs:
         messages = [{"role": "user", "content": demande}]
         if self.choix["creation"] == "local":
             return self._local(system, messages, self.local_cfg["generation"]["max_tokens"], schema)
+        if self.choix["creation"] == "lmstudio":
+            return self._lmstudio(system, messages, self.lmstudio_cfg["generation"]["max_tokens"], schema)
         cfg = self.claude_cfg["generation"]
         return self._claude(system, messages, cfg["max_tokens"],
                             {"effort": cfg["effort"], "format": {"type": "json_schema", "schema": schema}})
@@ -75,6 +92,9 @@ class Moteurs:
         if self.choix["dialogue"] == "local":
             maximum = max(64, round(self.local_cfg["dialogue"]["max_tokens"] * multiplicateur))
             return self._local_flux(system, messages, maximum, arrets, on_usage)
+        if self.choix["dialogue"] == "lmstudio":
+            maximum = max(64, round(self.lmstudio_cfg["dialogue"]["max_tokens"] * multiplicateur))
+            return self._lmstudio_flux(system, messages, maximum, arrets, on_usage)
         cfg = self.claude_cfg["dialogue"]
         maximum = max(64, round(cfg["max_tokens"] * multiplicateur))
         return self._claude_flux(system, messages, maximum, {"effort": cfg["effort"]}, arrets, on_usage)
@@ -186,3 +206,94 @@ class Moteurs:
             raise MoteurIndisponible(f"Le modèle local a renvoyé une erreur : {detail[:200]}") from e
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             raise MoteurIndisponible("Modèle local injoignable : lancez-le avec « docker compose up -d ».") from e
+
+    # --- Modèle local (LM Studio, API compatible OpenAI) ----------------------
+    def _lmstudio(self, system, messages, max_tokens, schema=None):
+        with self._lmstudio_requete(system, messages, max_tokens, schema) as r:
+            choix = json.loads(r.read())["choices"][0]
+        if choix.get("finish_reason") == "length":
+            print(f"[lmstudio] réponse coupée à max_tokens={max_tokens}")
+        texte = choix["message"].get("content") or ""
+        # Les modèles à réflexion (Qwen 3…) peuvent laisser leur raisonnement dans <think>…</think>
+        return re.sub(r"<think>.*?</think>", "", texte, flags=re.DOTALL).strip()
+
+    def _lmstudio_flux(self, system, messages, max_tokens, arrets=(), on_usage=None):
+        r = self._lmstudio_requete(system, messages, max_tokens, stream=True, arrets=arrets)
+
+        def morceaux():
+            # Flux SSE au format OpenAI : « data: {...} » par morceau de texte, jusqu'à « data: [DONE] ».
+            # Réponse abandonnée en route (Stop, filtre) : fermer la connexion arrête la génération.
+            usage = {}
+            try:
+                with r:
+                    for ligne in r:
+                        ligne = ligne.decode("utf-8").strip()
+                        if not ligne.startswith("data:"):
+                            continue
+                        ligne = ligne[5:].strip()
+                        if ligne == "[DONE]":
+                            break
+                        data = json.loads(ligne)
+                        if data.get("usage"):
+                            usage["input_tokens"] = data["usage"].get("prompt_tokens")
+                            usage["output_tokens"] = data["usage"].get("completion_tokens")
+                        for choix in data.get("choices", []):
+                            if choix.get("finish_reason") == "length":
+                                print(f"[lmstudio] réponse coupée à max_tokens={max_tokens}")
+                            if choix.get("delta", {}).get("content"):
+                                yield choix["delta"]["content"]
+            except (OSError, ValueError) as e:  # coupure réseau, délai dépassé, ligne illisible
+                raise MoteurIndisponible("LM Studio s'est interrompu.") from e
+            if on_usage and usage and None not in usage.values():
+                on_usage(usage)
+        return morceaux()
+
+    def _lmstudio_modele(self):
+        """Modèle chargé dans LM Studio (fiche de /api/v0/models), celui de config.toml s'il est renseigné."""
+        cfg = self.lmstudio_cfg
+        url = f"{cfg.get('url', 'http://localhost:1234').rstrip('/')}/api/v0/models"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as r:
+                modeles = json.loads(r.read()).get("data", [])
+        except (OSError, ValueError) as e:
+            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
+                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
+        if cfg.get("modele"):
+            return next((m for m in modeles if m["id"] == cfg["modele"]), {"id": cfg["modele"]})
+        # /api/v0/models (propre à LM Studio) indique le type et l'état de chaque modèle, contrairement à /v1/models
+        charges = [m for m in modeles if m.get("state") == "loaded" and m.get("type") in ("llm", "vlm")]
+        if not charges:
+            raise MoteurIndisponible("Aucun modèle chargé dans LM Studio : chargez-en un, ou renseignez "
+                                     "`modele` dans la section [lmstudio] de config.toml.")
+        return charges[0]
+
+    def _lmstudio_requete(self, system, messages, max_tokens, schema=None, stream=False, arrets=()):
+        """Envoie la requête à LM Studio et renvoie la réponse HTTP ouverte."""
+        cfg = self.lmstudio_cfg
+        body = {
+            "model": self._lmstudio_modele()["id"],
+            "messages": [{"role": "system", "content": system}] + messages,
+            "max_tokens": max_tokens,
+            "temperature": cfg.get("temperature", 0.8),
+            "stream": stream,
+        }
+        if stream:
+            body["stream_options"] = {"include_usage": True}  # tokens comptés dans le dernier morceau
+        if schema:
+            # LM Studio contraint la sortie à ce schéma JSON
+            body["response_format"] = {"type": "json_schema",
+                                       "json_schema": {"name": "fiche", "strict": True, "schema": schema}}
+        if arrets:
+            body["stop"] = list(arrets)  # la génération s'arrête net sur l'un de ces textes
+        if cfg.get("reflexion") is False:
+            body["reasoning_effort"] = "none"  # coupe le mode réflexion, qui sinon mange tout max_tokens
+        req = urllib.request.Request(f"{cfg.get('url', 'http://localhost:1234').rstrip('/')}/v1/chat/completions",
+                                     data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        try:
+            return urllib.request.urlopen(req, timeout=cfg.get("delai_max", 180))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")
+            raise MoteurIndisponible(f"LM Studio a renvoyé une erreur : {detail[:200]}") from e
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
+                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
