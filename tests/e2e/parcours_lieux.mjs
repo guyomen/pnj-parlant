@@ -131,9 +131,12 @@ await quand(`!!document.getElementById("micBtn") && document.readyState === "com
 await js(simulations);
 verifier("conversation reprise après rechargement", await quand(`${pnjPreNovice}.includes(document.querySelector(".pnj-card h1")?.textContent) && document.querySelector("#log .line .text")?.textContent === ${JSON.stringify(salutation)}`));
 
-// Options : accessibles depuis la partie, retour à la partie
+// Options : accessibles depuis la partie, retour à la partie ; la barre du haut ne bouge pas d'une vue à l'autre
+const placeBarre = `[...document.querySelectorAll(".marque, .onglets a")].map(a => Math.round(a.getBoundingClientRect().left)).join()`;
+const barreJeu = await js(placeBarre);
 await js(`location.hash = "options"`);
 verifier("options affichées, retour vers la partie", await quand(`document.body.dataset.vue === "options" && document.getElementById("optionsRetour").getAttribute("href") === "#jeu" && document.getElementById("optInterrompre").offsetParent !== null`));
+verifier("barre du haut : onglet Options actif, même place que dans la partie", await quand(`document.querySelector(".onglets [aria-current=page]")?.dataset.vue === "options" && document.querySelectorAll(".onglets a").length === 4 && ${placeBarre} === ${JSON.stringify(barreJeu)}`));
 
 console.log(resultats.join("\n"));
 // Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)

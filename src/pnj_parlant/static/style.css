@@ -5,35 +5,94 @@
   --line: #B9C7BD;
   --display: "IM Fell English", "Iowan Old Style", Georgia, serif;
   --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --rayon: 12px;
+  --ombre: 0 1px 2px rgb(24 36 31 / .06), 0 4px 14px rgb(24 36 31 / .05);
+  --barre-h: 3.5rem;      /* hauteur de la barre du haut (colonnes collantes de la partie) */
+  --page: 76rem;          /* largeur du contenu : accueil, options, préparation */
+  --page-large: 100rem;   /* largeur de la partie, et de la barre du haut sur toutes les pages */
+  --gouttiere: 1.5rem;
 }
 @media (prefers-color-scheme: dark) {
   :root { color-scheme: dark;
     --bg: #121A17; --surface: #1C2723; --ink: #DCE3DB; --muted: #9DB0A6;
     --glass: #7DB8A6; --verdigris: #4F8A7B; --wax: #C0443F; --wax-ink: #FFF4F0;
-    --line: #2E3D37; }
+    --line: #2E3D37;
+    --ombre: 0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18); }
 }
+@media (max-width: 40rem) { :root { --gouttiere: 1rem; } }
 * { box-sizing: border-box; }
+/* place de la barre de défilement réservée : rien ne se décale entre une page courte et une page longue */
+html { scrollbar-gutter: stable; }
 body { margin: 0; background: var(--bg); color: var(--ink);
        font: 1.05rem/1.55 var(--body); }
 
+/* Barre du haut : même balisage et même place sur toutes les pages et toutes les vues.
+   Sa largeur ne dépend pas du contenu de la page, pour qu'elle ne bouge pas d'une page à l'autre. */
+.entete { position: sticky; top: 0; z-index: 10; background: var(--surface);
+          border-bottom: 1px solid var(--line); box-shadow: var(--ombre); }
+.entete-in { max-width: var(--page-large); margin: 0 auto; padding: 0 var(--gouttiere);
+             min-height: var(--barre-h); display: flex; align-items: center; gap: 2rem; }
+.marque { display: flex; align-items: center; gap: .55rem; flex: none; text-decoration: none;
+          color: var(--ink); font: 400 1.4rem/1 var(--display); }
+.marque .sceau { width: 1.15rem; height: 1.15rem; border-radius: 50%; flex: none;
+                 background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, white), var(--wax) 65%);
+                 box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wax) 80%, black); }
+.onglets { display: flex; gap: .25rem; align-self: stretch; overflow-x: auto; scrollbar-width: none; }
+.onglets a { display: flex; align-items: center; padding: 0 .85rem; white-space: nowrap;
+             color: var(--muted); text-decoration: none; font-weight: 500;
+             border-bottom: 3px solid transparent; border-top: 3px solid transparent; }
+.onglets a:hover { color: var(--glass); }
+.onglets a[aria-current=page] { color: var(--glass); border-bottom-color: var(--glass); }
+.onglets a:focus-visible { outline-offset: -3px; }
+/* Téléphone : la marque au-dessus, les onglets en dessous ; la barre ne colle plus en haut */
+@media (max-width: 40rem) {
+  .entete { position: static; }
+  .entete-in { flex-direction: column; align-items: stretch; gap: 0; padding-top: .7rem; }
+  .onglets { min-height: 2.75rem; margin: 0 -.85rem; }
+}
+
+/* Contenu d'une page : même largeur et mêmes marges partout (sauf la partie, plus large) */
+.page { max-width: var(--page); margin: 0 auto; padding: 2rem var(--gouttiere) 3rem; }
+.titre-page { margin-bottom: 1.75rem; }
+.titre-page h1 { font: 400 clamp(2.2rem, 5vw, 3.2rem)/1.05 var(--display); margin: 0; }
+.titre-page .accroche { font-size: 1.12rem; color: var(--muted); margin: .5rem 0 0; max-width: 46rem; }
+
+/* Cartes et panneaux */
+.carte { background: var(--surface); border: 1px solid var(--line); border-radius: var(--rayon);
+         box-shadow: var(--ombre); padding: 1.25rem 1.5rem; }
+.carte h2 { font: 400 1.45rem/1.2 var(--display); margin: 0 0 .5rem; }
+.cartes { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); align-items: start; }
+.hint { color: var(--muted); }
+
 /* Fiche du PNJ */
-.npc { background: var(--surface); border-left: 6px solid var(--glass);
-       padding: 1.5rem; border-radius: 0 10px 10px 0; }
+.npc { background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--glass);
+       box-shadow: var(--ombre); padding: 1.5rem; border-radius: 0 var(--rayon) var(--rayon) 0; }
 .npc h1 { font: 400 2.6rem/1.05 var(--display); margin: 0 0 .25rem; }
 .npc .metier { font: italic 1.2rem var(--display); color: var(--glass); margin: 0 0 1rem; }
 .npc p { margin: 0 0 .6rem; }
 .npc .k { color: var(--muted); }
 .npc .empty { color: var(--muted); }
 .gen { display: flex; gap: .5rem; margin-top: 1.25rem; flex-wrap: wrap; }
-input[type=text], textarea { flex: 1; min-width: 10rem; font: inherit; color: var(--ink);
-       background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .55rem .7rem; }
+
+/* Champs */
+input[type=text], textarea, select { font: inherit; color: var(--ink); background: var(--bg);
+       border: 1px solid var(--line); border-radius: 8px; padding: .55rem .7rem;
+       transition: border-color .15s; }
+input[type=text], select { flex: 1; min-width: 10rem; }
+select { padding: .5rem; }
 textarea { width: 100%; resize: vertical; line-height: 1.45; }
-button { font: 500 1rem var(--body); cursor: pointer; border-radius: 6px;
+input[type=text]:hover, textarea:hover, select:hover { border-color: var(--verdigris); }
+input[type=checkbox] { accent-color: var(--glass); width: 1rem; height: 1rem; }
+
+/* Boutons */
+button { font: 500 1rem var(--body); cursor: pointer; border-radius: 8px;
          border: 1px solid var(--glass); background: var(--glass); color: var(--surface);
-         padding: .55rem 1rem; }
+         padding: .55rem 1rem; transition: background-color .15s, filter .15s; }
+button:hover:not(:disabled) { filter: brightness(1.1); }
 button.ghost { background: transparent; color: var(--glass); }
+button.ghost:hover:not(:disabled) { filter: none; background: color-mix(in srgb, var(--glass) 12%, transparent); }
 button:disabled { opacity: .5; cursor: wait; }
 :focus-visible { outline: 3px solid var(--verdigris); outline-offset: 2px; }
-select { flex: 1; min-width: 10rem; font: inherit; color: var(--ink); background: var(--bg);
-         border: 1px solid var(--line); border-radius: 6px; padding: .5rem; }
-a.link { color: var(--glass); font-weight: 500; }
+a.link { color: var(--glass); font-weight: 500; text-decoration: none; }
+a.link:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

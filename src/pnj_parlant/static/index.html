@@ -10,7 +10,7 @@
   /* Trois colonnes : la scène (lieu, PNJ présents) | la discussion | préparation et réglages.
      Écran moyen : la scène et les réglages l'un sous l'autre à gauche ; téléphone : tout empilé,
      les réglages en dernier. */
-  main { max-width: 100rem; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.5rem;
+  main { max-width: var(--page-large); margin: 0 auto; padding: 1.5rem var(--gouttiere); display: grid; gap: 1.5rem;
          grid-template-columns: minmax(0, 1fr); grid-template-areas: "scene" "talk" "reglages"; }
   .npc { grid-area: scene; }
   .talk { grid-area: talk; }
@@ -23,30 +23,20 @@
     main { grid-template-columns: 21rem minmax(0, 1fr) 19rem; grid-template-rows: auto;
            grid-template-areas: "scene talk reglages"; }
     /* les colonnes de côté restent visibles pendant que la discussion défile */
-    .npc, .reglages { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
+    .npc, .reglages { position: sticky; top: calc(var(--barre-h) + 1.5rem);
+                      max-height: calc(100vh - var(--barre-h) - 3rem); overflow-y: auto; }
   }
 
   /* Accueil (adresse « / ») ou table de jeu (« /#jeu ») : une seule page, pour que le clic de l'accueil
      autorise aussitôt le son du PNJ */
   body:not([data-vue=jeu]) main, body:not([data-vue=accueil]) #accueil,
   body:not([data-vue=options]) #options { display: none; }
-  .barre { max-width: 100rem; margin: 0 auto; padding: .9rem 1.5rem 0; display: flex; gap: 1.25rem; flex-wrap: wrap; }
-  body:not([data-vue=jeu]) .barre { max-width: 66rem; }  /* alignée sur le contenu de l'accueil et des options */
-  .barre a { color: var(--muted); text-decoration: none; font-weight: 500; padding-bottom: .15rem;
-             border-bottom: 2px solid transparent; }
-  .barre a:hover { color: var(--glass); }
-  .barre a[aria-current=page] { color: var(--glass); border-bottom-color: var(--glass); }
-  #accueil, #options { max-width: 66rem; margin: 0 auto; padding: 1.5rem 1.5rem 2.5rem; }
-  #accueil h1 { font: 400 clamp(2.4rem, 6vw, 3.6rem)/1.05 var(--display); margin: 0; }
-  #options h1 { font: 400 2.2rem var(--display); margin: 0 0 1.25rem; }
   #modelRow { align-items: center; }
   #modelRow[hidden] { display: none; }
-  #accueil .accroche { font-size: 1.15rem; color: var(--muted); margin: .5rem 0 0; }
-  #accueil .univers-actuel { margin: 1rem 0 1.5rem; font-style: italic; color: var(--glass); }
-  .cartes { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); align-items: start; }
-  .carte { background: var(--surface); border-radius: 10px; padding: 1.25rem 1.5rem;
-           display: flex; flex-direction: column; gap: .75rem; }
-  .carte h2 { font: 400 1.5rem var(--display); margin: 0; }
+  .univers-actuel { margin: .9rem 0 0; font-style: italic; color: var(--glass); }
+  .univers-actuel:empty { display: none; }
+  .carte { display: flex; flex-direction: column; gap: .75rem; }
+  .carte h2 { margin: 0; }
   .carte .hint { color: var(--muted); margin: 0; }
   .carte .row { display: flex; gap: .5rem; flex-wrap: wrap; }
   .carte .gen { margin-top: 0; }
@@ -56,7 +46,8 @@
   .exemple small { font-weight: 400; opacity: .9; }
 
   /* Préparation et réglages : création, banque, options, état de la machine */
-  .reglages { background: var(--surface); border-radius: 10px; padding: 1.25rem; }
+  .reglages { background: var(--surface); border: 1px solid var(--line); border-radius: var(--rayon);
+              box-shadow: var(--ombre); padding: 1.25rem; }
   .reglages h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
   .reglages .bloc + .bloc { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .reglages .gen { margin-top: 0; }
@@ -134,16 +125,23 @@
 </style>
 </head>
 <body data-vue="accueil">
-<nav class="barre" aria-label="Navigation">
-  <a href="#" data-vue="accueil">Accueil</a>
-  <a href="#jeu" data-vue="jeu">Partie</a>
-  <a href="#options" data-vue="options">Options</a>
-  <a href="creation.html">Préparer l’univers</a>
-</nav>
-<section id="accueil" aria-labelledby="accueilTitre">
-  <h1 id="accueilTitre">PNJ parlants</h1>
-  <p class="accroche">Parlez à voix haute avec les personnages de votre univers de jeu de rôle : ils vous répondent dans leur rôle.</p>
-  <p class="univers-actuel" id="universActuel"></p>
+<header class="entete">
+  <div class="entete-in">
+    <a class="marque" href="#"><span class="sceau" aria-hidden="true"></span>PNJ parlants</a>
+    <nav class="onglets" aria-label="Navigation">
+      <a href="#" data-vue="accueil">Accueil</a>
+      <a href="#jeu" data-vue="jeu">Partie</a>
+      <a href="creation.html">Préparer l’univers</a>
+      <a href="#options" data-vue="options">Options</a>
+    </nav>
+  </div>
+</header>
+<section id="accueil" class="page" aria-labelledby="accueilTitre">
+  <div class="titre-page">
+    <h1 id="accueilTitre">Bienvenue à la table</h1>
+    <p class="accroche">Parlez à voix haute avec les personnages de votre univers de jeu de rôle : ils vous répondent dans leur rôle.</p>
+    <p class="univers-actuel" id="universActuel"></p>
+  </div>
   <div class="cartes">
     <article class="carte">
       <h2>Charger un univers</h2>
@@ -251,8 +249,11 @@
   </aside>
 </main>
 
-<section id="options" aria-labelledby="optionsTitre">
-  <h1 id="optionsTitre">Options</h1>
+<section id="options" class="page" aria-labelledby="optionsTitre">
+  <div class="titre-page">
+    <h1 id="optionsTitre">Options</h1>
+    <p class="accroche">Réglages de la parole et de la scène, gardés dans ce navigateur ; état de la machine.</p>
+  </div>
   <div class="cartes">
     <article class="carte options">
       <h2>Parole</h2>
@@ -1200,7 +1201,7 @@ function afficherVue() {
   const vue = { "#jeu": "jeu", "#options": "options" }[location.hash] ?? "accueil";
   if (vue === "options" && document.body.dataset.vue !== "options") vuePrecedente = document.body.dataset.vue;
   document.body.dataset.vue = vue;
-  for (const a of document.querySelectorAll(".barre [data-vue]")) {
+  for (const a of document.querySelectorAll(".onglets [data-vue]")) {
     if (a.dataset.vue === vue) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   const versJeu = vuePrecedente === "jeu";

@@ -44,7 +44,7 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 - **Discuter avec un PNJ** : un PNJ de l'univers au hasard, ou un PNJ inventé par le modèle d'après un métier.
 - **Créer son univers** : la page de préparation (voir plus bas).
 
-La barre du haut mène à l'accueil, à la **partie**, aux **options** et à la préparation. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
+La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
 
 Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
 

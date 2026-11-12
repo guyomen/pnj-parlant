@@ -12,6 +12,12 @@ paths:
   (cases à cocher, modèle local, état machine ; « Retour » vers la vue d'origine). Une seule page : le clic de
   l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
 - `creation.html` (module ES) : scénario, lieux, fiches, banque, export/import de l'univers.
+- Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
+  même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
+  et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :
+  `aria-current="page"` (posé par `afficherVue` dans index.html, en dur dans creation.html).
+- `style.css` : jetons (couleurs, `--rayon`, `--ombre`, `--page`, `--gouttiere`), `.page` + `.titre-page` (accueil,
+  options, préparation), `.carte`, champs et boutons ; chaque page n'ajoute que sa mise en page.
 - `js/univers.js` : import (exemple, zip, dossier `webkitdirectory`), export, messages ; partagé par les deux pages.
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans
   `tests/js/scene.test.mjs` ; index.html n'est testé que par l'e2e.

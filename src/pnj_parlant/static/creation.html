@@ -7,17 +7,12 @@
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
-  header { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1.5rem 0;
-           display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-  header h1 { font: 400 2.4rem/1.1 var(--display); margin: 0; }
-  main { max-width: 76rem; margin: 0 auto; padding: 1.5rem;
-         display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
-  @media (min-width: 60rem) { main { grid-template-columns: 26rem 1fr; align-items: start; } }
+  .colonnes { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 60rem) { .colonnes { grid-template-columns: 26rem minmax(0, 1fr); align-items: start; } }
 
-  .panel { background: var(--surface); border-radius: 10px; padding: 1.25rem 1.5rem; }
-  .panel + .panel { margin-top: 1.5rem; }
-  .panel h2 { font: 400 1.5rem var(--display); margin: 0 0 .25rem; }
-  .hint { color: var(--muted); font-size: .92rem; margin: 0 0 .9rem; }
+  .carte + .carte { margin-top: 1.5rem; }
+  .carte h2 { margin-bottom: .25rem; }
+  .carte .hint { font-size: .92rem; margin: 0 0 .9rem; }
   label { display: block; font-weight: 500; margin: .8rem 0 .3rem; }
   label small { font-weight: 400; color: var(--muted); }
   .grid2 { display: grid; gap: 0 1rem; grid-template-columns: 1fr; }
@@ -26,7 +21,7 @@
   .grid2 input, .grid2 select { flex: none; width: 100%; }
   .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; margin-top: .5rem; }
-  .sheet { border-left: 6px solid var(--glass); border-radius: 0 10px 10px 0; }
+  .sheet { border-left: 6px solid var(--glass); border-radius: 0 var(--rayon) var(--rayon) 0; }
   .sheet .mode { color: var(--glass); font: italic 1.1rem var(--display); margin: 0 0 .5rem; }
   .voice { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .8rem;
            padding-top: .8rem; border-top: 1px solid var(--line); color: var(--muted); }
@@ -45,25 +40,30 @@
   .lieu-fiche .titre input { flex: 1; font-weight: 700; }
   .lieu-fiche .titre button { padding: .3rem .7rem; font-size: .9rem; }
   .lieu-fiche textarea { margin-top: .4rem; }
-  .barre { display: flex; gap: 1.25rem; flex-wrap: wrap; }
-  .barre a { color: var(--muted); text-decoration: none; font-weight: 500; }
-  .barre a:hover { color: var(--glass); }
   .sous-titre { font: 400 1.15rem var(--display); margin: 1.4rem 0 .2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .actions label.check { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-weight: 400; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Préparer l’univers</h1>
-  <nav class="barre" aria-label="Navigation">
-    <a href="/">Accueil</a>
-    <a href="/#jeu">Partie</a>
-    <a href="/#options">Options</a>
-  </nav>
+<header class="entete">
+  <div class="entete-in">
+    <a class="marque" href="/"><span class="sceau" aria-hidden="true"></span>PNJ parlants</a>
+    <nav class="onglets" aria-label="Navigation">
+      <a href="/">Accueil</a>
+      <a href="/#jeu">Partie</a>
+      <a href="creation.html" aria-current="page">Préparer l’univers</a>
+      <a href="/#options">Options</a>
+    </nav>
+  </div>
 </header>
-<main>
+<main class="page">
+  <div class="titre-page">
+    <h1>Préparer l’univers</h1>
+    <p class="accroche">Écrivez le monde, ses lieux et ses secrets, puis demandez des PNJ qui s’y rattachent. Exportez l’univers pour le partager.</p>
+  </div>
+  <div class="colonnes">
   <div>
-    <section class="panel">
+    <section class="carte">
       <h2>Scénario</h2>
       <p class="hint">Les PNJ s’appuient sur ce contexte au lieu d’inventer des lieux, des factions ou des personnages.</p>
       <label for="monde">Univers <small>— connu de tous les PNJ, transmis pendant les dialogues</small></label>
@@ -87,7 +87,7 @@
       <p class="status" id="universStatus"></p>
     </section>
 
-    <section class="panel">
+    <section class="carte">
       <h2>Lieux</h2>
       <p class="hint">Où se passent les scènes. La description est lue par le narrateur à l’arrivée et connue de tous les PNJ ; les notes du MJ servent seulement à créer des PNJ cohérents.</p>
       <div id="lieuxListe"></div>
@@ -98,14 +98,14 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="carte">
       <h2>Banque de PNJ</h2>
       <ul class="bank-list" id="bankList"></ul>
     </section>
   </div>
 
   <div>
-    <section class="panel">
+    <section class="carte">
       <h2>Demander un PNJ</h2>
       <p class="hint">Le modèle de création (Claude par défaut, réseau nécessaire) propose une fiche à partir du scénario et de vos consignes. Vous pouvez ensuite tout modifier.</p>
       <div class="grid2">
@@ -129,7 +129,7 @@
       </div>
     </section>
 
-    <section class="panel sheet">
+    <section class="carte sheet">
       <p class="mode" id="mode">Nouveau PNJ</p>
       <div class="grid2">
         <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
@@ -166,6 +166,7 @@
         <span class="status" id="saveStatus"></span>
       </div>
     </section>
+  </div>
   </div>
 </main>
 
