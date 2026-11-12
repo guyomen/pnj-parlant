@@ -1,4 +1,4 @@
-# PNJ parlants (PoC)
+# PNJ parlants
 
 Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Pocket TTS, Piper ou Edge lui donne une voix, et vous lui parlez au micro depuis le navigateur. faster-whisper reconnaît votre voix sur la machine, sans réseau.
 
