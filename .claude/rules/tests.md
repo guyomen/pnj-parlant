@@ -1,0 +1,28 @@
+---
+paths:
+  - "tests/**"
+---
+
+# Tests
+
+Aucun ne demande réseau, modèle ni carte graphique.
+
+```bash
+pytest                       # Python ; pytest est dans l'option dev (uv sync --extra tout --extra dev)
+node --test tests/js/        # fonctions pures de static/js/scene.js (Node 22+)
+python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran (NAVIGATEUR=... pour le choisir)
+```
+
+- `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance` ; fixtures `cfg` (config dans tmp_path),
+  `moteurs`, `tts`, `app` (`create_app` avec les faux), `client`, `ctx`.
+- `tests/js/scene.test.mjs` charge scene.js depuis son texte (data: URL), sans package.json.
+- e2e : `lancer.py` copie `tests/e2e/donnees/` (config.toml : moteurs locaux, voix Piper absente, reconnaissance
+  « navigateur ») dans un dossier temporaire, lance `faux_ollama.py` (port 5918), le vrai serveur (5917) et
+  `parcours_lieux.mjs`, qui pilote le navigateur par le protocole DevTools (port 9333).
+  - Les simulations (`speechSynthesis` instantanée ou bloquée avec `window.__lent`, reconnaissance qui « entend »
+    `window.__dicte`) sont évaluées après le chargement : `Page.addScriptToEvaluateOnNewDocument` ne prend pas en
+    Edge sans écran.
+  - Avant d'agir, attendre que le contrôle soit réactivé (`quand(...)`) : une action pendant une narration ou une
+    réplique est ignorée (`busy`).
+  - Fin par `Browser.close` : sous Windows, `kill()` laisse vivre les processus d'Edge (port 9333 pris ensuite).
+- Ajouter un test à chaque changement de logique ; pour index.html, une étape dans l'e2e.

@@ -3,10 +3,10 @@
 # Le bureau et l'écran de connexion occupent environ 700 Mo de la carte graphique : sur une carte
 # de 4 Go (NVIDIA T400), c'est ce qui manque pour que le modèle tourne à 100 % sur le GPU.
 #
-#   ./ecran.sh couper                 # jusqu'au prochain redémarrage du PC
-#   ./ecran.sh couper --permanent     # le PC démarrera aussi sans écran graphique
-#   ./ecran.sh rallumer [--permanent] # inverse
-#   ./ecran.sh etat                   # mémoire vidéo et répartition CPU/GPU du modèle
+#   ./scripts/ecran.sh couper                 # jusqu'au prochain redémarrage du PC
+#   ./scripts/ecran.sh couper --permanent     # le PC démarrera aussi sans écran graphique
+#   ./scripts/ecran.sh rallumer [--permanent] # inverse
+#   ./scripts/ecran.sh etat                   # mémoire vidéo et répartition CPU/GPU du modèle
 #
 # À lancer de préférence en SSH : couper l'écran ferme la session graphique et tout ce qui y tourne.
 set -euo pipefail

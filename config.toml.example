@@ -78,6 +78,8 @@ moteur = "local"           # "local" : faster-whisper sur ce PC, sans réseau ;
 modele = "small"           # tiny, base, small, medium, large-v3-turbo : plus gros = plus juste mais plus lent
 dossier = "modeles-stt"    # le modèle est dans <dossier>/<modele> (voir README pour le télécharger)
 appareil = "cpu"           # "cpu", ou "cuda" pour une carte NVIDIA (demande les bibliothèques CUDA 12 et cuDNN 9)
+# precision = "int8"       # calcul de Whisper ; par défaut int8 sur le processeur, float16 avec "cuda"
+# beam_size = 5            # 1 = plus rapide, un peu moins juste
 
 [banque]
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)

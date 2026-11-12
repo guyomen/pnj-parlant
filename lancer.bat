@@ -26,7 +26,7 @@ echo Pour aller plus vite : winget install astral-sh.uv
 py -3.13 -m venv .venv || python -m venv .venv
 if errorlevel 1 (
   echo.
-  echo Python est introuvable : installez uv, ou Python 3.13, voir HOWTO.md.
+  echo Python est introuvable : installez uv, ou Python 3.13, voir docs\installation-windows.md.
   pause
   exit /b 1
 )
@@ -79,7 +79,7 @@ exit /b 1
 
 :amd_sans_ollama
 echo.
-echo Carte AMD detectee, mais Ollama n'est pas installe sous Windows : voir HOWTO.md, section 4.
+echo Carte AMD detectee, mais Ollama n'est pas installe sous Windows : voir docs\installation-windows.md, section 4.
 echo Ou passez les moteurs sur "claude" dans config.toml, section [moteurs].
 pause
 exit /b 1

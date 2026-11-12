@@ -4,7 +4,7 @@ Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Pocket TTS, P
 
 ## Installation (PC sous Linux)
 
-Sous Windows, suivez plutôt le guide pas à pas [HOWTO.md](HOWTO.md).
+Sous Windows, suivez plutôt le guide pas à pas [docs/installation-windows.md](docs/installation-windows.md).
 
 ```bash
 uv sync --extra tout                 # .venv (Python 3.13) + le paquet pnj_parlant, avec voix et reconnaissance locales
@@ -32,9 +32,28 @@ Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `h
 
 - `POST /api/npc/generate` : Haiku renvoie une fiche JSON (nom, métier, humeur, rumeurs, secret, salutation, timbre, débit). Humeur, trait et initiale du nom sont tirés au sort côté Python pour éviter les PNJ qui se ressemblent.
 - `POST /api/npc/talk` : la fiche devient le prompt système, l'historique est renvoyé par le navigateur (serveur sans état). La réplique arrive en streaming, avec Claude comme avec le modèle local : le serveur la découpe en phrases et envoie chacune dès qu'elle est complète (une ligne JSON par phrase). Le navigateur affiche et fait lire la première phrase pendant que le modèle écrit la suite, et prépare la voix de la phrase suivante pendant la lecture.
-- La page de jeu affiche l'utilisation du contexte, une barre de progression si sa limite est connue, et le cumul des tokens d'entrée et de sortie de la scène. Ollama utilise `[local] contexte`; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle utilisé. Les boutons **Courte**, **Normale** et **Détaillée** ajustent la consigne et le plafond de tokens de chaque réponse.
-- `POST /api/tts` : le moteur de voix choisi (voir [Synthèse vocale](#synthèse-vocale)) lit la phrase avec la voix attribuée au PNJ, tirée parmi celles de son genre. En cas d'échec, le navigateur lit le texte lui-même (`speechSynthesis`), avec une hauteur adaptée au timbre.
+- Scène à plusieurs PNJ : chaque PNJ reçoit toute la conversation, ses propres répliques d'un côté, celles des autres préfixées par leur nom. Des séquences d'arrêt empêchent un petit modèle d'écrire aussi les répliques des autres.
+- `POST /api/tts` : le moteur de voix choisi (voir [Synthèse vocale](#synthèse-vocale)) lit la phrase avec la voix attribuée au PNJ, tirée parmi celles de son genre. Le texte entre parenthèses (« (Il se gratte la tête.) ») est lu par une voix neutre de narrateur et affiché en italique. En cas d'échec, le navigateur lit le texte lui-même (`speechSynthesis`), avec une hauteur adaptée au timbre.
 - `POST /api/stt` : faster-whisper transcrit l'enregistrement du micro (webm/opus envoyé par le navigateur), en français, avec le nom et le métier du PNJ comme indice de vocabulaire. Le navigateur coupe l'enregistrement après une seconde de silence.
+
+## Jouer
+
+Sur la page de jeu, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
+
+- **Stop** (ou Échap) fait taire le PNJ ; il ne se souvient que de ce qu'il a eu le temps de dire.
+- **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
+- **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
+- En haut de la page : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle. Avec un modèle local, un menu permet d'en changer en cours de partie, et le bas du panneau affiche l'état d'Ollama et de la carte graphique.
+
+Options, mémorisées par le navigateur :
+
+| Option | Effet |
+|---|---|
+| « Parler » interrompt le PNJ | Pendant qu'il parle, **Parler** lui coupe la parole et vous écoute aussitôt. Décochée : il faut attendre la fin ou cliquer sur Stop. |
+| Couper le PNJ dès que vous parlez | Désactivée par défaut. Le micro reste ouvert pendant que le PNJ parle : dès que vous parlez, il se tait et votre phrase devient la question. Prenez un casque : avec des haut-parleurs, la voix du PNJ peut le couper elle-même (surtout la voix de secours du navigateur). |
+| Plusieurs PNJ dans la scène | Jusqu'à 3 PNJ (**Ajouter à la scène**). Répond le PNJ que vous nommez (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un autre pose une question lui répond. **Laissez-les discuter** fait répondre un autre PNJ. |
+| Interventions spontanées | À plusieurs : un autre PNJ réagit parfois de lui-même (probabilité `intervention` dans `[dialogue]`). |
+| Faire entrer un PNJ | À plusieurs : le modèle invente un nouveau venu d'après la conversation (« la fille de l'aubergiste »), ou au hasard si le champ est vide. |
 
 ## Préparer le scénario et les PNJ (pour jouer sans réseau)
 
@@ -46,7 +65,7 @@ Ouvrez **http://localhost:5000/creation.html** (lien « Préparer les PNJ et le 
 2. **Demander un PNJ** : métier, nom, genre (tous facultatifs) et son rôle dans le scénario. Claude propose une fiche qui ne cite que des noms présents dans le scénario ou vos consignes.
 3. **Relire et ajuster** la fiche, écouter sa voix (bouton « Autre voix » si elle ne convient pas), puis l'**enregistrer dans la banque**. Les PNJ de la banque peuvent être modifiés ou supprimés.
 
-Sur la page de jeu, choisissez un PNJ dans la banque et cliquez sur **Jouer**.
+Sur la page de jeu, choisissez un PNJ dans la banque et cliquez sur **Jouer** (voir [Jouer](#jouer)).
 
 ### Lieux
 
@@ -100,13 +119,13 @@ Le conteneur redémarre ensuite avec le PC. `docker compose down` l'arrête ; `d
 - Modèle `qwen3:4b-instruct` (2,5 Go) : `docker compose exec ollama ollama pull qwen3:4b-instruct`, puis `modele = "qwen3:4b-instruct"` dans `[local]`. Évitez le tag `qwen3:4b` tout court : il réfléchit toujours, même avec `reflexion = false`, et lit son raisonnement à voix haute.
 - `contexte = 2048` dans `[local]`. Ça suffit : une création de PNJ demande au plus environ 1900 tokens, un dialogue avec 12 messages d'historique environ 1200. Un long univers de scénario s'ajoute à chaque requête : passez alors à 3072, au prix d'environ 10 % du modèle sur le processeur.
 - La *flash attention* et la mémoire de conversation compressée (`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`) sont déjà réglées dans [docker-compose.yml](docker-compose.yml).
-- Le bureau Linux occupe environ 700 Mo de mémoire vidéo. Si l'écran du PC ne sert pas (accès en SSH), coupez-le avec [ecran.sh](ecran.sh) :
+- Le bureau Linux occupe environ 700 Mo de mémoire vidéo. Si l'écran du PC ne sert pas (accès en SSH), coupez-le avec [scripts/ecran.sh](scripts/ecran.sh) :
 
   ```bash
-  ./ecran.sh couper                 # jusqu'au prochain redémarrage
-  ./ecran.sh couper --permanent     # le PC démarrera aussi sans écran graphique
-  ./ecran.sh rallumer [--permanent] # inverse
-  ./ecran.sh etat                   # mémoire vidéo utilisée, et répartition CPU/GPU du modèle
+  ./scripts/ecran.sh couper                 # jusqu'au prochain redémarrage
+  ./scripts/ecran.sh couper --permanent     # le PC démarrera aussi sans écran graphique
+  ./scripts/ecran.sh rallumer [--permanent] # inverse
+  ./scripts/ecran.sh etat                   # mémoire vidéo utilisée, et répartition CPU/GPU du modèle
   ```
 
   Sans cela, une partie du modèle reste sur le processeur et les répliques sont plus lentes (14 tokens/s mesurés avec l'écran allumé, 21 sans).
@@ -128,6 +147,7 @@ Trois moteurs, au choix dans la section `[voix]` de `config.toml` (`moteur = ...
 - **Pocket TTS** télécharge son modèle (environ 250 Mo) et ses voix au premier lancement : lancez l'application une fois avec le réseau, et attendez que la console n'affiche plus rien. Une voix qui n'a pas pu être téléchargée est signalée dans la console et n'est pas attribuée. Le débit du PNJ (`lent`, `rapide`) n'est pas appliqué, ni le timbre.
 - **Edge** applique le débit et le timbre du PNJ. Sans réseau, c'est la voix du navigateur qui prend le relais. Le service est gratuit mais non officiel : Microsoft peut le changer ou le couper.
 - Les genres des voix Pocket et Edge sont fixés dans [voix.py](src/pnj_parlant/voix.py) ; on peut les remplacer dans `config.toml` (voir les commentaires de `config.toml.example`).
+- La page de préparation permet d'essayer un autre moteur sans toucher à `config.toml` : le changement vaut pour tout le serveur, jusqu'à son redémarrage.
 
 Les répliques sont lues phrase par phrase, une phrase étant regroupée avec la suivante tant qu'elle fait moins de 40 caractères (« Ah ! »), pour éviter des blancs entre deux sons trop courts.
 
@@ -161,6 +181,7 @@ pyproject.toml              paquet, dépendances (options : voix, stt, tout, dev
 src/pnj_parlant/
   serveur.py                application Flask (routes) et lancement
   config.py                 lecture de config.toml
+  dependances.py            dépendances manquantes dans .venv (lancer.bat)
   fiches.py                 création des fiches de PNJ
   dialogue.py               consignes du PNJ, mise en scène de la conversation à un ou plusieurs PNJ
   texte.py                  nettoyage du texte, nombres en lettres, découpage en phrases
@@ -172,6 +193,9 @@ src/pnj_parlant/
   generer.py                remplissage de la banque en lot (pnj-banque)
   static/                   pages web : index.html (jeu), creation.html, js/scene.js
 tests/                      tests Python (pytest) et tests/js/ (Node)
+docs/                       installation-windows.md : guide pas à pas Windows
+scripts/ecran.sh            libère la mémoire vidéo sous Linux
+lancer.bat                  lanceur Windows (double-clic)
 ```
 
 Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de faux moteurs remplacent
@@ -181,10 +205,10 @@ le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/co
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest                      # tests Python
 node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
-python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons)
+python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption)
 ```
 
 ## Pistes pour la suite
 
-- Sauvegarder les PNJ créés (fichier JSON ou SQLite) pour les retrouver d'une session à l'autre.
-- Donner au PNJ un inventaire et des prix fixes, ou un contexte commun (ville, actualité) partagé par tous les PNJ.
+- Contexte de monde plus riche (ville, rumeurs du jour), et inventaire et prix fixes pour les marchands.
+- Mesurer la latence et la charge sur le PC de référence.

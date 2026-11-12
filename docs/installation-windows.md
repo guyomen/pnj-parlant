@@ -82,7 +82,7 @@ Sans uv, installez Python 3.13 (`winget install Python.Python.3.13`, ou [python.
 2. Dans le Bloc-notes :
    - `cle_api` (section `[claude]`) : votre clé API Anthropic, entre guillemets. Elle sert à créer les PNJ quand vous avez le réseau.
    - `dialogue = "local"` (section `[moteurs]`) : les PNJ parleront avec le modèle local, sans réseau.
-   - `moteur` (section `[voix]`) : `"pocket"` (le plus naturel sans réseau, conseillé), `"piper"` (plus léger) ou `"edge"` (le plus naturel, mais seulement avec le réseau). Le comparatif est dans le [README](README.md#synthèse-vocale).
+   - `moteur` (section `[voix]`) : `"pocket"` (le plus naturel sans réseau, conseillé), `"piper"` (plus léger) ou `"edge"` (le plus naturel, mais seulement avec le réseau). Le comparatif est dans le [README](../README.md#synthèse-vocale).
 3. Enregistrez et fermez.
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
@@ -115,6 +115,8 @@ Suivez **4A** pour une carte NVIDIA, **4B** pour une carte AMD.
    docker compose up -d
    docker compose exec ollama ollama pull qwen3:8b
    ```
+
+   Avec une carte de 4 Go (ex. NVIDIA T400), `qwen3:8b` ne tient pas : prenez `qwen3:4b-instruct` et `contexte = 2048`, voir le [README](../README.md#modèle-local-pour-les-dialogues-sans-réseau), « Petite carte graphique ».
 5. **Vérifiez que la carte graphique est utilisée** :
 
    ```powershell
@@ -160,6 +162,8 @@ Ouvrez ensuite **http://localhost:5000** dans Chrome ou Edge, sur ce PC. Si vous
 
 Au premier dialogue, le modèle se charge sur la carte graphique : la première réplique peut prendre une dizaine de secondes, les suivantes sont rapides. Pour le vérifier, `docker compose exec ollama ollama ps` doit afficher **100% GPU**.
 
+Les commandes de la page de jeu (Stop, couper la parole au PNJ, scène à plusieurs PNJ, export de la conversation…) sont décrites dans le [README](../README.md#jouer). Pour couper le PNJ simplement en parlant, prenez un casque.
+
 ### Jouer depuis les téléphones des amis
 
 Le navigateur n'autorise le micro qu'en HTTPS (ou sur `localhost`). Pour les autres appareils :
@@ -196,7 +200,7 @@ Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaiss
 | « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. Carte AMD : Ollama n'est pas lancé, démarrez-le depuis le menu Démarrer. |
 | « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (carte AMD : `ollama pull qwen3:8b`), avec le réseau. |
 | « Modèle Whisper absent » au lancement | Le modèle de reconnaissance vocale n'est pas téléchargé (étape 2.4), ou `modele` dans la section `[reconnaissance]` de `config.toml` ne correspond pas au dossier de `modeles-stt\`. |
-| `POST /api/stt` échoue avec `metadata_errors` | PyAV 19 n'est pas compatible avec la version de faster-whisper installée. Depuis le dossier du projet, exécutez `uv pip install "av<19"` (sans uv : `.venv\Scripts\python.exe -m pip install "av<19"`), puis relancez l'application. |
+| `POST /api/stt` échoue avec `metadata_errors` | Environnement `.venv` créé avant que `pyproject.toml` n'écarte PyAV 19, incompatible avec faster-whisper (`lancer.bat` ne modifie jamais un `.venv` existant). Depuis le dossier du projet, exécutez `uv pip install "av<19"` (sans uv : `.venv\Scripts\python.exe -m pip install "av<19"`), puis relancez l'application. |
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
 | Voix robotique du navigateur à la place de celle du PNJ | Pocket TTS : lancez l'application une fois avec le réseau pour télécharger le modèle et les voix. Piper : les voix ne sont pas dans `voices\` (étape 2.3). Edge : le réseau est coupé. |
 | « Pocket TTS : voix … indisponible » au lancement | Cette voix n'a pas encore été téléchargée : relancez l'application avec le réseau. |
