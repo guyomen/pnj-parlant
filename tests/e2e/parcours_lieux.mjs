@@ -23,16 +23,31 @@ async function quand(expression, ms = 8000) {
 const resultats = [];
 const verifier = (nom, ok) => { resultats.push(`${ok ? "OK  " : "ÉCHEC"} ${nom}`); };
 
-// Voix du navigateur instantanée : le casque n'existe pas en mode sans écran
-await cdp("Page.addScriptToEvaluateOnNewDocument", { source:
-  "window.speechSynthesis.speak = (u) => setTimeout(() => u.onend && u.onend(), 5);" });
+// Voix du navigateur instantanée : le casque n'existe pas en mode sans écran. Avec window.__lent, une
+// phrase dure jusqu'à ce qu'on la coupe (speechSynthesis.cancel). Reconnaissance vocale simulée :
+// elle « entend » window.__dicte.
+const simulations = `
+  window.speechSynthesis.speak = (u) => { if (window.__lent) window.__enCours = u; else setTimeout(() => u.onend && u.onend(), 5); };
+  window.speechSynthesis.cancel = () => { const u = window.__enCours; window.__enCours = null; u && u.onend && u.onend(); };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) SR.prototype.start = function () {
+    window.__ecoute = (window.__ecoute || 0) + 1;
+    setTimeout(() => {
+      this.onstart && this.onstart();
+      this.onresult && this.onresult({ results: [Object.assign([{ transcript: window.__dicte || "" }], { isFinal: true })] });
+      this.onend && this.onend();
+    }, 20);
+  };`;
 await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
+await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
+await js(simulations);  // après le chargement : le script d'initialisation de page ne prend pas en Edge sans écran
 verifier("menu des lieux rempli (aucun + 2 lieux)", await quand(`document.querySelectorAll("#lieuSel option").length === 3`));
 
 await js(`(() => { const s = document.getElementById("lieuSel"); s.value = "auberge-du-sanglier"; s.dispatchEvent(new Event("change")); })()`);
 verifier("narration de l'arrivée à l'auberge", await quand(`document.querySelector(".narration-line")?.textContent.includes("Vous arrivez : Auberge du Sanglier. Une salle enfumée.")`));
 verifier("Ysolde est là, Brom non", await quand(`(() => { const t = document.getElementById("ici").textContent; return t.includes("Ysolde") && !t.includes("Brom"); })()`));
 
+await quand(`[...document.querySelectorAll("[data-aborder]")].some(b => b.textContent.includes("Ysolde") && !b.disabled)`);  // fin de la narration
 await js(`[...document.querySelectorAll("[data-aborder]")].find(b => b.textContent.includes("Ysolde")).click()`);
 verifier("aborder Ysolde : fiche et salutation", await quand(`document.querySelector(".pnj-card h1")?.textContent === "Ysolde" && document.getElementById("log").textContent.includes("Bienvenue au Sanglier")`));
 await quand(`!document.getElementById("ask").disabled`);
@@ -62,6 +77,7 @@ verifier("de retour à l'auberge, Ysolde n'y est plus", await quand(`!document.g
 verifier("banque regroupée par lieu, Ysolde avec Brom à la forge", await js(`[...document.querySelectorAll("#bankSel optgroup")].map(o => o.label + " : " + [...o.children].map(c => c.textContent.split(" — ")[0]).join(", ")).join(" | ")`) === "Forge de Brom : Brom, Ysolde");
 
 // Ysolde est restée à la forge : on l'y retrouve
+await quand(`!document.getElementById("lieuSel").disabled`);  // fin de la narration précédente
 await js(`(() => { const s = document.getElementById("lieuSel"); s.value = "forge-de-brom"; s.dispatchEvent(new Event("change")); })()`);
 verifier("Ysolde retrouvée à la forge, avec Brom", await quand(`(() => { const t = document.getElementById("ici").textContent; return t.includes("Ysolde") && t.includes("Brom"); })()`));
 
@@ -75,7 +91,30 @@ verifier("import : Ysolde et Gaspard en scène, à la forge", await quand(`[...d
 await quand(`!document.getElementById("ask").disabled`);
 await js(`(() => { document.getElementById("ask").value = "Gaspard, tu as encore soif ?"; document.getElementById("sendBtn").click(); })()`);
 verifier("import : Gaspard reprend la conversation", await quand(`document.getElementById("log").textContent.includes("Moi, Gaspard le Colporteur, je suis bien à Forge de Brom")`));
+await quand(`!document.getElementById("ask").disabled`);
+
+// Couper la parole au PNJ : sans l'option, « Parler » reste désactivé pendant qu'il parle
+const option = (id, v) => js(`(() => { const c = document.getElementById("${id}"); c.checked = ${v}; c.dispatchEvent(new Event("change")); })()`);
+const parle = `!document.getElementById("stopBtn").hidden && [...document.querySelectorAll("#log .line")].at(-1)?.textContent.includes("voyageur.")`;
+await option("optInterrompre", false);
+await js(`(() => { window.__lent = true; document.getElementById("ask").value = "Ysolde, et toi ?"; document.getElementById("sendBtn").click(); })()`);
+verifier("sans l'option, « Parler » désactivé pendant que le PNJ parle", await quand(parle) && await js(`document.getElementById("micBtn").disabled`));
+await js(`document.getElementById("stopBtn").click()`);
+await quand(`!document.getElementById("ask").disabled`);
+
+// Avec l'option : « Parler » coupe le PNJ, écoute le joueur, et le PNJ répond à la nouvelle question
+await option("optInterrompre", true);
+await js(`(() => { document.getElementById("ask").value = "Ysolde, et toi ?"; document.getElementById("sendBtn").click(); })()`);
+verifier("avec l'option, « Parler » actif pendant que le PNJ parle", await quand(parle) && !await js(`document.getElementById("micBtn").disabled`));
+await js(`(() => { window.__lent = false; window.__dicte = "Pardon, je vous coupe."; document.getElementById("micBtn").click(); })()`);
+const lignes = `[...document.querySelectorAll("#log .line")].map(l => l.textContent)`;
+verifier("« Parler » coupe le PNJ et transmet la question", await quand(`(() => {
+  const l = ${lignes}, i = l.findIndex(t => t.includes("Pardon, je vous coupe."));
+  return i > 0 && !l[i - 1].includes("Que veux-tu") && l.slice(i + 1).some(t => t.includes("Que veux-tu"));
+})()`) && await js(`window.__ecoute === 1 && document.getElementById("stopBtn").hidden`));
 
 console.log(resultats.join("\n"));
+// Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)
+await Promise.race([cdp("Browser.close"), pause(2000)]);
 ws.close(); navigateur.kill();
 process.exit(resultats.some(r => r.startsWith("ÉCHEC")) ? 1 : 0);

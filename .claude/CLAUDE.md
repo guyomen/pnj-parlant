@@ -14,12 +14,14 @@ un navigateur, le PNJ répond dans son personnage, à voix haute. Langue : fran�
   Le serveur coupe la réponse après `[dialogue] phrases_max` phrases (`texte.limiter_phrases`, 3 par défaut).
 
 ## Architecture
-Paquet Python `pnj_parlant` (layout src/, `pyproject.toml`), installé par `pip install -e ".[tout]"`.
+Paquet Python `pnj_parlant` (layout src/, `pyproject.toml`, `uv.lock`), installé par `uv sync --extra tout`
+(ou `pip install -e ".[tout]"`).
 ```
 pyproject.toml       # dépendances (options voix, stt, tout, dev) ; commandes pnj-parlant et pnj-banque
 src/pnj_parlant/
   serveur.py         # Flask : create_app(cfg, moteurs=, tts=, reconnaissance=) + main() (Ctrl+C, HTTPS)
   config.py          # config.toml du dossier courant, PNJ_CONFIG ou --config ; chemins relatifs à son dossier
+  dependances.py     # dépendances de pyproject.toml absentes du .venv (lancer.bat ; bibliothèque standard seule)
   fiches.py          # création des fiches (prompt, schéma JSON, tirages au sort)
   dialogue.py        # consignes du PNJ, scène vue par chaque PNJ, découpage de sa réponse
   texte.py           # nettoyage pour la voix, nombres en lettres, phrases, « Nom : » en tête
@@ -34,7 +36,8 @@ tests/               # pytest (faux moteurs dans conftest.py) ; tests/js/*.test.
                      # tests/e2e/lancer.py : vrai serveur + faux Ollama + Edge/Chrome sans écran (CDP)
 config.toml(.example)# tous les réglages ; config.toml (clé API) n'est pas versionné
 docker-compose.yml   # Ollama dans Docker (carte NVIDIA)
-lancer.bat, lancerAMD.bat, ecran.sh  # lanceurs Windows (python -m pnj_parlant) ; ecran.sh libère la VRAM sous Linux
+lancer.bat, ecran.sh # lanceur Windows : Ollama (Windows ou Docker selon la carte) seulement si un moteur est local
+                     # (python -m pnj_parlant.config), puis python -m pnj_parlant ; ecran.sh libère la VRAM sous Linux
 pnj/                 # banque : _scenario.json + un JSON par PNJ (créé à l'usage)
 voices/, modeles-stt/  # voix Piper et modèle Whisper, téléchargés, non versionnés
 ```
@@ -83,14 +86,17 @@ Routes :
   Le texte entre parenthèses (description) est envoyé à part avec `narrateur: true` : voix neutre
   (`narrateur` dans `[voix.<moteur>]`, jamais celle du PNJ), affichée en italique.
 - `POST /api/stt` (audio webm/opus + indice) : faster-whisper ; repli sur la Web Speech API.
+  Couper la parole au PNJ (Stop, Échap) : option « Parler interrompt le PNJ » (bouton actif pendant qu'il
+  parle, barre d'espace) et option « Couper le PNJ dès que vous parlez » (désactivée par défaut : micro
+  ouvert pendant la `parole`, `detecteurVoix` de scene.js, puis l'enregistrement continue sur le même micro).
 
 Le micro exige `localhost` ou HTTPS : `[serveur] https = true` crée un certificat auto-signé dans `certs/`.
 
 ## Lancement
 Voir README.md (Linux) et HOWTO.md (Windows, cartes NVIDIA ou AMD).
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[tout,dev]"
+uv sync --extra tout --extra dev     # .venv en Python 3.13 (.python-version), versions figées dans uv.lock
+source .venv/bin/activate            # sans uv : python3 -m venv .venv, puis pip install -e ".[tout,dev]"
 cp config.toml.example config.toml   # cle_api, ou variable ANTHROPIC_API_KEY
 pnj-parlant                          # ou python -m pnj_parlant ; port dans [serveur] port (5000)
 pytest && node --test tests/js/      # tests, sans réseau ni modèle

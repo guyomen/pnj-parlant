@@ -7,8 +7,8 @@ Claude Haiku ou un modèle local invente un PNJ et joue son rôle, Pocket TTS, P
 Sous Windows, suivez plutôt le guide pas à pas [HOWTO.md](HOWTO.md).
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[tout]"             # le paquet pnj_parlant, avec voix et reconnaissance locales
+uv sync --extra tout                 # .venv (Python 3.13) + le paquet pnj_parlant, avec voix et reconnaissance locales
+source .venv/bin/activate            # sans uv : python3 -m venv .venv, activer, puis pip install -e ".[tout]"
 cp config.toml.example config.toml   # puis renseignez cle_api = "sk-ant-..."
 
 # Voix françaises Piper, si vous choisissez ce moteur de voix (une ou plusieurs, tirées au sort)
@@ -151,7 +151,7 @@ Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `
 
 ## Organisation du code et tests
 
-L'application est un paquet Python, `pnj_parlant`, installé par `pip install -e ".[tout]"` (mode éditable :
+L'application est un paquet Python, `pnj_parlant`, installé par `uv sync --extra tout` ou `pip install -e ".[tout]"` (mode éditable :
 les modifications du code sont prises en compte sans réinstaller). Les commandes `pnj-parlant` et `pnj-banque`
 cherchent `config.toml` dans le dossier courant ; `--config chemin/vers/config.toml` en désigne un autre.
 Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté de `config.toml`.
@@ -178,7 +178,7 @@ Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de 
 le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/conftest.py`).
 
 ```bash
-pip install -e ".[dev]"
+uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest                      # tests Python
 node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons)

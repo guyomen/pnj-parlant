@@ -22,6 +22,19 @@ class TestConfig:
         assert cfg.section("absente") == {}
         assert cfg.chemin("pnj") == fichier.parent.resolve() / "pnj"
 
+    @pytest.mark.parametrize("reglages, attendu", [
+        ({}, False),  # moteurs par défaut : Claude
+        ({"moteurs": {"creation": "claude", "dialogue": "claude"}}, False),
+        ({"moteurs": {"creation": "claude", "dialogue": "local"}}, True),
+        ({"moteurs": {"creation": "local", "dialogue": "claude"}}, True),
+        ({"moteurs": {"creation": "local", "dialogue": "local"},
+          "local": {"url": "http://127.0.0.1:11434"}}, True),
+        ({"moteurs": {"creation": "local", "dialogue": "local"},
+          "local": {"url": "http://192.168.1.20:11434"}}, False),  # Ollama sur un autre PC
+    ])
+    def test_ollama_sur_ce_pc(self, tmp_path, reglages, attendu):
+        assert config.ollama_sur_ce_pc(config.Config(reglages, tmp_path)) is attendu
+
 
 class TestGenerer:
     def test_remplit_la_banque(self, ctx):

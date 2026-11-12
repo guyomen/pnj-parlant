@@ -8,7 +8,7 @@ Ce qui sera installé :
 
 | Élément | Rôle |
 |---|---|
-| Python | fait tourner l'application (le serveur, les voix, la reconnaissance vocale) |
+| uv (et Python, qu'il installe lui-même) | fait tourner l'application (le serveur, les voix, la reconnaissance vocale) |
 | Ollama | sert le modèle de langage qui fait parler les PNJ |
 | Docker Desktop (carte NVIDIA seulement) | fait tourner Ollama dans un conteneur, sans rien installer d'autre sur la machine |
 
@@ -18,32 +18,37 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
 
 ---
 
-## 1. Python
+## 1. uv (gestionnaire Python)
 
-1. Installez Python 3.13 :
+[uv](https://docs.astral.sh/uv/) installe Python 3.13 et les dépendances de l'application, bien plus vite que `pip`.
+
+1. Installez uv :
 
    ```powershell
-   winget install Python.Python.3.13
+   winget install astral-sh.uv
    ```
 
-   Sans `winget`, téléchargez l'installateur sur [python.org](https://www.python.org/downloads/windows/) et cochez **« Add python.exe to PATH »** sur le premier écran.
+   Sans `winget` : `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`.
 2. Fermez PowerShell, rouvrez-le, puis vérifiez :
 
    ```powershell
-   py -3.13 --version
+   uv --version
    ```
+
+Sans uv, installez Python 3.13 (`winget install Python.Python.3.13`, ou [python.org](https://www.python.org/downloads/windows/) en cochant **« Add python.exe to PATH »**) : `lancer.bat` passera alors par `pip`, plus lentement.
 
 ## 2. L'application
 
 1. Copiez le dossier du projet sur le PC, par exemple dans `C:\PNJ`.
-2. Placez-vous dedans et créez l'environnement Python :
+2. Placez-vous dedans et créez l'environnement Python (`lancer.bat` le fait aussi s'il n'existe pas ; un `.venv` existant n'est jamais modifié, le lanceur signale seulement les dépendances manquantes) :
 
    ```powershell
    cd C:\PNJ
-   py -3.13 -m venv .venv
+   uv sync --extra tout
    .venv\Scripts\Activate.ps1
-   pip install -e ".[tout]"
    ```
+
+   Sans uv : `py -3.13 -m venv .venv`, `.venv\Scripts\Activate.ps1`, puis `pip install -e ".[tout]"`.
 
    Si PowerShell refuse d'exécuter `Activate.ps1` (« l'exécution de scripts est désactivée »), autorisez les scripts pour votre compte, puis recommencez :
 
@@ -51,7 +56,7 @@ Toutes les commandes se tapent dans **PowerShell** : menu Démarrer, tapez « Po
    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
    ```
 
-   Si l'installation des voix (`piper-tts`, `pocket-tts`) échoue, installez le reste avec `pip install -e ".[stt]"` : l'application fonctionnera avec la voix du navigateur.
+   Si l'installation des voix (`piper-tts`, `pocket-tts`) échoue, installez le reste avec `uv sync --extra stt` : l'application fonctionnera avec la voix du navigateur.
 3. Si vous choisissez les voix Piper (voir l'étape 3), téléchargez-les :
 
    ```powershell
@@ -149,7 +154,7 @@ Dans la suite de ce guide, remplacez `docker compose exec ollama ollama` par `ol
 
 ## 5. Lancer une partie
 
-Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il démarre le modèle local (avec une carte AMD, Ollama tourne déjà), puis l'application.
+Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il prépare le modèle local seulement si `config.toml` en utilise un (`"local"` dans `[moteurs]`) : il prend Ollama installé sous Windows s'il existe (carte AMD), et le démarre s'il ne répond pas ; sinon, avec une carte NVIDIA, il démarre Ollama dans Docker. Il lance ensuite l'application. En tout-Claude, Docker et Ollama sont inutiles.
 
 Ouvrez ensuite **http://localhost:5000** dans Chrome ou Edge, sur ce PC. Si vous avez changé le `port` dans `config.toml`, remplacez 5000 par votre port.
 
@@ -191,7 +196,7 @@ Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaiss
 | « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. Carte AMD : Ollama n'est pas lancé, démarrez-le depuis le menu Démarrer. |
 | « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (carte AMD : `ollama pull qwen3:8b`), avec le réseau. |
 | « Modèle Whisper absent » au lancement | Le modèle de reconnaissance vocale n'est pas téléchargé (étape 2.4), ou `modele` dans la section `[reconnaissance]` de `config.toml` ne correspond pas au dossier de `modeles-stt\`. |
-| `POST /api/stt` échoue avec `metadata_errors` | PyAV 19 n'est pas compatible avec la version de faster-whisper installée. Dans PowerShell, exécutez `.venv\Scripts\python.exe -m pip install "av<19"` depuis le dossier du projet, puis relancez l'application. |
+| `POST /api/stt` échoue avec `metadata_errors` | PyAV 19 n'est pas compatible avec la version de faster-whisper installée. Depuis le dossier du projet, exécutez `uv pip install "av<19"` (sans uv : `.venv\Scripts\python.exe -m pip install "av<19"`), puis relancez l'application. |
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
 | Voix robotique du navigateur à la place de celle du PNJ | Pocket TTS : lancez l'application une fois avec le réseau pour télécharger le modèle et les voix. Piper : les voix ne sont pas dans `voices\` (étape 2.3). Edge : le réseau est coupé. |
 | « Pocket TTS : voix … indisponible » au lancement | Cette voix n'a pas encore été téléchargée : relancez l'application avec le réseau. |

@@ -144,3 +144,28 @@ test("consignesRecreation : nom, métier, apparence et répliques du PNJ", () =>
   assert.match(texte, /- La bière est bonne\./);
   assert.doesNotMatch(texte, /Merci/);
 });
+
+test("detecteurVoix : voix soutenue au-dessus du bruit de fond, pas les bruits brefs", () => {
+  // niveaux échantillonnés toutes les 50 ms à partir de t = 0
+  const suite = (d, niveaux) => niveaux.map((n, i) => d.ajouter(n, i * 50));
+  const bruit = Array(10).fill(0.005);  // 500 ms de calibrage : bruit 0,005, seuil 0,02
+
+  let d = scene.detecteurVoix();
+  assert.deepEqual(suite(d, [...bruit, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]),
+    [...Array(16).fill(false), true]);  // 300 ms de voix
+  assert.equal(d.bruit, 0.005);
+  assert.equal(d.seuil, 0.02);
+
+  d = scene.detecteurVoix();  // claquement de 100 ms, puis silence
+  assert.ok(!suite(d, [...bruit, 0.5, 0.5, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005]).some(Boolean));
+
+  d = scene.detecteurVoix();  // creux de 100 ms toléré au milieu de la voix
+  assert.equal(suite(d, [...bruit, 0.1, 0.1, 0.1, 0.01, 0.01, 0.1, 0.1]).at(-1), true);
+
+  d = scene.detecteurVoix();  // creux trop long : on repart de zéro
+  assert.equal(suite(d, [...bruit, 0.1, 0.1, 0.1, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1]).at(-1), false);
+
+  d = scene.detecteurVoix();  // pièce silencieuse : le plancher évite de déclencher sur un souffle
+  assert.ok(!suite(d, [...Array(10).fill(0), ...Array(10).fill(0.008)]).some(Boolean));
+  assert.ok(!scene.detecteurVoix().ajouter(1, 0));  // rien pendant le calibrage
+});

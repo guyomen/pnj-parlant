@@ -182,3 +182,22 @@ export function nomFichierExport(npcs, date) {
   return `conversation-${slug}-${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`
     + `-${p2(date.getHours())}h${p2(date.getMinutes())}.txt`;
 }
+
+// Détecteur de prise de parole au micro, alimenté par le niveau (RMS) mesuré à intervalles réguliers.
+// Le bruit de fond est mesuré pendant `calibrage` ms ; ensuite, il y a voix quand le niveau dépasse
+// `facteur` fois ce bruit (et au moins `plancher`) pendant `duree` ms, avec des creux de `trou` ms
+// tolérés (la voix n'est pas continue). Un claquement bref ne déclenche donc rien.
+export function detecteurVoix({ calibrage = 500, facteur = 4, plancher = 0.01, duree = 300, trou = 150 } = {}) {
+  let debut = null, bruit = 0, depuis = null, dernierSon = null;
+  return {
+    get bruit() { return bruit; },
+    get seuil() { return Math.max(plancher, bruit * facteur); },
+    ajouter(niveau, t) {
+      debut ??= t;
+      if (t - debut < calibrage) { bruit = Math.max(bruit, niveau); return false; }
+      if (niveau > this.seuil) { depuis ??= t; dernierSon = t; }
+      else if (depuis !== null && t - dernierSon > trou) depuis = null;
+      return depuis !== null && t - depuis >= duree;
+    },
+  };
+}

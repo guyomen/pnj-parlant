@@ -177,6 +177,10 @@
     </div>
     <div class="bloc options">
       <h2>Options</h2>
+      <label><input type="checkbox" id="optInterrompre"> « Parler » interrompt le PNJ
+        <span class="hint">: vous lui coupez la parole (barre d’espace aussi)</span></label>
+      <label><input type="checkbox" id="optCoupure"> Couper le PNJ dès que vous parlez
+        <span class="hint">: micro ouvert pendant qu’il parle ; casque conseillé, sinon sa propre voix peut le couper</span></label>
       <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
       <div class="sub" id="multiOpts">
         <label><input type="checkbox" id="optIntervention"> Interventions spontanées
@@ -195,7 +199,7 @@
 <script type="module">
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
-         consignesRecreation } from "./js/scene.js";
+         consignesRecreation, detecteurVoix } from "./js/scene.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -278,13 +282,14 @@ async function apiStream(path, body, onItem, signal) {
 }
 
 // --- Options (mémorisées dans ce navigateur) ----------------------------------
-const OPTIONS = ["optMulti", "optIntervention", "optEntree"];
+const OPTIONS = ["optInterrompre", "optCoupure", "optMulti", "optIntervention", "optEntree"];
+const DESACTIVEES = ["optCoupure"];  // à essayer d'abord (écho des haut-parleurs) : désactivée par défaut
 
 function loadOptions() {
   for (const id of OPTIONS) {
     let v = null;
     try { v = localStorage.getItem(id); } catch {}
-    $(id).checked = v === null ? true : v === "1";  // tout est activé par défaut
+    $(id).checked = v === null ? !DESACTIVEES.includes(id) : v === "1";  // le reste est activé par défaut
   }
 }
 
@@ -371,7 +376,10 @@ function setBusy(b) {
   const scene = npcs.length > 0, multi = $("optMulti").checked;
   $("genBtn").disabled = b;
   $("sendBtn").disabled = $("ask").disabled = b || !scene;
-  $("micBtn").disabled = b || !scene || !(cfg.stt_local || recognition);
+  // pendant que le PNJ parle, « Parler » lui coupe la parole (option)
+  const interrompre = !!parole && $("optInterrompre").checked;
+  const ecoute = $("micBtn").getAttribute("aria-pressed") === "true";  // reste cliquable pour finir
+  $("micBtn").disabled = !ecoute && ((b && !interrompre) || !scene || !(cfg.stt_local || recognition));
   $("saveBtn").disabled = b || !npcs.some(n => !n.id);  // tous déjà dans la banque
   $("exportBtn").disabled = !rencontres.length;
   $("importBtn").disabled = b;
@@ -390,7 +398,13 @@ function setBusy(b) {
   $("discuterBtn").hidden = !multi || npcs.length < 2;
   $("discuterBtn").disabled = b;
   for (const btn of document.querySelectorAll("[data-retirer]")) btn.disabled = b;
+  if (!b) { const a = attentesLibre; attentesLibre = []; a.forEach(r => r()); }
 }
+
+// Attend la fin de l'action en cours (utile quand le joueur a coupé la parole au PNJ : sa question
+// part une fois que la réplique interrompue a fini de se ranger dans l'historique).
+let attentesLibre = [];
+const libre = () => busy ? new Promise(r => attentesLibre.push(r)) : Promise.resolve();
 
 // --- Voix des PNJ ------------------------------------------------------------
 // Prise de parole en cours : { ctrl, stop }. Le bouton Stop annule les requêtes (réponse du modèle,
@@ -400,13 +414,73 @@ let parole = null;
 function debutParole() {
   parole = { ctrl: new AbortController(), stop: null };
   $("stopBtn").hidden = false;
+  setBusy(busy);  // « Parler » devient un bouton pour interrompre
+  arreterVeille();
+  veiller(parole);
   return parole;
 }
 
 function finParole(p) {
   if (parole !== p) return;
   parole = null;
+  arreterVeille();
   $("stopBtn").hidden = true;
+  setBusy(busy);
+}
+
+// --- Couper la parole au PNJ en parlant (option) ------------------------------
+// Pendant que le PNJ parle (ou réfléchit), le micro reste ouvert ; dès que le joueur parle assez fort et
+// assez longtemps, le PNJ se tait et l'enregistrement continue avec le même micro : c'est sa question.
+// La suppression d'écho du navigateur retire en principe la voix du PNJ, mais pas forcément celle de
+// la synthèse du système (repli speechSynthesis) : avec des haut-parleurs, mieux vaut un casque.
+let veille = null;  // { p, stream, ctx, timer, arret }
+
+async function veiller(p) {
+  if (!$("optCoupure").checked || !npcs.length || !(cfg.stt_local || recognition)) return;
+  if ($("micBtn").getAttribute("aria-pressed") === "true") return;  // le joueur parle déjà
+  const v = { p, stream: null, ctx: null, timer: null, arret: false };
+  veille = v;
+  try {
+    v.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    if (v.arret) return fermerVeille(v);
+    const rate = v.stream.getAudioTracks()[0]?.getSettings().sampleRate;
+    v.ctx = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext();
+    if (v.ctx.state === "suspended") await v.ctx.resume();
+    if (v.arret) return fermerVeille(v);
+    const analyser = v.ctx.createAnalyser();
+    v.ctx.createMediaStreamSource(v.stream).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    const det = detecteurVoix();
+    v.timer = setInterval(() => {
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const x of samples) sum += x * x;
+      if (!det.ajouter(Math.sqrt(sum / samples.length), performance.now())) return;
+      // Le joueur parle : on garde le micro pour l'enregistrer, on fait taire le PNJ
+      clearInterval(v.timer); v.ctx.close();
+      veille = null;
+      stopNpc();
+      if (cfg.stt_local) listenLocal({ stream: v.stream, bruit: det.bruit });
+      else { v.stream.getTracks().forEach(t => t.stop()); recognition?.start(); }
+    }, 50);
+  } catch (e) {
+    fermerVeille(v);
+    if (veille === v) veille = null;
+    if (e.name === "NotAllowedError") status("Micro refusé : impossible de couper le PNJ en parlant.");
+  }
+}
+
+function fermerVeille(v) {
+  clearInterval(v.timer);
+  v.ctx?.close().catch(() => {});
+  v.stream?.getTracks().forEach(t => t.stop());
+}
+
+function arreterVeille() {
+  if (!veille) return;
+  veille.arret = true;  // getUserMedia encore en attente : le micro sera refermé à son retour
+  fermerVeille(veille);
+  veille = null;
 }
 
 function stopNpc() {
@@ -836,13 +910,16 @@ async function tourDe(n, p, voice) {
 function micPressed(on) {
   $("micBtn").setAttribute("aria-pressed", on ? "true" : "false");
   $("micBtn").textContent = on ? "J’écoute" : "Parler";
+  setBusy(busy);  // le bouton reste cliquable pendant l'écoute, pour la terminer
 }
 
 let stopListening = () => recognition?.stop();
 
-async function listenLocal() {
-  let stream;
-  try {
+// ouvert : { stream, bruit } quand le joueur vient de couper la parole au PNJ (micro déjà ouvert,
+// bruit de fond déjà mesuré, voix déjà entendue)
+async function listenLocal(ouvert = null) {
+  let stream = ouvert?.stream;
+  if (!stream) try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
     status("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).");
@@ -868,7 +945,8 @@ async function listenLocal() {
   const samples = new Float32Array(analyser.fftSize);
   const start = performance.now();
   // Seuil adaptatif : bruit de fond mesuré pendant la première demi-seconde, voix = nettement au-dessus.
-  let heard = false, lastSound = start, peak = 0, noise = 0, nNoise = 0;
+  let heard = !!ouvert, lastSound = start, peak = 0, noise = ouvert?.bruit ?? 0;
+  const calibrage = ouvert ? 0 : 500;
   const timer = setInterval(() => {
     analyser.getFloatTimeDomainData(samples);
     let sum = 0;
@@ -876,9 +954,9 @@ async function listenLocal() {
     const level = Math.sqrt(sum / samples.length);
     const now = performance.now();
     peak = Math.max(peak, level);
-    if (now - start < 500) { noise = Math.max(noise, level); nNoise++; }
+    if (now - start < calibrage) noise = Math.max(noise, level);
     const seuil = Math.max(0.004, noise * 3);
-    if (now - start >= 500 && level > seuil) { heard = true; lastSound = now; }
+    if (now - start >= calibrage && level > seuil) { heard = true; lastSound = now; }
     status(`J’écoute… niveau ${"▮".repeat(Math.min(20, Math.round(level * 200)))}`);
     if ((heard && now - lastSound > 1200) || (!heard && now - start > 8000) || now - start > 30000) stopListening();
   }, 100);
@@ -894,6 +972,7 @@ async function listenLocal() {
       status("Micro muet : aucun signal reçu. Vérifiez le périphérique d’entrée choisi par le navigateur.");
       return;
     }
+    await libre();  // réplique interrompue : elle finit de se ranger avant la question
     setBusy(true); status("Je transcris…");
     let text = "";
     try {
@@ -932,20 +1011,30 @@ if (SR) {
       ? "Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS)."
       : `Reconnaissance vocale : ${ev.error}`);
   };
-  recognition.onend = () => {
+  recognition.onend = async () => {
     micPressed(false);
-    if (finalText) send(finalText);
+    if (!finalText) return;
+    await libre();  // réplique interrompue : elle finit de se ranger avant la question
+    send(finalText);
   };
 }
 
 $("micBtn").onclick = () => {
   if ($("micBtn").getAttribute("aria-pressed") === "true") return stopListening();
-  speechSynthesis?.cancel();
+  if ($("micBtn").disabled) return;
+  stopNpc();  // le joueur coupe la parole au PNJ (le bouton n'est actif pendant qu'il parle qu'avec l'option)
   if (cfg.stt_local) listenLocal();
   else recognition?.start();
 };
 $("stopBtn").onclick = stopNpc;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") stopNpc(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") stopNpc();
+  // Barre d'espace = bouton « Parler », sauf quand on écrit ou qu'un autre bouton a le focus
+  if (e.key === " " && !e.repeat && !e.target.closest?.("input, textarea, select, button, a, [contenteditable]")) {
+    e.preventDefault();
+    $("micBtn").click();
+  }
+});
 $("genBtn").onclick = generate;
 $("loadBtn").onclick = () => loadFromBank(false);
 $("addBtn").onclick = () => loadFromBank(true);
@@ -973,6 +1062,7 @@ $("ici").onclick = (e) => { if (e.target.dataset?.aborder !== undefined) aborder
 $("propOui").onclick = () => { if (proposition) changerLieu(proposition.id); };
 $("propNon").onclick = masquerProposition;
 for (const id of OPTIONS) $(id).onchange = () => { saveOptions(); setBusy(busy); };
+$("optCoupure").addEventListener("change", () => { arreterVeille(); if (parole) veiller(parole); });
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
 $("modelSel").onchange = async () => {
