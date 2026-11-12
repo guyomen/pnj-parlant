@@ -1,5 +1,7 @@
 """Routes du serveur, avec les faux moteurs de conftest.py."""
+import io
 import json
+import zipfile
 
 from pnj_parlant.moteurs import MoteurIndisponible
 
@@ -65,6 +67,56 @@ class TestBanque:
 
 LIEUX = [{"nom": "Auberge du Sanglier", "description": "Une salle enfumée.", "notes_mj": "Une trappe mène aux égouts."},
          {"nom": "Forge de Brom", "description": "Une chaleur d'enfer.", "notes_mj": ""}]
+
+
+class TestUnivers:
+    """Export en zip, import d'un zip ou des fichiers d'un dossier, univers d'exemple."""
+
+    def _remplir(self, client):
+        client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret."})
+        client.put("/api/lieux", json=[{"id": "forge", "nom": "Forge"}])
+        return client.post("/api/bank", json=YSOLDE).get_json()["id"]
+
+    def test_export_puis_import_du_zip(self, client):
+        ysolde = self._remplir(client)
+        reponse = client.get("/api/scenario/export")
+        assert reponse.mimetype == "application/zip"
+        assert "attachment" in reponse.headers["Content-Disposition"]
+        archive = reponse.data
+        noms = sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist())
+        assert noms == sorted(["_lieux.json", "_scenario.json", f"{ysolde}.json"])
+        client.delete(f"/api/bank/{ysolde}")
+        r = client.post("/api/scenario/import", data={"fichiers": (io.BytesIO(archive), "univers.zip")},
+                        content_type="multipart/form-data").get_json()
+        assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
+        assert client.get(f"/api/bank/{ysolde}").get_json()["nom"] == "Ysolde"
+
+    def test_import_des_fichiers_d_un_dossier_en_gardant_les_pnj(self, client):
+        ysolde = self._remplir(client)
+        fichiers = [(io.BytesIO(json.dumps(BROM).encode()), "brom-0002.json"),
+                    (io.BytesIO(b'{"monde": "Brumecote"}'), "_scenario.json")]
+        r = client.post("/api/scenario/import", data={"fichiers": fichiers, "remplacer": "0"},
+                        content_type="multipart/form-data").get_json()
+        assert r["pnj"] == 1 and r["scenario"]
+        assert sorted(n["id"] for n in client.get("/api/bank").get_json()) == sorted([ysolde, "brom-0002"])
+        assert client.get("/api/scenario").get_json()["monde"] == "Brumecote"
+        assert client.get("/api/lieux").get_json()[0]["id"] == "forge"  # lieux non fournis : gardés
+
+    def test_import_refuse(self, client):
+        reponse = client.post("/api/scenario/import", data={"fichiers": (io.BytesIO(b"x"), "faux.zip")},
+                              content_type="multipart/form-data")
+        assert reponse.status_code == 400 and "zip" in reponse.get_json()["error"]
+        assert client.post("/api/scenario/import", data={}, content_type="multipart/form-data").status_code == 400
+
+    def test_exemples(self, client):
+        self._remplir(client)
+        exemples = client.get("/api/exemples").get_json()
+        assert "pre-novice" in [e["id"] for e in exemples]
+        r = client.post("/api/exemples/pre-novice", json={"remplacer": True}).get_json()
+        assert r["pnj"] == 5 and r["lieux"] == 3 and r["ignores"] == []  # _infos.json n'est pas importé
+        assert "Lyse" in [n["nom"] for n in client.get("/api/bank").get_json()]
+        assert client.post("/api/exemples/inconnu", json={}).status_code == 404
+        assert client.post("/api/exemples/..", json={}).status_code == 404
 
 
 class TestLieux:

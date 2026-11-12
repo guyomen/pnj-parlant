@@ -1,6 +1,11 @@
+import io
+import json
+import zipfile
+
 import pytest
 
-from pnj_parlant.banque import Banque
+from pnj_parlant import banque as module_banque
+from pnj_parlant.banque import Banque, lire_zip, nom_de_fichier
 
 
 @pytest.fixture
@@ -70,3 +75,69 @@ class TestLieux:
 
 def test_banque_absente(banque):
     assert banque.liste() == []
+
+
+# --- Export et import d'un scénario complet ----------------------------------------
+
+def _zip(fichiers):
+    tampon = io.BytesIO()
+    with zipfile.ZipFile(tampon, "w") as archive:
+        for nom, contenu in fichiers.items():
+            archive.writestr(nom, contenu if isinstance(contenu, (str, bytes)) else json.dumps(contenu))
+    return tampon.getvalue()
+
+
+def _remplir(banque):
+    banque.enregistrer_scenario({"monde": "Valmer.", "notes_mj": "Le maire ment."})
+    banque.enregistrer_lieux([{"id": "forge", "nom": "Forge"}])
+    banque.ecrire("brom-0001", {"nom": "Brom", "lieu": "forge"})
+
+
+def test_export_puis_import_dans_une_autre_banque(banque, tmp_path):
+    _remplir(banque)
+    archive = banque.exporter_zip()
+    assert sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist()) == ["_lieux.json", "_scenario.json", "brom-0001.json"]
+    autre = Banque(tmp_path / "autre")
+    r = autre.importer(lire_zip(archive))
+    assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
+    assert autre.scenario() == banque.scenario() and autre.lieux() == banque.lieux()
+    assert autre.lire("brom-0001")["nom"] == "Brom"
+
+
+def test_import_remplace_ou_garde_les_pnj(banque):
+    _remplir(banque)
+    banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'})
+    assert [n["nom"] for n in banque.liste()] == ["Ysolde"]
+    assert banque.scenario() == {"monde": "", "notes_mj": ""} and banque.lieux() == []  # absents : vidés
+    _remplir(banque)
+    banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'}, remplacer=False)
+    assert [n["nom"] for n in banque.liste()] == ["Brom", "Ysolde"]
+    assert banque.scenario()["monde"] == "Valmer." and len(banque.lieux()) == 1  # absents : gardés
+
+
+def test_import_fichiers_douteux(banque):
+    r = banque.importer({"Mon PNJ.json": '{"nom": "Gaspard"}'.encode(),  # renommé à la main : nouvel identifiant
+                         "abime.json": b"{pas du json", "sans-nom.json": b'{"metier": "x"}',
+                         "_autre.json": b"{}", "_scenario.json": "\ufeff{\"monde\": \"Brumecôte\"}".encode()})
+    assert r["ignores"] == ["_autre.json", "abime.json", "sans-nom.json"]
+    assert [n["id"].startswith("gaspard-") for n in banque.liste()] == [True]
+    assert banque.scenario()["monde"] == "Brumecôte"  # BOM du Bloc-notes accepté
+    with pytest.raises(ValueError):
+        banque.importer({"lisez-moi.json": b"[]"})
+
+
+def test_lire_zip_aplatit_et_protege(monkeypatch):
+    assert set(lire_zip(_zip({"pre-novice/_lieux.json": [], "pre-novice/a-1.json": {"nom": "A"},
+                              "__MACOSX/._a-1.json": "x", "lisez-moi.txt": "x"}))) == {"_lieux.json", "a-1.json"}
+    with pytest.raises(ValueError, match="Deux fichiers"):
+        lire_zip(_zip({"un/a-1.json": {}, "deux/a-1.json": {}}))
+    with pytest.raises(ValueError, match="zip valide"):
+        lire_zip(b"pas un zip")
+    monkeypatch.setattr(module_banque, "IMPORT_MAX_OCTETS", 10)
+    with pytest.raises(ValueError, match="volumineuse"):
+        lire_zip(_zip({"a-1.json": {"nom": "A" * 50}}))
+
+
+def test_nom_de_fichier_sans_chemin():
+    assert nom_de_fichier("../../etc/a-1.json") == "a-1.json"
+    assert nom_de_fichier(r"C:\univers\a-1.json") == "a-1.json"

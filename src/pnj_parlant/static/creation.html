@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Préparation des PNJ</title>
+<title>Préparer l’univers</title>
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
@@ -45,12 +45,21 @@
   .lieu-fiche .titre input { flex: 1; font-weight: 700; }
   .lieu-fiche .titre button { padding: .3rem .7rem; font-size: .9rem; }
   .lieu-fiche textarea { margin-top: .4rem; }
+  .barre { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+  .barre a { color: var(--muted); text-decoration: none; font-weight: 500; }
+  .barre a:hover { color: var(--glass); }
+  .sous-titre { font: 400 1.15rem var(--display); margin: 1.4rem 0 .2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .actions label.check { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-weight: 400; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Préparation des PNJ</h1>
-  <a class="link" href="/">← Retour au jeu</a>
+  <h1>Préparer l’univers</h1>
+  <nav class="barre" aria-label="Navigation">
+    <a href="/">Accueil</a>
+    <a href="/#jeu">Partie</a>
+    <a href="/#options">Options</a>
+  </nav>
 </header>
 <main>
   <div>
@@ -65,6 +74,17 @@
         <button id="saveScenarioBtn">Enregistrer le scénario</button>
         <span class="status" id="scenarioStatus"></span>
       </div>
+      <h3 class="sous-titre">Partager l’univers</h3>
+      <p class="hint">Scénario, lieux et PNJ de la banque, dans un seul fichier zip.</p>
+      <div class="actions">
+        <button class="ghost" id="exportUniversBtn">Exporter l’univers</button>
+        <button class="ghost" id="importZipBtn">Importer un zip</button>
+        <button class="ghost" id="importDossierBtn">Importer un dossier</button>
+        <label class="check"><input type="checkbox" id="garderPnj"> Garder les PNJ actuels</label>
+        <input type="file" id="importZip" accept=".zip,application/zip" hidden>
+        <input type="file" id="importDossier" webkitdirectory multiple hidden>
+      </div>
+      <p class="status" id="universStatus"></p>
     </section>
 
     <section class="panel">
@@ -149,7 +169,8 @@
   </div>
 </main>
 
-<script>
+<script type="module">
+import { confirmationImport, exporter, importerFichiers, resumeImport } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "lieu", "apparence", "personnalite",
@@ -236,12 +257,45 @@ async function loadScenario() {
   const s = await api("/api/scenario").catch(() => ({}));
   $("monde").value = s.monde || "";
   $("notes").value = s.notes_mj || "";
+  scenarioCharge = { monde: $("monde").value, notes_mj: $("notes").value };
 }
 async function saveScenario() {
   try {
-    await api("/api/scenario", { monde: $("monde").value, notes_mj: $("notes").value }, "PUT");
+    scenarioCharge = await api("/api/scenario", { monde: $("monde").value, notes_mj: $("notes").value }, "PUT");
+    $("monde").value = scenarioCharge.monde;
+    $("notes").value = scenarioCharge.notes_mj;
     $("scenarioStatus").textContent = "Scénario enregistré.";
   } catch (e) { $("scenarioStatus").textContent = e.message; }
+}
+
+// --- Partager l'univers (export zip, import zip ou dossier) ----------------------
+let scenarioCharge = { monde: "", notes_mj: "" };  // dernière version enregistrée (modifications en attente ?)
+const nonEnregistre = () => lieuxDirty || $("monde").value !== scenarioCharge.monde
+                            || $("notes").value !== scenarioCharge.notes_mj;
+
+$("exportUniversBtn").onclick = () => {
+  if (nonEnregistre()) {
+    $("universStatus").textContent = "Enregistrez d’abord le scénario et les lieux : l’export prend la version enregistrée.";
+    return;
+  }
+  exporter();
+  $("universStatus").textContent = "";
+};
+$("importZipBtn").onclick = () => $("importZip").click();
+$("importDossierBtn").onclick = () => $("importDossier").click();
+for (const id of ["importZip", "importDossier"]) {
+  $(id).onchange = async () => {
+    const fichiers = [...$(id).files];
+    $(id).value = "";  // pour pouvoir réimporter le même fichier
+    if (!fichiers.length || !confirm(confirmationImport(bank.length, $("garderPnj").checked))) return;
+    try {
+      const r = await importerFichiers(fichiers, $("garderPnj").checked);
+      await Promise.all([loadScenario(), loadLieux(), refreshBank()]);
+      lieuxDirty = false;
+      if (current.id && !bank.some(n => n.id === current.id)) delete current.id;  // fiche retirée de la banque
+      $("universStatus").textContent = resumeImport(r);
+    } catch (e) { $("universStatus").textContent = e.message; }
+  };
 }
 
 // --- Lieux -------------------------------------------------------------------

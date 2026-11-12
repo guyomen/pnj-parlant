@@ -4,13 +4,21 @@ Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiab
     pnj/_scenario.json      {"monde": ..., "notes_mj": ...}  (« _ » : jamais pris pour un PNJ)
     pnj/_lieux.json         [{"id", "nom", "description", "notes_mj"}, ...]
     pnj/<nom>-<hex>.json    fiche d'un PNJ
+
+Un scénario complet (scénario, lieux, PNJ) s'exporte en zip et s'importe depuis un zip ou un dossier.
 """
+import io
 import json
 import re
 import secrets
 import unicodedata
+import zipfile
+from pathlib import PurePosixPath
 
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
+SCENARIO, LIEUX = "_scenario.json", "_lieux.json"
+IMPORT_MAX_FICHIERS = 500
+IMPORT_MAX_OCTETS = 10_000_000  # contenu décompressé : protège contre les archives piégées
 
 
 def sans_accents(texte):
@@ -132,3 +140,75 @@ class Banque:
             return False
         self.chemin(npc_id).unlink()
         return True
+
+    # --- Export et import d'un scénario complet ------------------------------------
+    def exporter_zip(self):
+        """Archive zip à plat : _scenario.json, _lieux.json et une fiche JSON par PNJ."""
+        tampon = io.BytesIO()
+        with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
+            for f in sorted(self.dossier.glob("*.json")) if self.dossier.exists() else []:
+                if f.name in (SCENARIO, LIEUX) or NPC_ID.match(f.stem):
+                    archive.write(f, f.name)
+        return tampon.getvalue()
+
+    def importer(self, fichiers, remplacer=True):
+        """Copie un scénario dans la banque. `fichiers` : {nom de fichier: octets} (voir `lire_zip`).
+        remplacer : les PNJ actuels sont supprimés et le scénario et les lieux absents de l'import sont vidés ;
+        sinon les PNJ importés s'ajoutent (même identifiant : remplacé) et seuls le scénario et les lieux fournis
+        remplacent les actuels. Tout est vérifié avant d'écrire quoi que ce soit.
+        Renvoie {"scenario": bool, "lieux": nombre, "pnj": nombre, "ignores": [noms]}."""
+        scenario, lieux, pnjs, ignores = None, None, {}, []
+        for nom, octets in fichiers.items():
+            try:
+                data = json.loads(octets.decode("utf-8-sig"))
+            except (UnicodeDecodeError, ValueError):
+                ignores.append(nom)
+                continue
+            stem = nom[:-5] if nom.lower().endswith(".json") else nom
+            if nom == SCENARIO and isinstance(data, dict):
+                scenario = data
+            elif nom == LIEUX and isinstance(data, list):
+                lieux = data
+            elif not stem.startswith("_") and isinstance(data, dict) and str(data.get("nom") or "").strip():
+                # fichier renommé à la main : il reçoit un identifiant valide, tiré du nom du PNJ
+                npc_id = stem if NPC_ID.match(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
+                pnjs[npc_id] = data
+            else:
+                ignores.append(nom)
+        if scenario is None and lieux is None and not pnjs:
+            raise ValueError("Aucun scénario, lieu ni PNJ reconnu dans les fichiers.")
+
+        if remplacer:
+            for item in self.liste():
+                self.supprimer(item["id"])
+        if scenario is not None or remplacer:
+            self.enregistrer_scenario(scenario or {})
+        nb_lieux = len(self.enregistrer_lieux(lieux or [])) if lieux is not None or remplacer else len(self.lieux())
+        for npc_id, npc in pnjs.items():
+            self.ecrire(npc_id, npc)
+        return {"scenario": scenario is not None, "lieux": nb_lieux, "pnj": len(pnjs), "ignores": sorted(ignores)}
+
+
+def nom_de_fichier(chemin):
+    """« pre-novice/lyse.json » ou « C:\\x\\lyse.json » → « lyse.json » : seul le nom compte, jamais le chemin."""
+    return PurePosixPath(str(chemin).replace("\\", "/")).name
+
+
+def lire_zip(octets):
+    """{nom: octets} des fichiers .json d'une archive (sous-dossiers aplatis), avec des limites de taille."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(octets))
+    except zipfile.BadZipFile as e:
+        raise ValueError("Ce fichier n'est pas une archive zip valide.") from e
+    with archive:
+        infos = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(".json")
+                 and "__MACOSX" not in i.filename]
+        if len(infos) > IMPORT_MAX_FICHIERS or sum(i.file_size for i in infos) > IMPORT_MAX_OCTETS:
+            raise ValueError("Archive trop volumineuse pour un scénario.")
+        fichiers = {}
+        for info in infos:
+            nom = nom_de_fichier(info.filename)
+            if nom in fichiers:
+                raise ValueError(f"Deux fichiers « {nom} » dans l'archive : un seul scénario à la fois.")
+            fichiers[nom] = archive.read(info)
+        return fichiers

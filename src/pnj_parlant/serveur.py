@@ -12,6 +12,9 @@ Routes :
     POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu} (NDJSON, phrase par phrase)
     GET|PUT /api/lieux                lieux du scénario
     GET|PUT /api/scenario             univers et notes du MJ
+    GET  /api/scenario/export         scénario complet (scénario, lieux, PNJ) en zip
+    POST /api/scenario/import         copie un scénario dans la banque (zip ou fichiers JSON d'un dossier)
+    GET  /api/exemples, POST /api/exemples/<id>   univers d'exemple fournis : liste, chargement dans la banque
     GET|POST /api/bank, GET|PUT|DELETE /api/bank/<id>   banque de PNJ
     POST /api/voice                   autre voix pour un PNJ ; GET /api/voices : voix du moteur
     GET|PUT /api/voice-engine         moteur de synthèse (jusqu'au redémarrage)
@@ -26,18 +29,33 @@ import mimetypes
 import os
 import signal
 import threading
+import time
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_file
 
 from . import config as configuration
 from . import dialogue, fiches, systeme, texte, voix
-from .banque import Banque
+from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier
 from .moteurs import MoteurIndisponible, Moteurs
 from .stt import Reconnaissance
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
+EXEMPLES = Path(__file__).parent / "exemples"  # un dossier par univers d'exemple, au format de la banque
+INFOS = "_infos.json"                          # {nom, resume} : présentation de l'exemple, jamais importée
+
+
+def exemples(dossier=EXEMPLES):
+    """[{id, nom, resume}] des univers d'exemple fournis avec l'application."""
+    liste = []
+    for d in sorted(p for p in dossier.iterdir() if p.is_dir()) if dossier.is_dir() else []:
+        try:
+            infos = json.loads((d / INFOS).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            infos = {}
+        liste.append({"id": d.name, "nom": infos.get("nom", d.name), "resume": infos.get("resume", "")})
+    return liste
 
 # Sous Windows, le registre associe parfois .js à text/plain : le navigateur refuse alors les modules JS.
 mimetypes.add_type("text/javascript", ".js")
@@ -145,6 +163,43 @@ def create_app(cfg, **moteurs):
     @app.put("/api/scenario")
     def scenario_put():
         return jsonify(ctx.banque.enregistrer_scenario(request.json or {}))
+
+    @app.get("/api/scenario/export")
+    def scenario_export():
+        nom = time.strftime("scenario-%Y-%m-%d-%Hh%M.zip")
+        return send_file(io.BytesIO(ctx.banque.exporter_zip()), mimetype="application/zip",
+                         as_attachment=True, download_name=nom)
+
+    @app.post("/api/scenario/import")
+    def scenario_import():
+        """Champ « fichiers » : une archive zip, ou les fichiers .json d'un dossier ; « remplacer » : "0" pour
+        garder les PNJ actuels (voir Banque.importer)."""
+        fichiers = {}
+        try:
+            for f in request.files.getlist("fichiers"):
+                octets = f.read(IMPORT_MAX_OCTETS + 1)
+                if len(octets) > IMPORT_MAX_OCTETS:
+                    return erreur(f"« {f.filename} » est trop volumineux pour un scénario.", 413)
+                if (f.filename or "").lower().endswith(".zip"):
+                    fichiers.update(lire_zip(octets))
+                else:
+                    fichiers[nom_de_fichier(f.filename)] = octets
+            return jsonify(ctx.banque.importer(fichiers, remplacer=request.form.get("remplacer", "1") != "0"))
+        except ValueError as e:
+            return erreur(str(e), 400)
+
+    @app.get("/api/exemples")
+    def exemples_liste():
+        return jsonify(exemples())
+
+    @app.post("/api/exemples/<exemple_id>")
+    def exemple_charger(exemple_id):
+        """Copie l'univers d'exemple dans la banque ; {remplacer: false} garde les PNJ actuels."""
+        dossier = EXEMPLES / exemple_id
+        if not NPC_ID.match(exemple_id) or not dossier.is_dir():
+            return erreur("Exemple introuvable.", 404)
+        fichiers = {f.name: f.read_bytes() for f in dossier.glob("*.json") if f.name != INFOS}
+        return jsonify(ctx.banque.importer(fichiers, remplacer=(request.get_json(silent=True) or {}).get("remplacer", True)))
 
     @app.get("/api/lieux")
     def lieux_get():

@@ -169,3 +169,19 @@ test("detecteurVoix : voix soutenue au-dessus du bruit de fond, pas les bruits b
   assert.ok(!suite(d, [...Array(10).fill(0), ...Array(10).fill(0.008)]).some(Boolean));
   assert.ok(!scene.detecteurVoix().ajouter(1, 0));  // rien pendant le calibrage
 });
+
+// --- univers.js : messages de l'import et de l'accueil ---------------------------------
+const sourceUnivers = readFileSync(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url), "utf8");
+const univers = await import(`data:text/javascript;base64,${Buffer.from(sourceUnivers).toString("base64")}`);
+
+test("univers : fichiers importables, résumés et confirmation", () => {
+  const noms = univers.fichiersImportables([{ name: "a.json" }, { name: "B.ZIP" }, { name: "photo.png" }]).map(f => f.name);
+  assert.deepEqual(noms, ["a.json", "B.ZIP"]);
+  assert.equal(univers.resumeImport({ scenario: true, lieux: 3, pnj: 1, ignores: [] }), "Univers chargé : 3 lieux et 1 PNJ.");
+  assert.equal(univers.resumeImport({ scenario: false, lieux: 1, pnj: 5, ignores: ["x.json"] }),
+    "Univers chargé : 1 lieu et 5 PNJ, sans texte d’univers. Fichiers ignorés : x.json.");
+  assert.equal(univers.resumeUnivers(2, 0), "Univers actuel : 2 lieux et 0 PNJ.");
+  assert.match(univers.resumeUnivers(0, 0), /^Aucun univers chargé/);
+  assert.match(univers.confirmationImport(4, false), /4 PNJ de la banque seront remplacés/);
+  assert.match(univers.confirmationImport(4, true), /s’ajouteront/);
+});
