@@ -14,10 +14,11 @@ Modules :
     moteurs    modèles de langage : Claude ou Ollama
     voix       synthèse vocale : Piper, Pocket TTS ou Edge, et attribution des voix
     stt        reconnaissance vocale : faster-whisper
+    portraits  portraits des PNJ (facultatif) : Stable Diffusion Turbo ou Pollinations
     banque     banque de PNJ et scénario (fichiers JSON)
     systeme    état de la machine : carte graphique, Ollama
     serveur    application Flask (routes)
     generer    remplissage de la banque en lot
 """
 
-__version__ = "0.2.0"
+__version__ = "1.0.0"  # même valeur que dans pyproject.toml (vérifié par les tests)

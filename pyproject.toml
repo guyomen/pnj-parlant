@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pnj-parlant"
-version = "0.2.0"
+version = "1.0.0"
 description = "Générateur de PNJ parlants pour jeu de rôle médiéval-fantastique, avec voix de synthèse"
 readme = "README.md"
 requires-python = ">=3.11"          # tomllib

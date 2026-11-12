@@ -54,3 +54,12 @@ class TestGenerer:
         messages = []
         assert generer(ctx, 5, afficher=messages.append) == 0
         assert messages == ["[1/5] arrêt : Docker arrêté."]
+
+
+def test_version_identique_dans_pyproject():
+    import tomllib
+    from pathlib import Path
+
+    import pnj_parlant
+    with open(Path(__file__).parents[1] / "pyproject.toml", "rb") as f:
+        assert tomllib.load(f)["project"]["version"] == pnj_parlant.__version__
