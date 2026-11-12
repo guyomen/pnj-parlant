@@ -28,7 +28,8 @@ src/pnj_parlant/
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (jeu), creation.html, js/scene.js (fonctions pures testées)
+  static/            # index.html (accueil, partie, options), creation.html, js/scene.js + js/univers.js (testés)
+  exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
 lancer.bat, docker-compose.yml  # lancement Windows, Ollama dans Docker
@@ -41,7 +42,7 @@ Moteurs choisis dans `config.toml` : `[moteurs] creation` / `dialogue` = `"claud
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
 - `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage.
-- `web.md` : page de jeu (état, dialogue, lieux, export/import, micro et interruption).
+- `web.md` : vues (accueil, partie, options), conversation gardée, dialogue, lieux, univers, micro.
 - `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance.
 - `systeme.md` : dépendances, config.toml, lanceurs, Docker/Ollama, documentation.
 - `tests.md` : pytest, node, e2e et ses pièges.

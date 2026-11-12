@@ -38,7 +38,7 @@ const simulations = `
       this.onend && this.onend();
     }, 20);
   };`;
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
+await cdp("Page.navigate", { url: "http://127.0.0.1:5917/#jeu" });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await js(simulations);  // après le chargement : le script d'initialisation de page ne prend pas en Edge sans écran
 verifier("menu des lieux rempli (aucun + 2 lieux)", await quand(`document.querySelectorAll("#lieuSel option").length === 3`));
@@ -112,6 +112,28 @@ verifier("« Parler » coupe le PNJ et transmet la question", await quand(`(() =
   const l = ${lignes}, i = l.findIndex(t => t.includes("Pardon, je vous coupe."));
   return i > 0 && !l[i - 1].includes("Que veux-tu") && l.slice(i + 1).some(t => t.includes("Que veux-tu"));
 })()`) && await js(`window.__ecoute === 1 && document.getElementById("stopBtn").hidden`));
+
+// Accueil : la conversation en cours est proposée à la reprise ; l'exemple se charge ; un PNJ au hasard démarre
+await quand(`!document.getElementById("ask").disabled`);
+await js(`location.hash = ""`);
+verifier("accueil affiché, conversation à reprendre", await quand(`document.body.dataset.vue === "accueil" && !document.getElementById("accReprendreBtn").hidden && document.querySelector("[data-exemple='pre-novice']")`));
+await js(`document.querySelector("[data-exemple='pre-novice']").click()`);
+verifier("exemple Pré-Novice chargé", await quand(`document.getElementById("accStatus").textContent === "Univers chargé : 3 lieux et 5 PNJ." && document.getElementById("universActuel").textContent.includes("3 lieux et 5 PNJ")`));
+await js(`document.getElementById("accHasardBtn").click()`);
+const pnjPreNovice = `["Rosalie Tampon", "Bertrand le Prudent", "Lyse", "Baron Grimmoire", "Oscar"]`;
+verifier("PNJ au hasard : partie lancée", await quand(`document.body.dataset.vue === "jeu" && ${pnjPreNovice}.includes(document.querySelector(".pnj-card h1")?.textContent) && document.querySelectorAll("#log .line").length === 1`));
+await quand(`!document.getElementById("ask").disabled`);  // salutation entièrement affichée (elle arrive morceau par morceau)
+const salutation = await js(`document.querySelector("#log .line .text").textContent`);
+
+// Rechargement de la page : la conversation est toujours là
+await cdp("Page.reload");
+await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
+await js(simulations);
+verifier("conversation reprise après rechargement", await quand(`${pnjPreNovice}.includes(document.querySelector(".pnj-card h1")?.textContent) && document.querySelector("#log .line .text")?.textContent === ${JSON.stringify(salutation)}`));
+
+// Options : accessibles depuis la partie, retour à la partie
+await js(`location.hash = "options"`);
+verifier("options affichées, retour vers la partie", await quand(`document.body.dataset.vue === "options" && document.getElementById("optionsRetour").getAttribute("href") === "#jeu" && document.getElementById("optInterrompre").offsetParent !== null`));
 
 console.log(resultats.join("\n"));
 // Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)

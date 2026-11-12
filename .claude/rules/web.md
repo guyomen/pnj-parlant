@@ -7,7 +7,12 @@ paths:
 
 # Pages web (index.html, creation.html, js/scene.js)
 
-- `index.html` : page de jeu, un seul `<script type="module">`. `creation.html` : scénario, lieux, fiches, banque.
+- `index.html` : un seul `<script type="module">` et trois vues selon l'adresse (`afficherVue`, `body[data-vue]`) :
+  accueil `/` (charger un univers, PNJ au hasard ou inventé, créer son univers), partie `/#jeu`, options `/#options`
+  (cases à cocher, modèle local, état machine ; « Retour » vers la vue d'origine). Une seule page : le clic de
+  l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
+- `creation.html` (module ES) : scénario, lieux, fiches, banque, export/import de l'univers.
+- `js/univers.js` : import (exemple, zip, dossier `webkitdirectory`), export, messages ; partagé par les deux pages.
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans
   `tests/js/scene.test.mjs` ; index.html n'est testé que par l'e2e.
 - Interface et commentaires en français ; texte de l'interface avec typographie française (« », ’, espaces).
@@ -19,6 +24,9 @@ paths:
 - `parole` (`debutParole` / `finParole` / `stopNpc`) : prise de parole en cours, `{ctrl: AbortController, stop}`.
   Stop/Échap annule requêtes et son ; une réplique interrompue est raccourcie dans `history` à ce qui a été dit.
 - Options mémorisées dans localStorage (`OPTIONS`, `DESACTIVEES` = désactivées par défaut).
+- Conversation gardée dans localStorage (`CLE_PARTIE` : rencontres, scène, history, lieu, positions, journal
+  affiché, tokens) : `sauverPartie` à chaque `setBusy(false)`, `retirer` et `pagehide` ; `restaurerPartie` au
+  chargement (après les lieux et la banque ; aucune sauvegarde avant, `partieRestauree`).
 
 ## Dialogue côté navigateur
 - Répond le PNJ cité (`interpelles` : nom ou métier), sinon `dernier` ; un PNJ questionné par un autre répond juste

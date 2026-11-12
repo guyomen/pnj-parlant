@@ -38,14 +38,22 @@ Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `h
 
 ## Jouer
 
-Sur la page de jeu, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
+L'**accueil** (http://localhost:5000) propose trois entrées :
+
+- **Charger un univers** : un exemple fourni en un clic (voir [Pré-Novice](#univers-dexemple--pré-novice)), ou un univers exporté (fichier zip, ou son dossier décompressé). Le chargement remplace l'univers, les lieux et les PNJ de la banque, sauf si « Garder les PNJ actuels » est cochée.
+- **Discuter avec un PNJ** : un PNJ de l'univers au hasard, ou un PNJ inventé par le modèle d'après un métier.
+- **Créer son univers** : la page de préparation (voir plus bas).
+
+La barre du haut mène à l'accueil, à la **partie**, aux **options** et à la préparation. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
+
+Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
 
 - **Stop** (ou Échap) fait taire le PNJ ; il ne se souvient que de ce qu'il a eu le temps de dire.
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
-- En haut de la page : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle. Avec un modèle local, un menu permet d'en changer en cours de partie, et le bas du panneau affiche l'état d'Ollama et de la carte graphique.
+- Sous la discussion : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle.
 
-Options, mémorisées par le navigateur :
+La page **Options** (mémorisées par le navigateur) règle aussi le modèle local, qu'on peut changer en cours de partie, et affiche l'état d'Ollama et de la carte graphique :
 
 | Option | Effet |
 |---|---|
@@ -57,7 +65,7 @@ Options, mémorisées par le navigateur :
 
 ## Préparer le scénario et les PNJ (pour jouer sans réseau)
 
-Ouvrez **http://localhost:5000/creation.html** (lien « Préparer les PNJ et le scénario » sur la page de jeu). La création passe par Claude : faites-la avant de partir, avec le réseau.
+Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par Claude : faites-la avant de partir, avec le réseau.
 
 1. **Scénario**, en deux parties :
    - **Univers** : lieux, factions, personnages connus, événements. Connu de tous les PNJ, il est aussi transmis pendant les dialogues.
@@ -80,7 +88,17 @@ En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouven
 case « Vous accompagne » est cochée ; on les retrouve là où on les a laissés. Chaque PNJ sait où il se trouve
 et connaît les lieux du scénario.
 
-Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario, puis un fichier JSON par PNJ, lisible et modifiable à la main. Copier ce dossier suffit pour emporter un scénario complet.
+Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario, `_lieux.json` pour les lieux, puis un fichier JSON par PNJ, lisible et modifiable à la main.
+
+### Partager un univers
+
+Dans la page de préparation, **Exporter l'univers** télécharge un zip (scénario, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque.
+
+### Univers d'exemple : Pré-Novice
+
+Pour essayer sans rien préparer, l'accueil propose **Exemple : Pré-Novice**, un univers comique prêt à jouer : une ville d'aventuriers débutants fauchés, Lyse, la déesse du Feu que personne ne croit (ses miracles servent surtout à nettoyer les fours, d'où leur nom de pyro-Lyse), et un général du Roi Démon qui voudrait surtout dormir. Il comprend 3 lieux (la guilde, le temple, le fort de la colline) et 5 PNJ, sans voix enregistrée : chaque PNJ reçoit une voix de son genre, toujours la même, selon le moteur de voix de la machine. Les notes du MJ, dans la page de préparation, donnent l'intrigue et ses solutions.
+
+Les exemples sont dans [`src/pnj_parlant/exemples/`](src/pnj_parlant/exemples/), un dossier par univers au format de `pnj/`, plus un `_infos.json` (nom et résumé affichés sur l'accueil).
 
 Pour remplir la banque en lot (le scénario est pris en compte) :
 
@@ -191,7 +209,8 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (jeu), creation.html, js/scene.js
+  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js
+  exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows
 scripts/ecran.sh            libère la mémoire vidéo sous Linux
@@ -205,7 +224,7 @@ le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/co
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest                      # tests Python
 node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
-python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption)
+python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
 ```
 
 ## Pistes pour la suite

@@ -7,6 +7,7 @@ paths:
   - "src/pnj_parlant/moteurs.py"
   - "src/pnj_parlant/banque.py"
   - "src/pnj_parlant/generer.py"
+  - "src/pnj_parlant/exemples/**"
   - "src/pnj_parlant/static/**"
   - "tests/test_api.py"
   - "tests/test_dialogue.py"
@@ -39,6 +40,11 @@ Serveur sans état : l'historique vit dans le navigateur.
   seulement, jamais envoyées pendant les dialogues).
 - `GET|PUT /api/lieux` (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. Description connue de tous les PNJ
   et lue par le narrateur ; notes du MJ pour la création seulement.
+- `GET /api/scenario/export` : zip à plat (`_scenario.json`, `_lieux.json`, fiches). `POST /api/scenario/import`
+  (multipart `fichiers` : un zip ou les .json d'un dossier ; `remplacer` "0" garde les PNJ) → `Banque.importer` :
+  tout est vérifié avant d'écrire (`lire_zip` : noms aplatis, taille et nombre limités ; fichier renommé à la main →
+  nouvel identifiant). `GET /api/exemples`, `POST /api/exemples/<id> {remplacer}` : univers de
+  `src/pnj_parlant/exemples/<id>/` (`_infos.json` = nom et résumé pour l'accueil, jamais importé).
 - `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>` ; `POST /api/voice` (autre voix pour un PNJ, `eviter`) ;
   `GET /api/voices`, `GET|PUT /api/voice-engine` (page de création ; voir la règle voix).
 - `POST /api/tts {text, voice, narrateur, eviter}` : 503 en cas d'échec → le navigateur utilise `speechSynthesis`.

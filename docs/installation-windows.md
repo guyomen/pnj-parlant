@@ -162,7 +162,9 @@ Ouvrez ensuite **http://localhost:5000** dans Chrome ou Edge, sur ce PC. Si vous
 
 Au premier dialogue, le modèle se charge sur la carte graphique : la première réplique peut prendre une dizaine de secondes, les suivantes sont rapides. Pour le vérifier, `docker compose exec ollama ollama ps` doit afficher **100% GPU**.
 
-Les commandes de la page de jeu (Stop, couper la parole au PNJ, scène à plusieurs PNJ, export de la conversation…) sont décrites dans le [README](../README.md#jouer). Pour couper le PNJ simplement en parlant, prenez un casque.
+**Premier essai** : sur l'accueil, cliquez sur **Exemple : Pré-Novice** pour charger un univers prêt à jouer (3 lieux, 5 PNJ), puis sur **Un PNJ de l'univers au hasard**.
+
+L'accueil, la partie, les options (couper la parole au PNJ, scène à plusieurs PNJ…) et le partage d'un univers en zip sont décrits dans le [README](../README.md#jouer). Pour couper le PNJ simplement en parlant, prenez un casque.
 
 ### Jouer depuis les téléphones des amis
 
@@ -179,7 +181,7 @@ Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un r
 
 Avec le réseau, vérifiez que tout est sur le PC :
 
-- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `pnj-banque 20`. La création passe par Claude, donc demande le réseau.
+- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `pnj-banque 20`. La création passe par Claude, donc demande le réseau. Pour un premier essai, chargez plutôt l'univers d'exemple depuis l'accueil (voir [Lancer une partie](#5-lancer-une-partie)).
 - [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
 - [ ] Les voix sont téléchargées : avec `moteur = "pocket"`, l'application a été lancée une fois avec le réseau et la fenêtre n'affiche aucune « voix indisponible » ; avec `moteur = "piper"`, les voix sont dans `voices\`. Le moteur `edge` ne marche pas sans réseau.
 - [ ] Le modèle de reconnaissance vocale est dans `modeles-stt\small\` (étape 2.4), et `config.toml` contient la section `[reconnaissance]` avec `moteur = "local"`.

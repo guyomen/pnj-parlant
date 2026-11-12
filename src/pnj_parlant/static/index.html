@@ -26,6 +26,35 @@
     .npc, .reglages { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
   }
 
+  /* Accueil (adresse « / ») ou table de jeu (« /#jeu ») : une seule page, pour que le clic de l'accueil
+     autorise aussitôt le son du PNJ */
+  body:not([data-vue=jeu]) main, body:not([data-vue=accueil]) #accueil,
+  body:not([data-vue=options]) #options { display: none; }
+  .barre { max-width: 100rem; margin: 0 auto; padding: .9rem 1.5rem 0; display: flex; gap: 1.25rem; flex-wrap: wrap; }
+  body:not([data-vue=jeu]) .barre { max-width: 66rem; }  /* alignée sur le contenu de l'accueil et des options */
+  .barre a { color: var(--muted); text-decoration: none; font-weight: 500; padding-bottom: .15rem;
+             border-bottom: 2px solid transparent; }
+  .barre a:hover { color: var(--glass); }
+  .barre a[aria-current=page] { color: var(--glass); border-bottom-color: var(--glass); }
+  #accueil, #options { max-width: 66rem; margin: 0 auto; padding: 1.5rem 1.5rem 2.5rem; }
+  #accueil h1 { font: 400 clamp(2.4rem, 6vw, 3.6rem)/1.05 var(--display); margin: 0; }
+  #options h1 { font: 400 2.2rem var(--display); margin: 0 0 1.25rem; }
+  #modelRow { align-items: center; }
+  #modelRow[hidden] { display: none; }
+  #accueil .accroche { font-size: 1.15rem; color: var(--muted); margin: .5rem 0 0; }
+  #accueil .univers-actuel { margin: 1rem 0 1.5rem; font-style: italic; color: var(--glass); }
+  .cartes { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); align-items: start; }
+  .carte { background: var(--surface); border-radius: 10px; padding: 1.25rem 1.5rem;
+           display: flex; flex-direction: column; gap: .75rem; }
+  .carte h2 { font: 400 1.5rem var(--display); margin: 0; }
+  .carte .hint { color: var(--muted); margin: 0; }
+  .carte .row { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .carte .gen { margin-top: 0; }
+  .carte label.check { display: flex; gap: .4rem; align-items: center; color: var(--muted); }
+  .carte .status { min-height: 1.4rem; color: var(--muted); font-style: italic; margin: 0; }
+  .exemple { text-align: left; display: flex; flex-direction: column; gap: .2rem; }
+  .exemple small { font-weight: 400; opacity: .9; }
+
   /* Préparation et réglages : création, banque, options, état de la machine */
   .reglages { background: var(--surface); border-radius: 10px; padding: 1.25rem; }
   .reglages h2 { font: 400 1.3rem var(--display); margin: 0 0 .6rem; }
@@ -81,8 +110,7 @@
   /* Options */
   .options label { display: block; margin-bottom: .4rem; cursor: pointer; }
   .options .sub { margin-left: 1.6rem; }
-  .options .sub[hidden], .options .gen[hidden] { display: none; }
-  .options .gen { margin-top: .4rem; }
+  .options .sub[hidden] { display: none; }
   .options .hint { color: var(--muted); font-size: .9rem; }
   .actions { display: flex; flex-direction: column; gap: .4rem; }
   .actions button[hidden] { display: none; }
@@ -105,7 +133,49 @@
   @media (prefers-reduced-motion: reduce) { .mic[aria-pressed=true] { animation: none; outline: 4px solid var(--wax); } }
 </style>
 </head>
-<body>
+<body data-vue="accueil">
+<nav class="barre" aria-label="Navigation">
+  <a href="#" data-vue="accueil">Accueil</a>
+  <a href="#jeu" data-vue="jeu">Partie</a>
+  <a href="#options" data-vue="options">Options</a>
+  <a href="creation.html">Préparer l’univers</a>
+</nav>
+<section id="accueil" aria-labelledby="accueilTitre">
+  <h1 id="accueilTitre">PNJ parlants</h1>
+  <p class="accroche">Parlez à voix haute avec les personnages de votre univers de jeu de rôle : ils vous répondent dans leur rôle.</p>
+  <p class="univers-actuel" id="universActuel"></p>
+  <div class="cartes">
+    <article class="carte">
+      <h2>Charger un univers</h2>
+      <p class="hint">Un univers prêt à jouer, ou celui qu’on vous a envoyé (zip ou dossier exporté depuis la préparation).</p>
+      <div id="exemplesListe" class="row"></div>
+      <div class="row">
+        <button class="ghost" id="accZipBtn">Importer un zip</button>
+        <button class="ghost" id="accDossierBtn">Importer un dossier</button>
+        <input type="file" id="accZip" accept=".zip,application/zip" hidden>
+        <input type="file" id="accDossier" webkitdirectory multiple hidden>
+      </div>
+      <label class="check"><input type="checkbox" id="accGarder"> Garder les PNJ actuels</label>
+      <p class="status" id="accStatus"></p>
+    </article>
+    <article class="carte">
+      <h2>Discuter avec un PNJ</h2>
+      <p class="hint">Rencontrez un habitant de l’univers, ou laissez le modèle en inventer un.</p>
+      <button id="accHasardBtn">Un PNJ de l’univers au hasard</button>
+      <div class="gen">
+        <input type="text" id="accRole" placeholder="Métier (facultatif)" aria-label="Métier du PNJ à inventer">
+        <button class="ghost" id="accInventerBtn">Inventer un PNJ</button>
+      </div>
+      <button class="ghost" id="accReprendreBtn" hidden>Reprendre la conversation</button>
+      <a class="link" href="#jeu">Aller à la table de jeu →</a>
+    </article>
+    <article class="carte">
+      <h2>Créer son univers</h2>
+      <p class="hint">Écrivez le monde, ses lieux et ses secrets, puis demandez des PNJ qui s’y rattachent. Exportez-le pour le partager.</p>
+      <a class="link" href="creation.html">Préparer l’univers →</a>
+    </article>
+  </div>
+</section>
 <main>
   <section class="npc" aria-live="polite">
     <div class="lieu" id="lieuBloc" hidden>
@@ -169,37 +239,54 @@
         <button class="ghost" id="exportBtn">Exporter la conversation</button>
         <button class="ghost" id="importBtn" title="Reprendre une conversation exportée">Importer une conversation</button>
         <input type="file" id="importFichier" accept=".txt,text/plain" hidden>
-        <a class="link" href="creation.html">Préparer les PNJ et le scénario →</a>
-      </div>
-      <div class="row" id="modelRow" hidden>
-        <select id="modelSel" aria-label="Modèle local"></select>
       </div>
     </div>
-    <div class="bloc options">
-      <h2>Options</h2>
+    <div class="bloc" id="entreeRow">
+      <h2>Faire entrer quelqu’un</h2>
+      <div class="gen">
+        <input type="text" id="entree" placeholder="Qui ? (vide : au choix du modèle)" aria-label="PNJ à faire entrer">
+        <button class="ghost" id="entreeBtn">Faire entrer</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<section id="options" aria-labelledby="optionsTitre">
+  <h1 id="optionsTitre">Options</h1>
+  <div class="cartes">
+    <article class="carte options">
+      <h2>Parole</h2>
       <label><input type="checkbox" id="optInterrompre"> « Parler » interrompt le PNJ
         <span class="hint">: vous lui coupez la parole (barre d’espace aussi)</span></label>
       <label><input type="checkbox" id="optCoupure"> Couper le PNJ dès que vous parlez
         <span class="hint">: micro ouvert pendant qu’il parle ; casque conseillé, sinon sa propre voix peut le couper</span></label>
+    </article>
+    <article class="carte options">
+      <h2>Scène</h2>
       <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
       <div class="sub" id="multiOpts">
         <label><input type="checkbox" id="optIntervention"> Interventions spontanées
           <span class="hint">: un autre PNJ réagit parfois de lui-même</span></label>
         <label><input type="checkbox" id="optEntree"> Faire entrer un PNJ inventé d’après la conversation</label>
-        <div class="gen" id="entreeRow">
-          <input type="text" id="entree" placeholder="Qui ? (vide : au choix du modèle)" aria-label="PNJ à faire entrer">
-          <button class="ghost" id="entreeBtn">Faire entrer</button>
-        </div>
       </div>
-    </div>
-    <div class="sys" id="sys" aria-live="polite"></div>
-  </aside>
-</main>
+    </article>
+    <article class="carte">
+      <h2>Machine</h2>
+      <div class="row" id="modelRow" hidden>
+        <label for="modelSel">Modèle local</label>
+        <select id="modelSel"></select>
+      </div>
+      <div class="sys" id="sys" aria-live="polite"></div>
+    </article>
+  </div>
+  <p><a class="link" id="optionsRetour" href="#jeu">← Retour</a></p>
+</section>
 
 <script type="module">
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix } from "./js/scene.js";
+import { chargerExemple, confirmationImport, importerFichiers, resumeImport, resumeUnivers } from "./js/univers.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -311,6 +398,19 @@ function addLine(qui, text) {
   return div;
 }
 
+// Journal affiché, ligne par ligne : [qui ("Vous", nom du PNJ, "" pour une narration), texte affiché]
+const lignesDuLog = () => [...$("log").querySelectorAll(".line")]
+  .map(l => [l.querySelector(".who")?.textContent ?? "", l.querySelector(".text").textContent]);
+
+// Réaffiche un journal (conversation importée ou reprise) ; fiches : les PNJ qui y parlent
+function afficherLignes(lignes, fiches) {
+  $("log").innerHTML = "";
+  for (const [qui, t] of lignes) {
+    if (!qui) addNarration().querySelector(".text").innerHTML = formatLine(t);
+    else addLine(qui === "Vous" ? null : fiches.find(f => f.nom === qui) ?? { nom: qui }, t);
+  }
+}
+
 // Narration (arrivée dans un lieu…) : ni nom, ni bulle, lue par la voix du narrateur
 function addNarration() {
   const div = document.createElement("div");
@@ -393,12 +493,12 @@ function setBusy(b) {
   $("addBtn").disabled = b || !scene || npcs.length >= MAX_PNJ || !$("bankSel").value
                          || npcs.some(n => n.id === $("bankSel").value);
   $("multiOpts").hidden = !multi;
-  $("entreeRow").hidden = !opt("optEntree");
+  $("entreeRow").hidden = !opt("optEntree") || !scene;  // faire entrer quelqu'un : seulement dans une scène
   $("entreeBtn").disabled = b || !scene || npcs.length >= MAX_PNJ;
   $("discuterBtn").hidden = !multi || npcs.length < 2;
   $("discuterBtn").disabled = b;
   for (const btn of document.querySelectorAll("[data-retirer]")) btn.disabled = b;
-  if (!b) { const a = attentesLibre; attentesLibre = []; a.forEach(r => r()); }
+  if (!b) { const a = attentesLibre; attentesLibre = []; a.forEach(r => r()); sauverPartie(); }
 }
 
 // Attend la fin de l'action en cours (utile quand le joueur a coupé la parole au PNJ : sa question
@@ -594,6 +694,7 @@ async function joinScene(n) {
 
 function retirer(i) {
   const [n] = npcs.splice(i, 1);
+  sauverPartie();
   if (dernier === n) dernier = npcs[0];
   renderCards();
   renderLieu();
@@ -695,10 +796,10 @@ async function refreshBank(selectId) {
 }
 
 // ajout : le PNJ rejoint la scène en cours au lieu d'en commencer une nouvelle
-async function loadFromBank(ajout) {
+async function loadFromBank(ajout, id = $("bankSel").value) {
   setBusy(true); status("");
   try {
-    const n = await api(`/api/bank/${encodeURIComponent($("bankSel").value)}`);
+    const n = await api(`/api/bank/${encodeURIComponent(id)}`);
     await (ajout ? joinScene(n) : startScene(n));
   } catch (e) { status(e.message); }
   setBusy(false);
@@ -721,9 +822,7 @@ async function saveToBank() {
 // Télécharge un fichier texte avec le dialogue tel qu'il est affiché (descriptions comprises).
 function exportConversation() {
   const date = new Date();
-  const lignes = [...$("log").querySelectorAll(".line")]
-    .map(l => [l.querySelector(".who")?.textContent ?? "", l.querySelector(".text").textContent]);
-  const texte = texteExport(lignes, rencontres, date, nomDuLieu(lieuActuel) ?? "");
+  const texte = texteExport(lignesDuLog(), rencontres, date, nomDuLieu(lieuActuel) ?? "");
   // BOM : le Bloc-notes de Windows affiche alors correctement les accents
   const bom = String.fromCharCode(0xFEFF);
   const url = URL.createObjectURL(new Blob([bom + texte], { type: "text/plain;charset=utf-8" }));
@@ -778,10 +877,7 @@ async function importerConversation(fichier) {
     reinitialiserUsage();
     masquerProposition();
     $("log").innerHTML = "";
-    for (const [qui, t] of lu.lignes) {
-      if (!qui) addNarration().querySelector(".text").innerHTML = formatLine(t);
-      else addLine(qui === "Vous" ? null : fiches.find(f => f.nom === qui), t);
-    }
+    afficherLignes(lu.lignes, fiches);
     renderCards();
     renderLieu();
     status(!npcs.length ? "Conversation importée. Personne n’est resté avec vous : abordez quelqu’un ou jouez un PNJ."
@@ -1063,6 +1159,118 @@ $("propOui").onclick = () => { if (proposition) changerLieu(proposition.id); };
 $("propNon").onclick = masquerProposition;
 for (const id of OPTIONS) $(id).onchange = () => { saveOptions(); setBusy(busy); };
 $("optCoupure").addEventListener("change", () => { arreterVeille(); if (parole) veiller(parole); });
+// --- Conversation en cours, gardée dans ce navigateur -----------------------------
+// Rien ne se perd en allant à l'accueil, aux options, à la page de préparation, ni en rechargeant la page.
+const CLE_PARTIE = "pnj-partie";
+let partieRestauree = false;  // pas de sauvegarde avant d'avoir relu la précédente
+
+function sauverPartie() {
+  if (!partieRestauree) return;
+  try {
+    if (!rencontres.length) { localStorage.removeItem(CLE_PARTIE); return; }
+    localStorage.setItem(CLE_PARTIE, JSON.stringify({
+      rencontres, scene: npcs.map(n => n.nom), dernier: dernier?.nom ?? null, history, lieuActuel, positions,
+      lignes: lignesDuLog(), tokenUsage }));
+  } catch {}  // stockage plein ou interdit : la partie continue, sans sauvegarde
+}
+
+function restaurerPartie() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(CLE_PARTIE) || "null"); } catch {}
+  partieRestauree = true;
+  if (!p?.rencontres?.length || !Array.isArray(p.lignes)) return;
+  rencontres = p.rencontres;
+  npcs = (p.scene ?? []).map(nom => rencontres.find(r => r.nom === nom)).filter(Boolean);
+  dernier = npcs.find(n => n.nom === p.dernier) ?? npcs[0] ?? null;
+  history = Array.isArray(p.history) ? p.history : [];
+  lieuActuel = lieux.some(l => l.id === p.lieuActuel) ? p.lieuActuel : "";
+  positions = p.positions ?? {};
+  tokenUsage = { ...tokenUsage, ...p.tokenUsage };
+  afficherUsage();
+  afficherLignes(p.lignes, rencontres);
+  renderCards();
+  renderLieu();
+  setBusy(false);
+}
+window.addEventListener("pagehide", sauverPartie);
+
+// --- Vues : accueil (« / »), partie (« #jeu »), options (« #options ») ---------------
+let vuePrecedente = "accueil";  // où revient le lien « Retour » des options
+function afficherVue() {
+  const vue = { "#jeu": "jeu", "#options": "options" }[location.hash] ?? "accueil";
+  if (vue === "options" && document.body.dataset.vue !== "options") vuePrecedente = document.body.dataset.vue;
+  document.body.dataset.vue = vue;
+  for (const a of document.querySelectorAll(".barre [data-vue]")) {
+    if (a.dataset.vue === vue) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  const versJeu = vuePrecedente === "jeu";
+  $("optionsRetour").href = versJeu ? "#jeu" : "#";
+  $("optionsRetour").textContent = versJeu ? "← Retour à la partie" : "← Retour à l’accueil";
+  if (vue === "accueil") majAccueil();
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", afficherVue);
+
+// --- Accueil -------------------------------------------------------------------
+let exemples = null;
+async function majAccueil() {
+  exemples ??= await api("/api/exemples").catch(() => []);
+  $("exemplesListe").innerHTML = exemples.map(e => `<button class="exemple" data-exemple="${esc(e.id)}">`
+    + `Exemple : ${esc(e.nom)}<small>${esc(e.resume)}</small></button>`).join("");
+  $("universActuel").textContent = resumeUnivers(lieux.length, banque.length);
+  $("accHasardBtn").disabled = !banque.length;
+  $("accReprendreBtn").hidden = !npcs.length;
+  $("accReprendreBtn").textContent = `Reprendre la conversation avec ${npcs.map(n => n.nom).join(" et ")}`;
+}
+
+// Un nouveau PNJ remplace la conversation en cours : on demande avant de la perdre
+const nouvelleConversation = () => history.length <= 1
+  || confirm("Commencer une nouvelle conversation ? Celle en cours sera remplacée (exportez-la pour la garder).");
+
+$("accHasardBtn").onclick = () => {
+  if (busy || !banque.length || !nouvelleConversation()) return;
+  stopNpc();
+  location.hash = "jeu";
+  loadFromBank(false, hasard(banque).id);
+};
+$("accInventerBtn").onclick = () => {
+  if (busy || !nouvelleConversation()) return;
+  stopNpc();
+  $("role").value = $("accRole").value;
+  location.hash = "jeu";
+  generate();
+};
+$("accRole").addEventListener("keydown", (e) => { if (e.key === "Enter") $("accInventerBtn").click(); });
+$("accReprendreBtn").onclick = () => { location.hash = "jeu"; };
+
+const confirmerImport = () => !(banque.length || lieux.length)
+  || confirm(confirmationImport(banque.length, $("accGarder").checked));
+async function importerUnivers(charger) {
+  if (busy || !confirmerImport()) return;
+  $("accStatus").textContent = "Chargement…";
+  try {
+    const r = await charger($("accGarder").checked);
+    await chargerLieux();
+    await refreshBank();
+    $("accStatus").textContent = resumeImport(r);
+  } catch (e) { $("accStatus").textContent = e.message; }
+  majAccueil();
+}
+$("exemplesListe").onclick = (e) => {
+  const b = e.target.closest("[data-exemple]");
+  if (b) importerUnivers((garder) => chargerExemple(b.dataset.exemple, garder));
+};
+$("accZipBtn").onclick = () => $("accZip").click();
+$("accDossierBtn").onclick = () => $("accDossier").click();
+for (const id of ["accZip", "accDossier"]) {
+  $(id).onchange = () => {
+    const fichiers = [...$(id).files];
+    $(id).value = "";  // pour pouvoir réimporter le même fichier
+    if (fichiers.length) importerUnivers((garder) => importerFichiers(fichiers, garder));
+  };
+}
+
+afficherVue();
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
 $("modelSel").onchange = async () => {
@@ -1117,7 +1325,7 @@ async function refreshSys() {
 refreshSys();
 setInterval(() => { if (!document.hidden) refreshSys(); }, 3000);
 setBusy(false);
-chargerLieux().then(() => refreshBank());
+chargerLieux().then(() => refreshBank()).then(() => { restaurerPartie(); majAccueil(); });
 </script>
 </body>
 </html>
