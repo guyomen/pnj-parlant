@@ -61,8 +61,10 @@ class TestBanque:
         assert client.put(f"/api/bank/{npc_id}", json=npc).status_code == 404
 
     def test_scenario(self, client):
-        client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve"})
-        assert client.get("/api/scenario").get_json() == {"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve"}
+        client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve",
+                                          "style_portrait": "manga"})
+        assert client.get("/api/scenario").get_json() == {"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve",
+                                                          "style_portrait": "manga"}
 
 
 LIEUX = [{"nom": "Auberge du Sanglier", "description": "Une salle enfumée.", "notes_mj": "Une trappe mène aux égouts."},
@@ -81,7 +83,7 @@ class TestUnivers:
         self._remplir(client)
         assert client.delete("/api/univers").get_json() == {"pnj": 1}
         assert client.get("/api/bank").get_json() == [] and client.get("/api/lieux").get_json() == []
-        assert client.get("/api/scenario").get_json() == {"monde": "", "notes_mj": "", "theme": ""}
+        assert client.get("/api/scenario").get_json() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
 
     def test_export_puis_import_du_zip(self, client):
         ysolde = self._remplir(client)

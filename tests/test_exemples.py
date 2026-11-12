@@ -1,4 +1,6 @@
 """Les univers d'exemple (src/pnj_parlant/exemples/<nom>/) se chargent comme une banque et leurs fiches respectent le schéma."""
+import json
+
 import pytest
 
 from pnj_parlant.banque import NPC_ID, Banque
@@ -21,6 +23,8 @@ def test_exemple_complet_et_coherent(dossier):
     assert scenario["monde"] and scenario["notes_mj"]
     if scenario["theme"]:  # thème graphique : doit exister dans la feuille de style
         assert f"[data-theme={scenario['theme']}]" in STYLE, f"thème inconnu : {scenario['theme']}"
+    brut = json.loads((dossier / "_scenario.json").read_text(encoding="utf-8"))
+    assert brut.get("style_portrait", "") == scenario["style_portrait"], "style de portrait inconnu"
     lieux = {lieu["id"] for lieu in banque.lieux()}
     assert len(lieux) >= 2 and all(NPC_ID.match(i) for i in lieux)
 

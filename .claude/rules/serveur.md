@@ -39,8 +39,9 @@ Serveur sans état : l'historique vit dans le navigateur.
   initiale du nom tirés au sort en Python pour varier les PNJ. Le serveur ajoute `voix` (voix du genre du PNJ +
   réglages, et pitch/rate pour le repli navigateur).
 - `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues), `notes_mj` (création
-  seulement, jamais envoyées pendant les dialogues) et `theme` (thème graphique des pages, `banque.theme_valide` :
-  id `[a-z0-9-]{1,40}` sinon `""` = défaut ; la liste des thèmes vit côté navigateur).
+  seulement, jamais envoyées pendant les dialogues), `theme` (thème graphique des pages, `banque.theme_valide` :
+  id `[a-z0-9-]{1,40}` sinon `""` = défaut ; la liste des thèmes vit côté navigateur) et `style_portrait` (style de
+  dessin, clé de `portraits.STYLES` sinon `""`). PUT remplace tout : envoyer tous les champs.
 - `GET|PUT /api/lieux` (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. Description connue de tous les PNJ
   et lue par le narrateur ; notes du MJ pour la création seulement.
 - `DELETE /api/univers` → `Banque.vider()` : « Nouvelle table » de l'accueil, supprime tous les PNJ, vide le scénario
@@ -63,8 +64,14 @@ Serveur sans état : l'historique vit dans le navigateur.
   de `tout`, chargé à la première génération, verrou, fp16 sur CUDA / fp32 au processeur) ou `en_ligne` (`EnLigne` :
   Pollinations, une adresse GET, image vérifiée par ses premiers octets, `type_image`). `PortraitIndisponible` :
   message pour l'utilisateur. Ollama ne génère pas d'images (Windows/Linux) : ne pas le proposer.
-- `prompt_portrait(moteurs, npc, style)` : le moteur de création traduit la fiche en anglais (`Moteurs.fiche` avec
-  le schéma `{prompt}`) ; repli sans modèle : « genre, métier, apparence ». Style : `[portraits] style`.
+- `prompt_portrait(moteurs, npc, style)` → « style, description » (style en tête : il pèse plus). Le moteur de
+  création traduit la fiche en anglais (`Moteurs.fiche`, schéma `{prompt}` ; consigne : âge en chiffres, vêtements
+  d'époque couvrants, contre les biais des générateurs) ; repli sans modèle : « genre, métier, apparence ».
+- Style : `STYLES` (portraits.py : peinture, manga, jdr80, photo, crayon → nom, résumé, prompt anglais, sans nom
+  d'illustrateur), choisi par le scénario (`style_portrait`, `style_valide`) ; sinon `[portraits] style`
+  (`Contexte.style_portrait()`). `/api/config` → `styles_portrait` [{id, nom, resume}] : seule source pour la page.
+- Pollinations gratuit : une image / 45 s par IP (HTTP 402 `FREE_LIMIT`, Retry-After) → `attente_demandee`, une
+  attente puis un nouvel essai si ≤ `attente_max` (60 s), sinon message « réessayez dans N s ».
 - Stockage : `pnj/<id>.png|jpg|webp` à côté de la fiche (`Banque.portrait`, `enregistrer_portrait`,
   `supprimer_portrait`) ; supprimé avec le PNJ, par `vider` et quand une fiche importée remplace l'ancienne.
   Export : images incluses ; import (`lire_zip`, `importer`) : un portrait suit sa fiche (même nom, fiche renommée

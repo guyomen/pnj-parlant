@@ -1,7 +1,7 @@
 """
 Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiable à la main.
 
-    pnj/_scenario.json      {"monde": ..., "notes_mj": ..., "theme": ...}  (« _ » : jamais pris pour un PNJ)
+    pnj/_scenario.json      {"monde", "notes_mj", "theme", "style_portrait"}  (« _ » : jamais pris pour un PNJ)
     pnj/_lieux.json         [{"id", "nom", "description", "notes_mj"}, ...]
     pnj/<nom>-<hex>.json    fiche d'un PNJ
     pnj/<nom>-<hex>.png     son portrait, facultatif (.png, .jpg ou .webp)
@@ -16,7 +16,7 @@ import unicodedata
 import zipfile
 from pathlib import PurePosixPath
 
-from .portraits import type_image
+from .portraits import style_valide, type_image
 
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
 THEME = re.compile(r"^[a-z0-9-]{1,40}$")   # thème graphique : identifiant défini dans static/style.css
@@ -53,17 +53,19 @@ class Banque:
     # --- Scénario ---------------------------------------------------------------
     def scenario(self):
         """{"monde": connu de tous les PNJ, "notes_mj": réservé à la création des PNJ,
-        "theme": thème graphique des pages ("" : thème par défaut)}."""
+        "theme": thème graphique des pages ("" : thème par défaut),
+        "style_portrait": style de dessin des portraits (portraits.STYLES, "" : style par défaut)}."""
         try:
             data = json.loads(self.scenario_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
         return {"monde": data.get("monde", ""), "notes_mj": data.get("notes_mj", ""),
-                "theme": theme_valide(data.get("theme"))}
+                "theme": theme_valide(data.get("theme")), "style_portrait": style_valide(data.get("style_portrait"))}
 
     def enregistrer_scenario(self, data):
         scenario = {k: str(data.get(k, "")).strip()[:20000] for k in ("monde", "notes_mj")}
         scenario["theme"] = theme_valide(data.get("theme"))
+        scenario["style_portrait"] = style_valide(data.get("style_portrait"))
         self.dossier.mkdir(parents=True, exist_ok=True)
         self.scenario_path.write_text(json.dumps(scenario, ensure_ascii=False, indent=2), encoding="utf-8")
         return scenario

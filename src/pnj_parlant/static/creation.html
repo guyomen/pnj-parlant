@@ -59,6 +59,18 @@
   .theme-choix:has(input:checked) { box-shadow: 0 0 0 2px var(--glass); border-color: var(--glass); }
   .theme-choix:has(input:checked) .nom::after { content: " ✓"; color: var(--glass); }
   .theme-choix:has(input:focus-visible) { outline: 3px solid var(--verdigris); outline-offset: 2px; }
+  /* Style des portraits : même principe que les thèmes, sans aperçu de couleurs */
+  .styles { border: 0; padding: 0; margin: 0; min-width: 0;
+            display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+  .styles[hidden], #stylesCarte[hidden] { display: none; }
+  label.style-choix { margin: 0; position: relative; display: flex; flex-direction: column; gap: .1rem; cursor: pointer;
+                      padding: .55rem .75rem; border-radius: 10px; border: 1px solid var(--line); font-weight: 400; }
+  .style-choix input { position: absolute; opacity: 0; pointer-events: none; }
+  .style-choix .nom { font: 400 1.1rem/1.2 var(--display); }
+  .style-choix small { color: var(--muted); font-size: .85rem; line-height: 1.3; }
+  .style-choix:has(input:checked) { box-shadow: 0 0 0 2px var(--glass); border-color: var(--glass); }
+  .style-choix:has(input:checked) .nom::after { content: " ✓"; color: var(--glass); }
+  .style-choix:has(input:focus-visible) { outline: 3px solid var(--verdigris); outline-offset: 2px; }
 
   /* Lieux : une carte par lieu */
   .barre-section { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
@@ -178,6 +190,12 @@
           <fieldset class="themes" id="themes" aria-label="Thème graphique"></fieldset>
           <p class="status" id="themeStatus"></p>
         </section>
+        <section class="carte" id="stylesCarte" hidden>
+          <h2>Style des portraits</h2>
+          <p class="hint">Le style de dessin des portraits des PNJ de cet univers. Enregistré dès le choix ; les portraits déjà faits ne changent pas : refaites-les.</p>
+          <fieldset class="styles" id="styles" aria-label="Style des portraits"></fieldset>
+          <p class="status" id="styleStatus"></p>
+        </section>
         <section class="carte">
           <h2>Partager l’univers</h2>
           <p class="hint">Scénario, thème, lieux et PNJ de la banque, dans un seul fichier zip.</p>
@@ -263,6 +281,7 @@
               <figcaption>
                 <button class="petit" id="portraitBtn">Générer le portrait</button>
                 <button class="ghost petit" id="portraitSuppr" hidden>Retirer</button>
+                <small id="portraitStyle"></small>
                 <small id="portraitStatus"></small>
               </figcaption>
             </figure>
@@ -458,8 +477,11 @@ $("portraitSuppr").onclick = async () => {
 $("f-nom").addEventListener("input", () => { $("portraitVide").textContent = initiale($("f-nom").value); });
 
 // --- Scénario ----------------------------------------------------------------
-let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT };  // dernière version enregistrée
+// dernière version enregistrée ; chaque enregistrement envoie tous les champs (PUT remplace le scénario entier)
+let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT, style_portrait: "" };
 const scenarioModifie = () => $("monde").value !== scenarioCharge.monde || $("notes").value !== scenarioCharge.notes_mj;
+// Enregistre `changements` par-dessus la version enregistrée (pas la saisie en cours du texte)
+const enregistrerScenario = (changements) => api("/api/scenario", { ...scenarioCharge, ...changements }, "PUT");
 
 // Thème graphique : une carte par thème, dans ses propres couleurs ; enregistré dès le choix
 // (avec le texte enregistré du scénario : les modifications en cours du texte ne partent pas avec lui)
@@ -479,8 +501,8 @@ $("themes").onchange = async () => {
   const theme = themeChoisi();
   document.documentElement.dataset.theme = theme;
   try {
-    const s = await api("/api/scenario", { monde: scenarioCharge.monde, notes_mj: scenarioCharge.notes_mj, theme }, "PUT");
-    scenarioCharge.theme = afficherTheme(s.theme);
+    const s = await enregistrerScenario({ theme });
+    scenarioCharge = { ...s, theme: afficherTheme(s.theme) };
     $("themeStatus").textContent = `Thème « ${THEMES.find(t => t.id === scenarioCharge.theme).nom} » enregistré.`;
   } catch (e) {
     $("themeStatus").textContent = e.message;
@@ -488,17 +510,49 @@ $("themes").onchange = async () => {
   }
 };
 
+// Style de dessin des portraits : liste donnée par le serveur (/api/config), carte visible si les portraits
+// sont activés ; "" = style par défaut (config.toml), montré comme le premier (peinture)
+let stylesPortrait = [];
+const styleChoisi = () => document.querySelector("input[name=style]:checked")?.value ?? "";
+function afficherStyles(liste) {
+  stylesPortrait = liste;
+  $("styles").innerHTML = liste.map(st => `
+    <label class="style-choix">
+      <input type="radio" name="style" value="${esc(st.id)}">
+      <span class="nom">${esc(st.nom)}</span><small>${esc(st.resume)}</small>
+    </label>`).join("");
+  afficherStyle(scenarioCharge.style_portrait);
+}
+function afficherStyle(id) {
+  const radio = document.querySelector(`input[name=style][value="${id}"]`) ?? document.querySelector("input[name=style]");
+  if (radio) radio.checked = true;
+  const nom = stylesPortrait.find(st => st.id === (id || stylesPortrait[0]?.id))?.nom;
+  $("portraitStyle").textContent = nom ? `Style : ${nom} (onglet Scénario)` : "";
+}
+$("styles").onchange = async () => {
+  try {
+    const s = await enregistrerScenario({ style_portrait: styleChoisi() });
+    scenarioCharge = { ...s, theme: scenarioCharge.theme };
+    afficherStyle(s.style_portrait);
+    $("styleStatus").textContent = `Style « ${stylesPortrait.find(st => st.id === styleChoisi())?.nom} » enregistré.`;
+  } catch (e) {
+    $("styleStatus").textContent = e.message;
+    afficherStyle(scenarioCharge.style_portrait);
+  }
+};
+
 async function loadScenario() {
   const s = await api("/api/scenario").catch(() => ({}));
   $("monde").value = s.monde || "";
   $("notes").value = s.notes_mj || "";
-  scenarioCharge = { monde: $("monde").value, notes_mj: $("notes").value, theme: afficherTheme(s.theme) };
+  scenarioCharge = { monde: $("monde").value, notes_mj: $("notes").value, theme: afficherTheme(s.theme),
+                     style_portrait: s.style_portrait || "" };
+  afficherStyle(scenarioCharge.style_portrait);
   majModifs();
 }
 async function saveScenario() {
   try {
-    const s = await api("/api/scenario", { monde: $("monde").value, notes_mj: $("notes").value,
-                                           theme: scenarioCharge.theme }, "PUT");
+    const s = await enregistrerScenario({ monde: $("monde").value, notes_mj: $("notes").value });
     $("monde").value = s.monde;
     $("notes").value = s.notes_mj;
     scenarioCharge = { ...s, theme: afficherTheme(s.theme) };
@@ -725,7 +779,13 @@ window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty || scen
 
 loadEngine();
 fillForm({});
-api("/api/config").then(c => { portraitsActifs = !!c.portraits; majPortrait(); renderBank(); }).catch(() => {});
+api("/api/config").then(c => {
+  portraitsActifs = !!c.portraits;
+  $("stylesCarte").hidden = !portraitsActifs;
+  afficherStyles(c.styles_portrait ?? []);
+  majPortrait();
+  renderBank();
+}).catch(() => {});
 loadScenario();
 loadLieux().then(refreshBank);
 </script>

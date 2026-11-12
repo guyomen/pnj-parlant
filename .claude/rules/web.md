@@ -39,8 +39,10 @@ paths:
   `theme`), `chargerTheme()` (relit /api/scenario). Un petit script dans le `<head>` des deux pages pose le thème
   gardé avant l'affichage (pas de flash), puis `chargerTheme()` au chargement et après un import d'univers.
 - Préparation : `fieldset#themes`, une carte par thème portant son propre `data-theme` (aperçu dans ses couleurs) ;
-  le clic l'enregistre aussitôt (PUT /api/scenario avec le texte *enregistré* `scenarioCharge`, pour ne pas envoyer
-  une saisie en cours).
+  le clic l'enregistre aussitôt. Style des portraits : `#stylesCarte` (cachée sans moteur de portraits), liste reçue
+  de `/api/config` (`afficherStyles`), "" affiché comme le premier ; rappelé dans la fiche (`#portraitStyle`).
+  Tout enregistrement du scénario passe par `enregistrerScenario(changements)` = PUT `{...scenarioCharge,
+  ...changements}` : version *enregistrée* (pas la saisie en cours), et un champ n'en efface pas un autre.
 - Ajouter un thème : bloc(s) dans `style.css` + entrée dans `THEMES` (le serveur accepte tout id `[a-z0-9-]`).
 - Portraits : `adressePortrait(pnj)` (scene.js) = `/api/bank/<id>/portrait?v=<version>` ou "" ; partie :
   `img.portrait` en tête de `.pnj-card` (grand pour le premier, vignette flottante sinon) ; préparation :

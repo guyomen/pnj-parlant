@@ -11,12 +11,15 @@ jouable sans réseau.
 
 Le générateur d'images comprend mieux l'anglais : le modèle de création (Claude ou Ollama) traduit l'apparence
 de la fiche en une courte description ; s'il ne répond pas, la description est tirée telle quelle de la fiche.
+Le style de dessin est choisi par le scénario parmi STYLES (champ « style_portrait »), sinon [portraits] style.
 """
 import importlib.util
 import io
 import json
 import logging
 import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -27,11 +30,39 @@ log = logging.getLogger(__name__)
 
 STYLE = ("head and shoulders portrait, medieval fantasy character, detailed painting, "
          "soft dramatic lighting, plain dark background")
+# Styles de dessin proposés au scénario : identifiant → nom, résumé (pour la page), suite du prompt (anglais)
+STYLES = {
+    "peinture": ("Peinture fantasy", "Tableau détaillé, lumière dramatique", STYLE),
+    "manga": ("Manga", "Animé japonais, traits nets, couleurs vives",
+              "head and shoulders portrait, anime style, Japanese manga illustration, clean line art, cel shading, "
+              "vibrant colors, fantasy character, simple background"),
+    "jdr80": ("JDR années 80", "Encre noir et blanc des premiers livres de jeu de rôle",
+              "black and white ink illustration from an old 1980s fantasy role-playing rulebook, comic book inking, "
+              "bold outlines, crosshatch shading, retro pulp fantasy line art, head and shoulders portrait"),
+    "photo": ("Photo", "Réaliste, comme un portrait photographié",
+              "head and shoulders portrait photograph, photorealistic, medieval fantasy costume, natural light, "
+              "85mm lens, shallow depth of field, detailed skin texture"),
+    "crayon": ("Fait main", "Dessin au crayon sur papier",
+               "monochrome graphite pencil drawing, grayscale only, no color, hand-drawn sketch on paper, "
+               "cross-hatching, visible pencil strokes, head and shoulders portrait"),
+}
+
+
+def style_valide(style):
+    """Identifiant d'un style de STYLES, ou "" (style par défaut : [portraits] style de config.toml)."""
+    style = str(style or "").strip().lower()
+    return style if style in STYLES else ""
+
+
+def styles():
+    """[{id, nom, resume}] des styles proposés, pour la page de préparation."""
+    return [{"id": i, "nom": nom, "resume": resume} for i, (nom, resume, _) in STYLES.items()]
 SCHEMA = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"],
           "additionalProperties": False}
 CONSIGNES = ("Tu écris la description d'un portrait pour un générateur d'images. Réponds en JSON {\"prompt\": ...} : "
-             "une seule phrase en anglais, 40 mots au plus, qui décrit ce qu'on voit du personnage (âge, visage, "
-             "cheveux, expression, vêtements, accessoires de son métier). Pas de nom propre, pas de décor, pas de texte.")
+             "une seule phrase en anglais, 40 mots au plus, qui décrit ce qu'on voit du personnage : son âge en "
+             "chiffres (ex. « in her fifties »), sa corpulence, son visage, ses cheveux, son expression, des vêtements "
+             "d'époque couvrants et les accessoires de son métier. Pas de nom propre, pas de décor, pas de texte.")
 GENRES = {"feminin": "woman", "masculin": "man", "neutre": "person"}
 TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 TAILLE_MAX = 8_000_000  # octets d'une image reçue
@@ -49,7 +80,8 @@ def description(npc):
 
 
 def prompt_portrait(moteurs, npc, style=STYLE):
-    """Description anglaise du portrait, suivie du style. Repli sans modèle de langage : genre, métier, apparence."""
+    """Style puis description anglaise du portrait (le générateur donne plus de poids au début : le style passe
+    devant). Repli sans modèle de langage : genre, métier, apparence."""
     sujet = ""
     try:
         sujet = str(parse_json(moteurs.fiche(CONSIGNES, description(npc), SCHEMA)).get("prompt") or "")
@@ -59,7 +91,7 @@ def prompt_portrait(moteurs, npc, style=STYLE):
         parties = [GENRES.get(npc.get("genre"), "person"), npc.get("metier"), npc.get("apparence")]
         sujet = ", ".join(str(p).strip() for p in parties if str(p or "").strip())
     sujet = " ".join(sujet.split())[:500]
-    return f"{sujet}, {style}" if style else sujet
+    return f"{style}, {sujet}" if style else sujet
 
 
 def type_image(octets):
@@ -84,14 +116,18 @@ class Aucun:
 
 
 class EnLigne:
-    """Pollinations : une simple adresse web renvoie l'image (gratuit, sans clé)."""
+    """Pollinations : une simple adresse web renvoie l'image (gratuit, sans clé). L'accès gratuit est limité
+    (une image toutes les 45 s par adresse IP en novembre 2026 : réponse 402 ou 429 avec Retry-After) : on attend
+    puis on réessaie une fois si l'attente demandée ne dépasse pas `attente_max` secondes."""
     nom = "en_ligne"
     URL = "https://image.pollinations.ai/prompt/"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, dormir=time.sleep):
         self.url = cfg.get("url", self.URL)
         self.taille = int(cfg.get("taille", 512))
         self.delai = float(cfg.get("delai", 120))
+        self.attente_max = float(cfg.get("attente_max", 60))
+        self.dormir = dormir  # remplacé dans les tests
 
     def disponible(self):
         return True
@@ -100,17 +136,45 @@ class EnLigne:
         parametres = {"width": self.taille, "height": self.taille, "seed": graine, "nologo": "true"}
         return f"{self.url}{urllib.parse.quote(prompt, safe='')}?{urllib.parse.urlencode(parametres)}"
 
+    def _telecharger(self, adresse):
+        requete = urllib.request.Request(adresse, headers={"User-Agent": "pnj-parlant"})
+        with urllib.request.urlopen(requete, timeout=self.delai) as r:
+            return r.read(TAILLE_MAX + 1)
+
     def generer(self, prompt, graine):
-        requete = urllib.request.Request(self.adresse(prompt, graine), headers={"User-Agent": "pnj-parlant"})
+        adresse = self.adresse(prompt, graine)
         try:
-            with urllib.request.urlopen(requete, timeout=self.delai) as r:
-                octets = r.read(TAILLE_MAX + 1)
+            try:
+                octets = self._telecharger(adresse)
+            except urllib.error.HTTPError as e:
+                attente = attente_demandee(e)
+                if attente is None or attente > self.attente_max:
+                    raise
+                log.info("Pollinations : limite gratuite, nouvel essai dans %s s", attente)
+                self.dormir(attente)
+                octets = self._telecharger(adresse)
+        except urllib.error.HTTPError as e:
+            attente = attente_demandee(e)
+            if attente is not None:
+                raise PortraitIndisponible("Le service gratuit de portraits limite le rythme (une image toutes les "
+                                           f"45 s environ) : réessayez dans {round(attente)} s.") from e
+            raise PortraitIndisponible(f"Le service de portraits en ligne a refusé la demande (erreur {e.code}).") from e
         except OSError as e:
             raise PortraitIndisponible("Le service de portraits en ligne ne répond pas (réseau coupé ?).") from e
         ext = type_image(octets)
         if not ext or len(octets) > TAILLE_MAX:
             raise PortraitIndisponible("Le service de portraits en ligne a renvoyé autre chose qu'une image.")
         return octets, ext
+
+
+def attente_demandee(erreur):
+    """Secondes à attendre si la réponse HTTP est une limite de rythme (402, 429, 503 avec Retry-After), sinon None."""
+    if erreur.code not in (402, 429, 503):
+        return None
+    try:
+        return max(1.0, float(erreur.headers.get("Retry-After", "")))
+    except (TypeError, ValueError, AttributeError):
+        return 45.0 if erreur.code in (402, 429) else None
 
 
 class Local:

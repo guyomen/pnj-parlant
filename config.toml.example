@@ -91,6 +91,8 @@ moteur = "aucun"           # "aucun" : pas de portraits ;
                            #           description du PNJ est envoyée à ce service.
 # Les portraits sont rangés à côté des fiches (pnj/<id>.png) et exportés avec l'univers : la partie n'en
 # génère jamais, elle reste jouable sans réseau. Le modèle de création traduit l'apparence en anglais.
+# Le style de dessin se choisit par univers (onglet Scénario : peinture, manga, JDR années 80, photo, fait main) ;
+# « style » ci-dessous (en anglais) sert quand l'univers n'en a pas choisi.
 # style = "head and shoulders portrait, medieval fantasy character, detailed painting, soft dramatic lighting, plain dark background"
 
 [portraits.local]
@@ -102,6 +104,7 @@ appareil = "auto"          # "auto" (carte NVIDIA si disponible), "cuda" ou "cpu
 [portraits.en_ligne]
 # taille = 512
 # delai = 120              # secondes avant d'abandonner
+# attente_max = 60         # accès gratuit limité (une image toutes les 45 s) : attente acceptée avant de réessayer
 
 [banque]
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)

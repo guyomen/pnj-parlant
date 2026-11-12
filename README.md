@@ -194,13 +194,15 @@ Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dan
 
 Chaque PNJ de la banque peut avoir un portrait, généré dans la page de préparation (onglet PNJ, bouton **Générer le portrait** à côté de son identité ; **Refaire** en tire un autre). Il s'affiche dans la fiche du PNJ pendant la partie et en vignette dans la banque. Le portrait part de la fiche telle qu'elle est à l'écran : modifiez l'apparence, puis refaites-le. Le modèle de création (Claude ou Ollama) traduit l'apparence en une courte description anglaise, que les générateurs d'images comprennent mieux.
 
+Le **style des portraits** se choisit par univers, dans l'onglet Scénario (carte visible quand un moteur de portraits est configuré) : **Peinture fantasy** (par défaut), **Manga** (animé japonais), **JDR années 80** (encre noir et blanc des premiers livres de jeu de rôle), **Photo** (réaliste) ou **Fait main** (crayon sur papier). Il est enregistré dès le choix et voyage avec l'univers ; les portraits déjà faits ne changent pas, refaites-les. Sans choix, c'est `style` de `[portraits]` qui s'applique (en anglais).
+
 Les portraits sont rangés à côté des fiches (`pnj/<id>.png`) et partent avec l'univers exporté. La partie n'en génère jamais : elle reste jouable sans réseau. Section `[portraits]` de `config.toml` :
 
 | `moteur` | Comment | Réseau | Vitesse |
 |---|---|---|---|
 | `"aucun"` (défaut) | pas de portraits | — | — |
 | `"local"` | [Stable Diffusion Turbo](https://huggingface.co/stabilityai/sd-turbo) sur le PC (licence non commerciale : usage personnel) | seulement pour télécharger le modèle (~2,5 Go) au premier portrait | quelques secondes sur carte NVIDIA, 20 s à 1 min au processeur |
-| `"en_ligne"` | [Pollinations](https://pollinations.ai), gratuit et sans clé ; la description du PNJ est envoyée à ce service, et l'image porte un petit filigrane | à chaque portrait | 5 à 15 s |
+| `"en_ligne"` | [Pollinations](https://pollinations.ai), gratuit et sans clé ; la description du PNJ est envoyée à ce service, et l'image porte un petit filigrane | à chaque portrait | 5 à 15 s ; l'accès gratuit limite à une image toutes les 45 s environ : l'application attend puis réessaie (jusqu'à une minute) |
 
 Le moteur local demande l'option `portraits` (diffusers ; PyTorch vient déjà avec la synthèse vocale) :
 

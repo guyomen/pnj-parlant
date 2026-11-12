@@ -41,7 +41,7 @@ from . import config as configuration
 from . import dialogue, fiches, systeme, texte, voix
 from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier
 from .moteurs import MoteurIndisponible, Moteurs
-from .portraits import STYLE, PortraitIndisponible, prompt_portrait
+from .portraits import STYLE, STYLES, PortraitIndisponible, prompt_portrait, styles
 from .portraits import charger as charger_portraits
 from .stt import Reconnaissance
 
@@ -76,11 +76,16 @@ class Contexte:
         self.tts_charges = {self.tts.nom: self.tts}  # on ne recharge pas Pocket TTS à chaque bascule
         self.reconnaissance = reconnaissance or Reconnaissance(cfg.section("reconnaissance"), cfg.racine)
         self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
-        self.style_portrait = cfg.section("portraits").get("style", STYLE)
+        self.style_defaut = cfg.section("portraits").get("style", STYLE)  # si le scénario n'a pas choisi de style
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
         self.historique = cfg.section("dialogue").get("historique", 12)  # messages gardés pour le contexte
         self.intervention = cfg.section("dialogue").get("intervention", 0.3)
         self.phrases_max = max(1, int(cfg.section("dialogue").get("phrases_max", dialogue.PHRASES_MAX)))
+
+    def style_portrait(self):
+        """Suite du prompt des portraits : le style choisi par le scénario, sinon celui de config.toml."""
+        choix = self.banque.scenario()["style_portrait"]
+        return STYLES[choix][2] if choix else self.style_defaut
 
     def changer_tts(self, nom):
         """Change de moteur de synthèse pour tout le serveur. Lève ValueError s'il est inutilisable."""
@@ -133,7 +138,8 @@ def create_app(cfg, **moteurs):
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
                         "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes),
                         "contexte_max": m.contexte_max(),
-                        "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None})
+                        "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None,
+                        "styles_portrait": styles()})
 
     @app.get("/api/etat")
     def etat():
@@ -278,7 +284,7 @@ def create_app(cfg, **moteurs):
         if not ctx.portraits.disponible():
             return erreur("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.", 400)
         npc.update(request.get_json(silent=True) or {})
-        prompt = prompt_portrait(ctx.moteurs, npc, ctx.style_portrait)
+        prompt = prompt_portrait(ctx.moteurs, npc, ctx.style_portrait())
         try:
             octets, ext = ctx.portraits.generer(prompt, secrets.randbelow(2**31))
         except PortraitIndisponible as e:

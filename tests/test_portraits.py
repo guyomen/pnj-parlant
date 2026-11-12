@@ -1,6 +1,7 @@
 """Portraits des PNJ : description pour le générateur, moteurs, stockage dans la banque, routes."""
 import io
 import json
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -10,7 +11,7 @@ from conftest import PNG
 from pnj_parlant import portraits
 from pnj_parlant.banque import Banque
 from pnj_parlant.moteurs import MoteurIndisponible
-from pnj_parlant.portraits import STYLE, EnLigne, PortraitIndisponible, prompt_portrait, type_image
+from pnj_parlant.portraits import STYLE, STYLES, EnLigne, PortraitIndisponible, prompt_portrait, style_valide, type_image
 
 BROM = {"nom": "Brom", "metier": "forgeron", "genre": "masculin", "apparence": "Un colosse au tablier brûlé.",
         "salutation": "Salut."}
@@ -32,14 +33,21 @@ class Langage:
 # --- Description du portrait -----------------------------------------------------------------
 def test_prompt_traduit_par_le_modele_de_langage():
     langage = Langage('{"prompt": "a burly  blacksmith with a burnt apron"}')
-    assert prompt_portrait(langage, BROM, "oil painting") == "a burly blacksmith with a burnt apron, oil painting"
+    assert prompt_portrait(langage, BROM, "oil painting") == "oil painting, a burly blacksmith with a burnt apron"
     assert "Apparence : Un colosse au tablier brûlé." in langage.demandes[0] and "Brom" not in langage.demandes[0]
 
 
 @pytest.mark.parametrize("reponse", [MoteurIndisponible("Ollama arrêté"), "pas du JSON", '{"autre": 1}', "[1]"])
 def test_prompt_sans_modele_de_langage_tire_de_la_fiche(reponse):
     assert prompt_portrait(Langage(reponse), BROM, "") == "man, forgeron, Un colosse au tablier brûlé."
-    assert prompt_portrait(Langage(reponse), {"genre": "?"}).startswith("person, head and shoulders portrait")
+    assert prompt_portrait(Langage(reponse), {"genre": "?"}) == f"{STYLE}, person"
+
+
+def test_styles_de_dessin():
+    assert list(STYLES) == ["peinture", "manga", "jdr80", "photo", "crayon"]
+    assert all(nom and resume and "head and shoulders" in prompt for nom, resume, prompt in STYLES.values())
+    assert [style_valide(s) for s in ("manga", " Photo ", "aquarelle", None)] == ["manga", "photo", "", ""]
+    assert portraits.styles()[1] == {"id": "manga", "nom": "Manga", "resume": STYLES["manga"][1]}
 
 
 def test_type_image():
@@ -93,6 +101,39 @@ def test_en_ligne(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", coupe)
     with pytest.raises(PortraitIndisponible, match="réseau"):
         moteur.generer("a dwarf", 7)
+
+
+def erreur_http(code, retry_after=None):
+    import email.message
+    entetes = email.message.Message()
+    if retry_after is not None:
+        entetes["Retry-After"] = str(retry_after)
+    return urllib.error.HTTPError("https://image.pollinations.ai/", code, "limite", entetes, io.BytesIO(b"{}"))
+
+
+def test_en_ligne_limite_gratuite(monkeypatch):
+    attentes = []
+    moteur = EnLigne({}, dormir=attentes.append)
+    reponses = [erreur_http(402, 18), Reponse(PNG)]
+
+    def urlopen(r, timeout):
+        rep = reponses.pop(0)
+        if isinstance(rep, Exception):
+            raise rep
+        return rep
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert moteur.generer("a dwarf", 1) == (PNG, "png") and attentes == [18.0]  # attendu puis réessayé
+
+    reponses[:] = [erreur_http(429, 300)]  # attente trop longue : message clair, sans attendre
+    with pytest.raises(PortraitIndisponible, match="réessayez dans 300 s"):
+        moteur.generer("a dwarf", 1)
+    reponses[:] = [erreur_http(402, 10), erreur_http(402, 40)]  # encore limité après l'attente
+    with pytest.raises(PortraitIndisponible, match="réessayez dans 40 s"):
+        moteur.generer("a dwarf", 1)
+    reponses[:] = [erreur_http(500)]
+    with pytest.raises(PortraitIndisponible, match="erreur 500"):
+        moteur.generer("a dwarf", 1)
+    assert attentes == [18.0, 10.0]
 
 
 # --- Banque : stockage, export, import -------------------------------------------------------
@@ -151,7 +192,7 @@ def test_routes_du_portrait(client, portraits, ctx):
 
     r = client.post(f"/api/bank/{npc_id}/portrait", json={**BROM, "apparence": "Un nain chauve."})
     assert r.status_code == 200 and "Un nain chauve." in r.get_json()["prompt"]  # fiche en cours d'édition
-    assert portraits.prompts[0] == r.get_json()["prompt"] and portraits.prompts[0].endswith(STYLE)
+    assert portraits.prompts[0] == r.get_json()["prompt"] and portraits.prompts[0].startswith(STYLE)
     version = r.get_json()["portrait"]
     assert version == client.get("/api/bank").get_json()[0]["portrait"] == client.get(f"/api/bank/{npc_id}").get_json()["portrait"]
     image = client.get(f"/api/bank/{npc_id}/portrait?v={version}")
@@ -162,6 +203,29 @@ def test_routes_du_portrait(client, portraits, ctx):
     assert client.delete(f"/api/bank/{npc_id}/portrait").status_code == 200
     assert client.delete(f"/api/bank/{npc_id}/portrait").status_code == 404
     assert client.post("/api/bank/inconnu-0000/portrait").status_code == 404
+
+
+def test_portrait_au_style_du_scenario(client, portraits, cfg):
+    npc_id = client.post("/api/bank", json=BROM).get_json()["id"]
+    assert [s["id"] for s in client.get("/api/config").get_json()["styles_portrait"]] == list(STYLES)
+    client.put("/api/scenario", json={"monde": "Valmer.", "style_portrait": "crayon"})
+    client.post(f"/api/bank/{npc_id}/portrait")
+    assert portraits.prompts[-1].startswith(STYLES["crayon"][2])
+    client.put("/api/scenario", json={"monde": "Valmer.", "style_portrait": "inconnu"})  # → style par défaut
+    client.post(f"/api/bank/{npc_id}/portrait")
+    assert portraits.prompts[-1].startswith(STYLE)
+
+
+def test_style_par_defaut_de_config(tmp_path, moteurs, tts, portraits):
+    from conftest import FausseReconnaissance
+    from pnj_parlant.config import Config
+    from pnj_parlant.serveur import create_app
+    app = create_app(Config({"portraits": {"style": "watercolor"}, "banque": {"dossier": "pnj"}}, tmp_path),
+                     moteurs=moteurs, tts=tts, reconnaissance=FausseReconnaissance(), portraits=portraits)
+    client = app.test_client()
+    npc_id = client.post("/api/bank", json=BROM).get_json()["id"]
+    client.post(f"/api/bank/{npc_id}/portrait")
+    assert portraits.prompts[-1].startswith("watercolor, ")
 
 
 def test_portrait_erreurs(client, portraits):

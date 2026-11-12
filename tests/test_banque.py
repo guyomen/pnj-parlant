@@ -14,7 +14,7 @@ def banque(tmp_path):
 
 
 def test_scenario_vide_puis_enregistre(banque):
-    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""}
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
     banque.enregistrer_scenario({"monde": "  Valmer.  ", "notes_mj": "x" * 30000, "autre": "ignoré"})
     scenario = banque.scenario()
     assert scenario["monde"] == "Valmer."
@@ -36,7 +36,7 @@ def test_vider(banque):
     banque.ajouter({"nom": "Ysolde"})
     assert banque.vider() == 2
     assert banque.liste() == [] and banque.lieux() == []
-    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""}
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
     assert Banque(banque.dossier).vider() == 0  # déjà vide : rien à supprimer
 
 
@@ -127,7 +127,7 @@ def test_import_remplace_ou_garde_les_pnj(banque):
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'})
     assert [n["nom"] for n in banque.liste()] == ["Ysolde"]
-    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""} and banque.lieux() == []  # absents : vidés
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""} and banque.lieux() == []  # absents : vidés
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'}, remplacer=False)
     assert [n["nom"] for n in banque.liste()] == ["Brom", "Ysolde"]
