@@ -25,6 +25,7 @@ src/pnj_parlant/
   texte.py           # nettoyage pour la voix, nombres en lettres, découpage en phrases
   moteurs.py         # LLM : Claude (API Anthropic) ou modèle local (Ollama)
   voix.py, stt.py    # synthèse (Pocket TTS, Piper, Edge) ; reconnaissance (faster-whisper)
+  portraits.py       # portraits des PNJ (facultatif) : SD-Turbo local (diffusers) ou Pollinations en ligne
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
@@ -38,7 +39,8 @@ scripts/ecran.sh     # libère la VRAM sous Linux (écran graphique coupé)
 docs/                # installation-windows.md : guide pas à pas Windows
 ```
 Moteurs choisis dans `config.toml` : `[moteurs] creation` / `dialogue` = `"claude"` ou `"local"` (Ollama) ;
-`[voix] moteur` = `pocket`, `piper` ou `edge` ; `[reconnaissance] moteur` = `local` ou `navigateur`.
+`[voix] moteur` = `pocket`, `piper` ou `edge` ; `[reconnaissance] moteur` = `local` ou `navigateur` ;
+`[portraits] moteur` = `aucun` (défaut), `local` ou `en_ligne`.
 
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
@@ -46,6 +48,7 @@ Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concern
 - `web.md` : vues (accueil, partie, options), barre du haut, thèmes graphiques, conversation gardée, dialogue,
   lieux, univers, micro.
 - `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance.
+- `serveur.md` couvre aussi les portraits (portraits.py, stockage, routes) ; `web.md` leur affichage.
 - `systeme.md` : dépendances, config.toml, lanceurs, Docker/Ollama, documentation.
 - `tests.md` : pytest, node, e2e et ses pièges.
 

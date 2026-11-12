@@ -81,6 +81,28 @@ appareil = "cpu"           # "cpu", ou "cuda" pour une carte NVIDIA (demande les
 # precision = "int8"       # calcul de Whisper ; par défaut int8 sur le processeur, float16 avec "cuda"
 # beam_size = 5            # 1 = plus rapide, un peu moins juste
 
+[portraits]                # portrait de chaque PNJ, généré dans la page de préparation (facultatif)
+moteur = "aucun"           # "aucun" : pas de portraits ;
+                           # "local" : Stable Diffusion Turbo sur ce PC, sans réseau une fois le modèle téléchargé
+                           #           (~2,5 Go à la première génération) ; demande l'option portraits :
+                           #           uv sync --extra tout --extra portraits ; quelques secondes sur carte NVIDIA,
+                           #           de 20 s à 1 min au processeur ;
+                           # "en_ligne" : Pollinations, gratuit et sans clé, mais réseau nécessaire et la
+                           #           description du PNJ est envoyée à ce service.
+# Les portraits sont rangés à côté des fiches (pnj/<id>.png) et exportés avec l'univers : la partie n'en
+# génère jamais, elle reste jouable sans réseau. Le modèle de création traduit l'apparence en anglais.
+# style = "head and shoulders portrait, medieval fantasy character, detailed painting, soft dramatic lighting, plain dark background"
+
+[portraits.local]
+modele = "stabilityai/sd-turbo"   # modèle Hugging Face (licence non commerciale : usage personnel)
+etapes = 2                 # 1 à 4 : plus = un peu plus détaillé, plus lent
+appareil = "auto"          # "auto" (carte NVIDIA si disponible), "cuda" ou "cpu"
+# taille = 512
+
+[portraits.en_ligne]
+# taille = 512
+# delai = 120              # secondes avant d'abandonner
+
 [banque]
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)
 

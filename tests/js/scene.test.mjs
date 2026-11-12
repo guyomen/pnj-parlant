@@ -170,13 +170,21 @@ test("detecteurVoix : voix soutenue au-dessus du bruit de fond, pas les bruits b
   assert.ok(!scene.detecteurVoix().ajouter(1, 0));  // rien pendant le calibrage
 });
 
+test("adressePortrait : seulement pour un PNJ de la banque qui a un portrait", () => {
+  assert.equal(scene.adressePortrait({ id: "brom-00a1", portrait: 1731400000123 }), "/api/bank/brom-00a1/portrait?v=1731400000123");
+  assert.equal(scene.adressePortrait({ id: "brom-00a1", portrait: 0 }), "");
+  assert.equal(scene.adressePortrait({ nom: "Inventé", portrait: 5 }), "");  // pas encore dans la banque
+  assert.equal(scene.adressePortrait(null), "");
+});
+
 // --- univers.js : messages de l'import et de l'accueil ---------------------------------
 const sourceUnivers = readFileSync(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url), "utf8");
 const univers = await import(`data:text/javascript;base64,${Buffer.from(sourceUnivers).toString("base64")}`);
 
 test("univers : fichiers importables, résumés et confirmation", () => {
-  const noms = univers.fichiersImportables([{ name: "a.json" }, { name: "B.ZIP" }, { name: "photo.png" }]).map(f => f.name);
-  assert.deepEqual(noms, ["a.json", "B.ZIP"]);
+  const noms = univers.fichiersImportables([{ name: "a.json" }, { name: "B.ZIP" }, { name: "brom-0001.png" },
+    { name: "x.JPEG" }, { name: "notes.txt" }, { name: "Thumbs.db" }]).map(f => f.name);
+  assert.deepEqual(noms, ["a.json", "B.ZIP", "brom-0001.png", "x.JPEG"]);  // fiches, archives et portraits
   assert.equal(univers.resumeImport({ scenario: true, lieux: 3, pnj: 1, ignores: [] }), "Univers chargé : 3 lieux et 1 PNJ.");
   assert.equal(univers.resumeImport({ scenario: false, lieux: 1, pnj: 5, ignores: ["x.json"] }),
     "Univers chargé : 1 lieu et 5 PNJ, sans texte d’univers. Fichiers ignorés : x.json.");

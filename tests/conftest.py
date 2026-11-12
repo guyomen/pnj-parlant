@@ -1,6 +1,7 @@
 """
 Faux moteurs pour tester sans réseau, sans modèle et sans carte graphique :
-FauxMoteurs (modèle de langage), FauxTTS (synthèse vocale), FausseReconnaissance (Whisper).
+FauxMoteurs (modèle de langage), FauxTTS (synthèse vocale), FausseReconnaissance (Whisper),
+FauxPortraits (générateur d'images).
 """
 import json
 
@@ -92,6 +93,28 @@ class FauxTTS:
         return b"RIFF" + texte.encode(), "audio/wav"
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"faux portrait"
+
+
+class FauxPortraits:
+    """Remplace un moteur de portraits.py : renvoie une fausse image PNG, ou lève `erreur` si elle est définie."""
+    nom = "faux"
+
+    def __init__(self):
+        self.prompts = []
+        self.erreur = None
+        self.actif = True
+
+    def disponible(self):
+        return self.actif
+
+    def generer(self, prompt, graine):
+        self.prompts.append(prompt)
+        if self.erreur:
+            raise self.erreur
+        return PNG, "png"
+
+
 class FausseReconnaissance:
     choisie = False
     dossier = None
@@ -116,8 +139,13 @@ def tts():
 
 
 @pytest.fixture
-def app(cfg, moteurs, tts):
-    return create_app(cfg, moteurs=moteurs, tts=tts, reconnaissance=FausseReconnaissance())
+def portraits():
+    return FauxPortraits()
+
+
+@pytest.fixture
+def app(cfg, moteurs, tts, portraits):
+    return create_app(cfg, moteurs=moteurs, tts=tts, reconnaissance=FausseReconnaissance(), portraits=portraits)
 
 
 @pytest.fixture

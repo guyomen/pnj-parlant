@@ -50,6 +50,7 @@ verifier("Ysolde est là, Brom non", await quand(`(() => { const t = document.ge
 await quand(`[...document.querySelectorAll("[data-aborder]")].some(b => b.textContent.includes("Ysolde") && !b.disabled)`);  // fin de la narration
 await js(`[...document.querySelectorAll("[data-aborder]")].find(b => b.textContent.includes("Ysolde")).click()`);
 verifier("aborder Ysolde : fiche et salutation", await quand(`document.querySelector(".pnj-card h1")?.textContent === "Ysolde" && document.getElementById("log").textContent.includes("Bienvenue au Sanglier")`));
+verifier("portrait d'Ysolde dans sa fiche (pnj/ysolde-0001.png)", await quand(`document.querySelector(".pnj-card img.portrait")?.naturalWidth === 8 && !document.querySelector(".pnj-card.second img.portrait")`));
 await quand(`!document.getElementById("ask").disabled`);
 
 await js(`(() => { document.getElementById("ask").value = "Allons à la forge de Brom !"; document.getElementById("sendBtn").click(); })()`);

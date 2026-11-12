@@ -44,7 +44,7 @@ def test_ajouter_lire_lister_supprimer(banque):
     npc_id = banque.ajouter({"nom": "Ysolde la Rousse", "metier": "aubergiste"})
     assert npc_id.startswith("ysolde-la-rousse-")
     banque.ajouter({"nom": "Ébène", "metier": "barde"})
-    assert banque.lire(npc_id) == {"nom": "Ysolde la Rousse", "metier": "aubergiste", "id": npc_id}
+    assert banque.lire(npc_id) == {"nom": "Ysolde la Rousse", "metier": "aubergiste", "id": npc_id, "portrait": 0}
     assert [n["nom"] for n in banque.liste()] == ["Ébène", "Ysolde la Rousse"]  # tri sans tenir compte des accents
     assert banque.supprimer(npc_id) and not banque.existe(npc_id)
     assert not banque.supprimer(npc_id)

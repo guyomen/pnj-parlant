@@ -29,6 +29,15 @@ stt = [
     # sur carte NVIDIA (appareil = "cuda") : CUDA 12 et cuDNN 9 pour CTranslate2
     # "nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10",
 ]
+# Portraits générés sur ce PC ([portraits] moteur = "local") ; PyTorch vient avec l'option voix (Pocket TTS).
+# Pas dans « tout » : le modèle pèse ~2,5 Go et les portraits sont facultatifs (ou en ligne).
+portraits = [
+    "torch>=2.4",
+    "diffusers>=0.30",
+    "transformers>=4.44",
+    "accelerate>=0.33",
+    "pillow>=10",
+]
 tout = ["pnj-parlant[voix,stt]"]
 dev = ["pytest>=8"]
 

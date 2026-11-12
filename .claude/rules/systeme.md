@@ -19,7 +19,8 @@ paths:
 # Installation, lancement, configuration, machine
 
 ## Paquet et dépendances
-- `pyproject.toml` : options `voix`, `stt`, `tout`, `dev` ; commandes `pnj-parlant` et `pnj-banque`.
+- `pyproject.toml` : options `voix`, `stt`, `tout`, `portraits` (diffusers… : volontairement hors de `tout`, et non
+  vérifiée par dependances.py : facultative), `dev` ; commandes `pnj-parlant` et `pnj-banque`.
   `uv.lock` fige les versions, `.python-version` = 3.13 (`requires-python >= 3.11` pour tomllib) : les deux sont
   versionnés (installation reproductible, lancer.bat fait `uv sync`).
 - `dependances.py` : lancé par lancer.bat comme simple fichier (bibliothèque standard seule), signale les paquets

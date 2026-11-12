@@ -17,6 +17,7 @@ Routes :
     POST /api/scenario/import         copie un scénario dans la banque (zip ou fichiers JSON d'un dossier)
     GET  /api/exemples, POST /api/exemples/<id>   univers d'exemple fournis : liste, chargement dans la banque
     GET|POST /api/bank, GET|PUT|DELETE /api/bank/<id>   banque de PNJ
+    GET|POST|DELETE /api/bank/<id>/portrait   portrait du PNJ : image, génération (moteur de [portraits]), retrait
     POST /api/voice                   autre voix pour un PNJ ; GET /api/voices : voix du moteur
     GET|PUT /api/voice-engine         moteur de synthèse (jusqu'au redémarrage)
     POST /api/tts                     synthèse vocale {text, voice, narrateur, eviter}
@@ -28,6 +29,7 @@ import json
 import logging
 import mimetypes
 import os
+import secrets
 import signal
 import threading
 import time
@@ -39,6 +41,8 @@ from . import config as configuration
 from . import dialogue, fiches, systeme, texte, voix
 from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier
 from .moteurs import MoteurIndisponible, Moteurs
+from .portraits import STYLE, PortraitIndisponible, prompt_portrait
+from .portraits import charger as charger_portraits
 from .stt import Reconnaissance
 
 log = logging.getLogger(__name__)
@@ -65,12 +69,14 @@ mimetypes.add_type("text/javascript", ".js")
 class Contexte:
     """Tout ce dont les routes ont besoin. Les moteurs peuvent être remplacés (tests)."""
 
-    def __init__(self, cfg, moteurs=None, tts=None, reconnaissance=None):
+    def __init__(self, cfg, moteurs=None, tts=None, reconnaissance=None, portraits=None):
         self.cfg = cfg
         self.moteurs = moteurs or Moteurs(cfg.reglages)  # Claude ou modèle local, d'après [moteurs]
         self.tts = tts or voix.charger(cfg.reglages, cfg.racine)  # Piper, Pocket TTS ou Edge, d'après [voix]
         self.tts_charges = {self.tts.nom: self.tts}  # on ne recharge pas Pocket TTS à chaque bascule
         self.reconnaissance = reconnaissance or Reconnaissance(cfg.section("reconnaissance"), cfg.racine)
+        self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
+        self.style_portrait = cfg.section("portraits").get("style", STYLE)
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
         self.historique = cfg.section("dialogue").get("historique", 12)  # messages gardés pour le contexte
         self.intervention = cfg.section("dialogue").get("intervention", 0.3)
@@ -105,7 +111,8 @@ class Contexte:
 
 
 def create_app(cfg, **moteurs):
-    """Application Flask. `moteurs` : moteurs=, tts=, reconnaissance= pour remplacer ceux de config.toml."""
+    """Application Flask. `moteurs` : moteurs=, tts=, reconnaissance=, portraits= pour remplacer ceux de
+    config.toml."""
     app = Flask(__name__, static_folder=str(STATIC), static_url_path="")
     ctx = Contexte(cfg, **moteurs)
     app.extensions["pnj"] = ctx
@@ -125,7 +132,8 @@ def create_app(cfg, **moteurs):
         return jsonify({"moteurs": m.description(), "tts": ctx.tts.nom if ctx.tts.catalogue() else None,
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
                         "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes),
-                        "contexte_max": m.contexte_max()})
+                        "contexte_max": m.contexte_max(),
+                        "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None})
 
     @app.get("/api/etat")
     def etat():
@@ -247,6 +255,41 @@ def create_app(cfg, **moteurs):
     def bank_delete(npc_id):
         if not ctx.banque.supprimer(npc_id):
             return erreur("PNJ introuvable.", 404)
+        return jsonify({"ok": True})
+
+    # --- Portraits -----------------------------------------------------------------
+    @app.get("/api/bank/<npc_id>/portrait")
+    def portrait_get(npc_id):
+        chemin = ctx.banque.portrait(npc_id)
+        if chemin is None:
+            return erreur("Pas de portrait.", 404)
+        # lu en mémoire : sous Windows, un fichier encore ouvert ne pourrait être ni refait ni supprimé.
+        # Adresse avec ?v=<version> (champ « portrait » de la fiche) : gardée en cache, elle change avec l'image.
+        return send_file(io.BytesIO(chemin.read_bytes()), mimetype=mimetypes.guess_type(chemin.name)[0],
+                         max_age=86400 if request.args.get("v") else 0)
+
+    @app.post("/api/bank/<npc_id>/portrait")
+    def portrait_generer(npc_id):
+        """Génère et enregistre le portrait d'un PNJ de la banque. Corps facultatif : la fiche en cours
+        d'édition (apparence modifiée mais pas encore enregistrée). Renvoie {portrait: version, prompt}."""
+        npc = ctx.banque.lire(npc_id)
+        if npc is None:
+            return erreur("PNJ introuvable.", 404)
+        if not ctx.portraits.disponible():
+            return erreur("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.", 400)
+        npc.update(request.get_json(silent=True) or {})
+        prompt = prompt_portrait(ctx.moteurs, npc, ctx.style_portrait)
+        try:
+            octets, ext = ctx.portraits.generer(prompt, secrets.randbelow(2**31))
+        except PortraitIndisponible as e:
+            return erreur(str(e), 503)
+        ctx.banque.enregistrer_portrait(npc_id, octets, ext)
+        return jsonify({"portrait": ctx.banque.version_portrait(npc_id), "prompt": prompt})
+
+    @app.delete("/api/bank/<npc_id>/portrait")
+    def portrait_supprimer(npc_id):
+        if not ctx.banque.supprimer_portrait(npc_id):
+            return erreur("Pas de portrait.", 404)
         return jsonify({"ok": True})
 
     # --- Voix ---------------------------------------------------------------------

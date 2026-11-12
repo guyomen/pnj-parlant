@@ -2,6 +2,11 @@
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// Adresse du portrait d'un PNJ de la banque, "" s'il n'en a pas. Champ « portrait » = version de l'image
+// (sa date) : l'adresse change quand on refait le portrait, le navigateur peut donc la garder en cache.
+export const adressePortrait = (pnj) => pnj?.id && pnj.portrait
+  ? `/api/bank/${encodeURIComponent(pnj.id)}/portrait?v=${encodeURIComponent(pnj.portrait)}` : "";
+
 // Minuscules sans accents : « Écoute » → « ecoute »
 export const norm = (s) => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 

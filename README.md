@@ -190,9 +190,29 @@ python -c "from faster_whisper import download_model; download_model('small', 'm
 
 Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
 
+## Portraits des PNJ (facultatif)
+
+Chaque PNJ de la banque peut avoir un portrait, généré dans la page de préparation (onglet PNJ, bouton **Générer le portrait** à côté de son identité ; **Refaire** en tire un autre). Il s'affiche dans la fiche du PNJ pendant la partie et en vignette dans la banque. Le portrait part de la fiche telle qu'elle est à l'écran : modifiez l'apparence, puis refaites-le. Le modèle de création (Claude ou Ollama) traduit l'apparence en une courte description anglaise, que les générateurs d'images comprennent mieux.
+
+Les portraits sont rangés à côté des fiches (`pnj/<id>.png`) et partent avec l'univers exporté. La partie n'en génère jamais : elle reste jouable sans réseau. Section `[portraits]` de `config.toml` :
+
+| `moteur` | Comment | Réseau | Vitesse |
+|---|---|---|---|
+| `"aucun"` (défaut) | pas de portraits | — | — |
+| `"local"` | [Stable Diffusion Turbo](https://huggingface.co/stabilityai/sd-turbo) sur le PC (licence non commerciale : usage personnel) | seulement pour télécharger le modèle (~2,5 Go) au premier portrait | quelques secondes sur carte NVIDIA, 20 s à 1 min au processeur |
+| `"en_ligne"` | [Pollinations](https://pollinations.ai), gratuit et sans clé ; la description du PNJ est envoyée à ce service, et l'image porte un petit filigrane | à chaque portrait | 5 à 15 s |
+
+Le moteur local demande l'option `portraits` (diffusers ; PyTorch vient déjà avec la synthèse vocale) :
+
+```bash
+uv sync --extra tout --extra portraits
+```
+
+Ollama ne génère pas d'images sous Windows ni sous Linux (sa génération d'images expérimentale était réservée à macOS, puis a été retirée). Avec un modèle de dialogue local sur une petite carte (4 Go), générez les portraits pendant la préparation, quand Ollama n'occupe pas la mémoire vidéo, ou mettez `appareil = "cpu"` dans `[portraits.local]`.
+
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, hôte, port et HTTPS. Relancez `pnj-parlant` après une modification.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Relancez `pnj-parlant` après une modification.
 
 `config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 
@@ -204,7 +224,7 @@ cherchent `config.toml` dans le dossier courant ; `--config chemin/vers/config.t
 Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté de `config.toml`.
 
 ```
-pyproject.toml              paquet, dépendances (options : voix, stt, tout, dev), commandes
+pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev), commandes
 src/pnj_parlant/
   serveur.py                application Flask (routes) et lancement
   config.py                 lecture de config.toml
@@ -215,6 +235,7 @@ src/pnj_parlant/
   moteurs.py                modèles de langage : Claude ou Ollama
   voix.py                   synthèse vocale (Pocket TTS, Piper, Edge) et attribution des voix
   stt.py                    reconnaissance vocale (faster-whisper)
+  portraits.py              portraits des PNJ : Stable Diffusion Turbo (local) ou Pollinations (en ligne)
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
@@ -227,7 +248,7 @@ lancer.bat                  lanceur Windows (double-clic)
 ```
 
 Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de faux moteurs remplacent
-le modèle de langage, la synthèse et la reconnaissance vocales (voir `tests/conftest.py`).
+le modèle de langage, la synthèse et la reconnaissance vocales et le générateur de portraits (voir `tests/conftest.py`).
 
 ```bash
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"

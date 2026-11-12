@@ -104,6 +104,30 @@
   .sheet .sous-titre:first-of-type { border-top: 0; padding-top: 0; margin-top: .6rem; }
   .voice { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .8rem; color: var(--muted); }
   .voice span { flex: 1 1 100%; }
+  /* Portrait : à droite de l'identité (en dessous sur téléphone) */
+  .identite { display: grid; gap: 1rem 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .identite:has(.portrait:not([hidden])) { grid-template-columns: minmax(0, 1fr) 11rem; }
+  @media (max-width: 40rem) { .identite:has(.portrait:not([hidden])) { grid-template-columns: minmax(0, 1fr); } }
+  .portrait { margin: .8rem 0 0; display: flex; flex-direction: column; gap: .5rem; }
+  .portrait[hidden] { display: none; }
+  .portrait .cadre { aspect-ratio: 1; border-radius: var(--rayon); overflow: hidden; border: 1px solid var(--line);
+                     background: var(--bg); display: grid; place-items: center; }
+  .portrait img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .portrait img[hidden] { display: none; }
+  .portrait #portraitVide { font: 400 4rem var(--display); color: var(--line); }
+  .portrait #portraitVide[hidden] { display: none; }
+  .portrait figcaption { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .portrait figcaption small { flex: 1 1 100%; color: var(--muted); font-style: italic; line-height: 1.3; }
+  .portrait.en-cours .cadre { animation: peinture 1.6s ease-in-out infinite; }
+  @keyframes peinture { 50% { opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) { .portrait.en-cours .cadre { animation: none; } }
+  /* vignette du portrait dans la banque */
+  .bank-list .who { display: flex; align-items: center; gap: .6rem; }
+  .bank-list .who .mini { width: 2.2rem; height: 2.2rem; border-radius: 50%; flex: none; object-fit: cover;
+                          background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center;
+                          font: 400 1.1rem var(--display); color: var(--muted); }
+  .bank-list .who .txt { min-width: 0; }
+
   /* barre d'enregistrement toujours visible en bas de la fiche, même longue */
   .sheet .collante { position: sticky; bottom: 0; background: var(--surface); margin: 1.25rem -1.5rem 0;
                      padding: .8rem 1.5rem; border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) 0; }
@@ -225,12 +249,23 @@
         <section class="carte sheet" aria-labelledby="mode">
           <h2 id="mode">Nouveau PNJ</h2>
           <h3 class="sous-titre">Identité</h3>
-          <div class="grid2">
-            <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
-            <div><label for="f-metier">Métier</label><input type="text" id="f-metier"></div>
-            <div><label for="f-genre">Genre</label>
-              <select id="f-genre"><option value="feminin">Féminin</option><option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
-            <div><label for="f-lieu">Lieu habituel</label><select id="f-lieu" class="lieux-sel"></select></div>
+          <div class="identite">
+            <div class="grid2">
+              <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
+              <div><label for="f-metier">Métier</label><input type="text" id="f-metier"></div>
+              <div><label for="f-genre">Genre</label>
+                <select id="f-genre"><option value="feminin">Féminin</option><option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
+              <div><label for="f-lieu">Lieu habituel</label><select id="f-lieu" class="lieux-sel"></select></div>
+            </div>
+            <!-- portrait (facultatif : [portraits] moteur dans config.toml) -->
+            <figure class="portrait" id="portraitBloc" hidden>
+              <div class="cadre"><img id="portraitImg" alt="" hidden><span id="portraitVide" aria-hidden="true">?</span></div>
+              <figcaption>
+                <button class="petit" id="portraitBtn">Générer le portrait</button>
+                <button class="ghost petit" id="portraitSuppr" hidden>Retirer</button>
+                <small id="portraitStatus"></small>
+              </figcaption>
+            </figure>
           </div>
           <h3 class="sous-titre">Caractère</h3>
           <label for="f-humeur">Humeur</label><input type="text" id="f-humeur">
@@ -270,7 +305,7 @@
 </main>
 
 <script type="module">
-import { esc, parLieu } from "./js/scene.js";
+import { adressePortrait, esc, parLieu } from "./js/scene.js";
 import { THEMES, THEME_DEFAUT, appliquerTheme, confirmationImport, exporter, importerFichiers,
          resumeImport } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
@@ -318,6 +353,8 @@ function fillForm(npc) {
   if (!npc.debit) $("f-debit").value = "normal";
   $("mode").textContent = npc.id ? `Modification de ${npc.nom}` : (npc.nom ? "Proposition (non enregistrée)" : "Nouveau PNJ");
   $("demande").open = !npc.nom;  // la demande au modèle sert pour une fiche vierge
+  $("portraitStatus").textContent = "";
+  majPortrait();
   showVoice();
   dirty = false;
   renderBank();
@@ -372,6 +409,53 @@ function showVoice() {
 }
 
 const confirmDiscard = () => !dirty || confirm("Les modifications de la fiche en cours seront perdues. Continuer ?");
+
+// --- Portrait (facultatif : [portraits] moteur dans config.toml) ----------------------
+// Seulement pour un PNJ enregistré : l'image est rangée à côté de sa fiche. La génération part de la fiche
+// telle qu'elle est à l'écran (apparence modifiée comprise).
+let portraitsActifs = false;        // un moteur de portraits est configuré sur le serveur
+let peinture = false;               // génération en cours
+const initiale = (nom) => (String(nom ?? "").trim()[0] ?? "?").toUpperCase();
+
+function majPortrait() {
+  const present = !!adressePortrait(current);
+  $("portraitBloc").hidden = !portraitsActifs && !present;
+  $("portraitBloc").classList.toggle("en-cours", peinture);
+  $("portraitImg").hidden = !present;
+  if (present && !$("portraitImg").src.endsWith(adressePortrait(current))) $("portraitImg").src = adressePortrait(current);
+  $("portraitVide").hidden = present;
+  $("portraitVide").textContent = initiale($("f-nom").value);
+  $("portraitBtn").hidden = !portraitsActifs;
+  $("portraitBtn").textContent = present ? "Refaire" : "Générer le portrait";
+  $("portraitBtn").disabled = !current.id || peinture;
+  $("portraitSuppr").hidden = !present || peinture;
+  if (!current.id && portraitsActifs) $("portraitStatus").textContent = "Enregistrez le PNJ pour lui faire un portrait.";
+}
+
+$("portraitBtn").onclick = async () => {
+  const id = current.id;
+  peinture = true;
+  majPortrait();
+  $("portraitStatus").textContent = "Le portrait se peint… (en local, le tout premier télécharge le modèle : patience)";
+  try {
+    const r = await api(`/api/bank/${encodeURIComponent(id)}/portrait`, readForm());
+    if (current.id === id) { current.portrait = r.portrait; $("portraitImg").title = r.prompt; }
+    $("portraitStatus").textContent = "";
+    await refreshBank();
+  } catch (e) { $("portraitStatus").textContent = e.message; }
+  peinture = false;
+  majPortrait();
+};
+$("portraitSuppr").onclick = async () => {
+  if (!confirm(`Retirer le portrait de ${current.nom} ?`)) return;
+  try {
+    await api(`/api/bank/${encodeURIComponent(current.id)}/portrait`, undefined, "DELETE");
+    current.portrait = 0;
+    await refreshBank();
+  } catch (e) { $("portraitStatus").textContent = e.message; }
+  majPortrait();
+};
+$("f-nom").addEventListener("input", () => { $("portraitVide").textContent = initiale($("f-nom").value); });
 
 // --- Scénario ----------------------------------------------------------------
 let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT };  // dernière version enregistrée
@@ -545,13 +629,16 @@ async function refreshBank() {
   renderBank();
   if (!lieuxDirty) renderLieux();  // PNJ de chaque lieu (sans effacer une saisie en cours)
 }
+// Vignette : le portrait, sinon l'initiale (si les portraits sont activés)
+const vignette = (n) => n.portrait ? `<img class="mini" src="${adressePortrait(n)}" alt="">`
+  : portraitsActifs ? `<span class="mini" aria-hidden="true">${esc(initiale(n.nom))}</span>` : "";
 // Banque groupée par lieu habituel ; le PNJ de la fiche est mis en évidence
 function renderBank() {
   $("nbPnj").textContent = bank.length || "";
   $("bankList").innerHTML = bank.length ? parLieu(bank, lieux).map(({ lieu, pnjs }) =>
     `<li class="groupe">${lieu ? esc(lieu.nom) : "Sans lieu"}</li>` + pnjs.map(n => `
     <li class="${n.id === current.id ? "current" : ""}">
-      <button class="who" data-edit="${esc(n.id)}">${esc(n.nom)}<small>${esc(n.metier)}</small></button>
+      <button class="who" data-edit="${esc(n.id)}">${vignette(n)}<span class="txt">${esc(n.nom)}<small>${esc(n.metier)}</small></span></button>
       <button class="ghost suppr" data-del="${esc(n.id)}" aria-label="Supprimer ${esc(n.nom)}" title="Supprimer">✕</button>
     </li>`).join("")).join("") : `<li class="vide">Aucun PNJ enregistré. Demandez-en un au modèle, ou remplissez la fiche.</li>`;
 }
@@ -638,6 +725,7 @@ window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty || scen
 
 loadEngine();
 fillForm({});
+api("/api/config").then(c => { portraitsActifs = !!c.portraits; majPortrait(); renderBank(); }).catch(() => {});
 loadScenario();
 loadLieux().then(refreshBank);
 </script>

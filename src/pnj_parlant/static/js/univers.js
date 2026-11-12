@@ -29,8 +29,8 @@ export async function chargerTheme() {
   return s ? appliquerTheme(s.theme) : document.documentElement.dataset.theme;
 }
 
-// Fichiers utiles d'une sélection (zip, ou fichiers .json d'un dossier choisi avec webkitdirectory)
-export const fichiersImportables = (fichiers) => [...fichiers].filter(f => /\.(json|zip)$/i.test(f.name));
+// Fichiers utiles d'une sélection (zip, ou fiches .json et portraits d'un dossier choisi avec webkitdirectory)
+export const fichiersImportables = (fichiers) => [...fichiers].filter(f => /\.(json|zip|png|jpe?g|webp)$/i.test(f.name));
 
 const pluriel = (n, mot, s = "s") => `${n} ${mot}${n > 1 ? s : ""}`;
 

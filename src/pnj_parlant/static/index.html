@@ -100,6 +100,11 @@
   .pnj-card.second { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .npc .pnj-card.second h1 { font-size: 1.7rem; }
   .pnj-card.second p { font-size: .95rem; }
+  /* Portrait du PNJ (facultatif) : en grand pour le premier, en vignette pour les suivants */
+  .pnj-card .portrait { display: block; width: 100%; max-width: 18rem; aspect-ratio: 1; object-fit: cover;
+                        border-radius: var(--rayon); border: 1px solid var(--line); margin: 0 0 1rem; }
+  .pnj-card.second .portrait { float: right; width: 4.5rem; margin: 0 0 .5rem .75rem; }
+  .pnj-card.second::after { content: ""; display: block; clear: both; }
 
   /* Options */
   .options label { display: block; margin-bottom: .4rem; cursor: pointer; }
@@ -290,7 +295,7 @@
 </section>
 
 <script type="module">
-import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
+import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix } from "./js/scene.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, importerFichiers,
@@ -433,6 +438,7 @@ const nomDuLieu = (id) => lieux.find(l => l.id === id)?.nom;
 function renderCards() {
   $("cards").innerHTML = npcs.length ? npcs.map((n, i) => `
     <div class="pnj-card${i ? " second" : ""}">
+      ${adressePortrait(n) ? `<img class="portrait" src="${adressePortrait(n)}" alt="Portrait de ${esc(n.nom)}">` : ""}
       <h1>${esc(n.nom)}</h1>
       <p class="metier">${esc(n.metier)}</p>
       <p>${esc(n.apparence)}</p>

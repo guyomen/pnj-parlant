@@ -83,6 +83,7 @@ Sans uv, installez Python 3.13 (`winget install Python.Python.3.13`, ou [python.
    - `cle_api` (section `[claude]`) : votre clé API Anthropic, entre guillemets. Elle sert à créer les PNJ quand vous avez le réseau.
    - `dialogue = "local"` (section `[moteurs]`) : les PNJ parleront avec le modèle local, sans réseau.
    - `moteur` (section `[voix]`) : `"pocket"` (le plus naturel sans réseau, conseillé), `"piper"` (plus léger) ou `"edge"` (le plus naturel, mais seulement avec le réseau). Le comparatif est dans le [README](../README.md#synthèse-vocale).
+   - Facultatif, `moteur` (section `[portraits]`) : `"en_ligne"` pour donner un portrait aux PNJ pendant la préparation (avec le réseau, rien à installer), ou `"local"` pour les générer sur le PC (installez d'abord l'option : `uv sync --extra tout --extra portraits`). Voir le [README](../README.md#portraits-des-pnj-facultatif).
 3. Enregistrez et fermez.
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
@@ -185,6 +186,7 @@ Avec le réseau, vérifiez que tout est sur le PC :
 - [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
 - [ ] Les voix sont téléchargées : avec `moteur = "pocket"`, l'application a été lancée une fois avec le réseau et la fenêtre n'affiche aucune « voix indisponible » ; avec `moteur = "piper"`, les voix sont dans `voices\`. Le moteur `edge` ne marche pas sans réseau.
 - [ ] Le modèle de reconnaissance vocale est dans `modeles-stt\small\` (étape 2.4), et `config.toml` contient la section `[reconnaissance]` avec `moteur = "local"`.
+- [ ] Facultatif : les portraits voulus sont générés (page de préparation, onglet PNJ). Ils sont enregistrés sur le PC et s'affichent sans réseau.
 - [ ] **Test complet en coupant le Wi-Fi ou le câble réseau** : lancez `lancer.bat`, jouez un PNJ et posez-lui une question.
 
 Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaissance vocale passe par les serveurs de Google (Chrome) ou Microsoft (Edge) et ne marchera pas sans réseau : téléchargez le modèle (étape 2.4).

@@ -6,6 +6,7 @@ paths:
   - "src/pnj_parlant/fiches.py"
   - "src/pnj_parlant/moteurs.py"
   - "src/pnj_parlant/banque.py"
+  - "src/pnj_parlant/portraits.py"
   - "src/pnj_parlant/generer.py"
   - "src/pnj_parlant/exemples/**"
   - "src/pnj_parlant/static/**"
@@ -15,6 +16,7 @@ paths:
   - "tests/test_fiches.py"
   - "tests/test_moteurs.py"
   - "tests/test_banque.py"
+  - "tests/test_portraits.py"
 ---
 
 # Serveur Flask, routes et dialogue
@@ -48,11 +50,29 @@ Serveur sans état : l'historique vit dans le navigateur.
   tout est vérifié avant d'écrire (`lire_zip` : noms aplatis, taille et nombre limités ; fichier renommé à la main →
   nouvel identifiant). `GET /api/exemples`, `POST /api/exemples/<id> {remplacer}` : univers de
   `src/pnj_parlant/exemples/<id>/` (`_infos.json` = nom et résumé pour l'accueil, jamais importé).
+- Les fiches lues (`GET /api/bank`, `/api/bank/<id>`) ont `portrait` = version de l'image (`Banque.version_portrait` :
+  date en ms, 0 sans portrait) ; jamais écrit dans le JSON (`ecrire` le retire, comme `id`).
 - `GET|POST /api/bank`, `GET|PUT|DELETE /api/bank/<id>` ; `POST /api/voice` (autre voix pour un PNJ, `eviter`) ;
   `GET /api/voices`, `GET|PUT /api/voice-engine` (page de création ; voir la règle voix).
 - `POST /api/tts {text, voice, narrateur, eviter}` : 503 en cas d'échec → le navigateur utilise `speechSynthesis`.
 - `POST /api/stt` (audio webm/opus + `indice`) : 404 si la reconnaissance locale est indisponible.
 - `POST /api/npc/talk {npc, presents, history, lieu, longueur}` : détaillé ci-dessous.
+
+## Portraits (portraits.py, facultatif)
+- `[portraits] moteur` : `aucun` (défaut, `Aucun`), `local` (`Local` : SD-Turbo via diffusers, option `portraits` hors
+  de `tout`, chargé à la première génération, verrou, fp16 sur CUDA / fp32 au processeur) ou `en_ligne` (`EnLigne` :
+  Pollinations, une adresse GET, image vérifiée par ses premiers octets, `type_image`). `PortraitIndisponible` :
+  message pour l'utilisateur. Ollama ne génère pas d'images (Windows/Linux) : ne pas le proposer.
+- `prompt_portrait(moteurs, npc, style)` : le moteur de création traduit la fiche en anglais (`Moteurs.fiche` avec
+  le schéma `{prompt}`) ; repli sans modèle : « genre, métier, apparence ». Style : `[portraits] style`.
+- Stockage : `pnj/<id>.png|jpg|webp` à côté de la fiche (`Banque.portrait`, `enregistrer_portrait`,
+  `supprimer_portrait`) ; supprimé avec le PNJ, par `vider` et quand une fiche importée remplace l'ancienne.
+  Export : images incluses ; import (`lire_zip`, `importer`) : un portrait suit sa fiche (même nom, fiche renommée
+  comprise), sans fiche ou illisible → `ignores`. `IMPORT_MAX_OCTETS` = 60 Mo.
+- Routes : `GET /api/bank/<id>/portrait` (lu en mémoire : sous Windows un fichier ouvert ne se remplace pas ;
+  `?v=` → cache 1 jour), `POST` (corps facultatif = fiche à l'écran ; 400 moteur absent, 503
+  `PortraitIndisponible` ; renvoie `{portrait: version, prompt}`), `DELETE`. `/api/config` : `portraits` = nom du
+  moteur ou null.
 
 ## /api/npc/talk
 - Prompt système = fiche + univers + lieux (dialogue.py). Le PNJ sait où il est, et s'il accompagne le voyageur

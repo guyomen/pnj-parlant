@@ -4,6 +4,7 @@ Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiab
     pnj/_scenario.json      {"monde": ..., "notes_mj": ..., "theme": ...}  (« _ » : jamais pris pour un PNJ)
     pnj/_lieux.json         [{"id", "nom", "description", "notes_mj"}, ...]
     pnj/<nom>-<hex>.json    fiche d'un PNJ
+    pnj/<nom>-<hex>.png     son portrait, facultatif (.png, .jpg ou .webp)
 
 Un scénario complet (scénario, lieux, PNJ) s'exporte en zip et s'importe depuis un zip ou un dossier.
 """
@@ -15,11 +16,14 @@ import unicodedata
 import zipfile
 from pathlib import PurePosixPath
 
+from .portraits import type_image
+
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
 THEME = re.compile(r"^[a-z0-9-]{1,40}$")   # thème graphique : identifiant défini dans static/style.css
 SCENARIO, LIEUX = "_scenario.json", "_lieux.json"
 IMPORT_MAX_FICHIERS = 500
-IMPORT_MAX_OCTETS = 10_000_000  # contenu décompressé : protège contre les archives piégées
+IMPORT_MAX_OCTETS = 60_000_000  # contenu décompressé (portraits compris) : protège contre les archives piégées
+IMAGES = ("png", "jpg", "webp")  # portraits des PNJ
 
 
 def sans_accents(texte):
@@ -122,19 +126,21 @@ class Banque:
             except ValueError:
                 continue  # fichier abîmé ou en cours d'édition : on l'ignore
             items.append({"id": f.stem, "nom": npc.get("nom", f.stem), "metier": npc.get("metier", ""),
-                          "lieu": npc.get("lieu", "")})  # lieu habituel
+                          "lieu": npc.get("lieu", ""),  # lieu habituel
+                          "portrait": self.version_portrait(f.stem)})
         return sorted(items, key=lambda n: sans_accents(n["nom"]).lower())  # « Ébène » avant « Ysolde »
 
     def lire(self, npc_id):
-        """Fiche du PNJ (avec son "id"), ou None s'il n'existe pas."""
+        """Fiche du PNJ (avec son "id" et "portrait" : voir version_portrait), ou None s'il n'existe pas."""
         if not self.existe(npc_id):
             return None
         npc = json.loads(self.chemin(npc_id).read_text(encoding="utf-8"))
         npc["id"] = npc_id
+        npc["portrait"] = self.version_portrait(npc_id)
         return npc
 
     def ecrire(self, npc_id, npc):
-        npc = {k: v for k, v in npc.items() if k != "id"}
+        npc = {k: v for k, v in npc.items() if k not in ("id", "portrait")}
         self.dossier.mkdir(parents=True, exist_ok=True)
         self.chemin(npc_id).write_text(json.dumps(npc, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -149,7 +155,36 @@ class Banque:
         if not self.existe(npc_id):
             return False
         self.chemin(npc_id).unlink()
+        self.supprimer_portrait(npc_id)
         return True
+
+    # --- Portraits ----------------------------------------------------------------
+    def portrait(self, npc_id):
+        """Fichier du portrait du PNJ, ou None s'il n'en a pas."""
+        if not NPC_ID.match(npc_id or ""):
+            return None
+        return next((p for ext in IMAGES if (p := self.dossier / f"{npc_id}.{ext}").exists()), None)
+
+    def version_portrait(self, npc_id):
+        """Version du portrait (date du fichier en millisecondes), 0 s'il n'y en a pas : sert à l'adresse de
+        l'image, pour que le navigateur la garde en cache sans montrer un ancien portrait."""
+        chemin = self.portrait(npc_id)
+        return chemin.stat().st_mtime_ns // 1_000_000 if chemin else 0
+
+    def enregistrer_portrait(self, npc_id, octets, ext):
+        """Remplace le portrait du PNJ (`ext` : png, jpg ou webp)."""
+        if not NPC_ID.match(npc_id or "") or ext not in IMAGES:
+            raise ValueError("Portrait invalide.")
+        self.supprimer_portrait(npc_id)
+        self.dossier.mkdir(parents=True, exist_ok=True)
+        (self.dossier / f"{npc_id}.{ext}").write_bytes(octets)
+
+    def supprimer_portrait(self, npc_id):
+        """Vrai si le PNJ avait un portrait."""
+        chemin = self.portrait(npc_id)
+        if chemin:
+            chemin.unlink()
+        return chemin is not None
 
     def vider(self):
         """Nouvelle table : supprime tous les PNJ, vide le scénario (thème compris) et les lieux.
@@ -163,11 +198,11 @@ class Banque:
 
     # --- Export et import d'un scénario complet ------------------------------------
     def exporter_zip(self):
-        """Archive zip à plat : _scenario.json, _lieux.json et une fiche JSON par PNJ."""
+        """Archive zip à plat : _scenario.json, _lieux.json, une fiche JSON par PNJ et son portrait."""
         tampon = io.BytesIO()
         with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
-            for f in sorted(self.dossier.glob("*.json")) if self.dossier.exists() else []:
-                if f.name in (SCENARIO, LIEUX) or NPC_ID.match(f.stem):
+            for f in sorted(self.dossier.iterdir()) if self.dossier.exists() else []:
+                if f.name in (SCENARIO, LIEUX) or (NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
                     archive.write(f, f.name)
         return tampon.getvalue()
 
@@ -176,9 +211,18 @@ class Banque:
         remplacer : les PNJ actuels sont supprimés et le scénario et les lieux absents de l'import sont vidés ;
         sinon les PNJ importés s'ajoutent (même identifiant : remplacé) et seuls le scénario et les lieux fournis
         remplacent les actuels. Tout est vérifié avant d'écrire quoi que ce soit.
+        Les portraits (<id du PNJ>.png, .jpg, .webp) suivent leur fiche ; un portrait sans fiche est ignoré.
         Renvoie {"scenario": bool, "lieux": nombre, "pnj": nombre, "ignores": [noms]}."""
         scenario, lieux, pnjs, ignores = None, None, {}, []
+        images, ids = {}, {}  # portraits : nom du fichier sans extension → (octets, ext) ; nom de fiche → id
         for nom, octets in fichiers.items():
+            stem, _, ext = nom.rpartition(".")
+            if ext.lower() in ("png", "jpg", "jpeg", "webp"):
+                if type_image(octets):
+                    images[stem] = (octets, type_image(octets))
+                else:
+                    ignores.append(nom)
+                continue
             try:
                 data = json.loads(octets.decode("utf-8-sig"))
             except (UnicodeDecodeError, ValueError):
@@ -193,6 +237,7 @@ class Banque:
                 # fichier renommé à la main : il reçoit un identifiant valide, tiré du nom du PNJ
                 npc_id = stem if NPC_ID.match(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
                 pnjs[npc_id] = data
+                ids[stem] = npc_id
             else:
                 ignores.append(nom)
         if scenario is None and lieux is None and not pnjs:
@@ -206,6 +251,12 @@ class Banque:
         nb_lieux = len(self.enregistrer_lieux(lieux or [])) if lieux is not None or remplacer else len(self.lieux())
         for npc_id, npc in pnjs.items():
             self.ecrire(npc_id, npc)
+            self.supprimer_portrait(npc_id)  # celui d'avant ne correspond plus à la fiche importée
+        for stem, (octets, ext) in images.items():
+            if stem in ids:
+                self.enregistrer_portrait(ids[stem], octets, ext)
+            else:
+                ignores.append(f"{stem}.{ext}")
         return {"scenario": scenario is not None, "lieux": nb_lieux, "pnj": len(pnjs), "ignores": sorted(ignores)}
 
 
@@ -215,14 +266,14 @@ def nom_de_fichier(chemin):
 
 
 def lire_zip(octets):
-    """{nom: octets} des fichiers .json d'une archive (sous-dossiers aplatis), avec des limites de taille."""
+    """{nom: octets} des fiches (.json) et portraits d'une archive (sous-dossiers aplatis), avec des limites de taille."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(octets))
     except zipfile.BadZipFile as e:
         raise ValueError("Ce fichier n'est pas une archive zip valide.") from e
     with archive:
-        infos = [i for i in archive.infolist() if not i.is_dir() and i.filename.lower().endswith(".json")
-                 and "__MACOSX" not in i.filename]
+        infos = [i for i in archive.infolist() if not i.is_dir() and "__MACOSX" not in i.filename
+                 and i.filename.lower().endswith((".json", ".png", ".jpg", ".jpeg", ".webp"))]
         if len(infos) > IMPORT_MAX_FICHIERS or sum(i.file_size for i in infos) > IMPORT_MAX_OCTETS:
             raise ValueError("Archive trop volumineuse pour un scénario.")
         fichiers = {}

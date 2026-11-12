@@ -42,6 +42,11 @@ paths:
   le clic l'enregistre aussitôt (PUT /api/scenario avec le texte *enregistré* `scenarioCharge`, pour ne pas envoyer
   une saisie en cours).
 - Ajouter un thème : bloc(s) dans `style.css` + entrée dans `THEMES` (le serveur accepte tout id `[a-z0-9-]`).
+- Portraits : `adressePortrait(pnj)` (scene.js) = `/api/bank/<id>/portrait?v=<version>` ou "" ; partie :
+  `img.portrait` en tête de `.pnj-card` (grand pour le premier, vignette flottante sinon) ; préparation :
+  `figure#portraitBloc` à droite de l'identité (`majPortrait`, `peinture` pendant la génération, seulement pour un
+  PNJ enregistré, visible si `/api/config` donne un moteur ou si le PNJ a déjà un portrait) et vignettes dans la
+  banque (`vignette`). Import d'un dossier : `fichiersImportables` garde aussi png/jpg/webp.
 - `js/univers.js` : import (exemple, zip, dossier `webkitdirectory`), export, messages ; partagé par les deux pages.
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans
   `tests/js/scene.test.mjs` ; index.html n'est testé que par l'e2e.

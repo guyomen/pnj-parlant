@@ -50,7 +50,7 @@ class TestBanque:
         assert client.post("/api/bank", json={"nom": "Brom"}).status_code == 400  # pas de salutation
         npc_id = client.post("/api/bank", json={"nom": "Brom", "salutation": "*Grogne.* Salut.",
                                                 "genre": "masculin"}).get_json()["id"]
-        assert client.get("/api/bank").get_json() == [{"id": npc_id, "nom": "Brom", "metier": "", "lieu": ""}]
+        assert client.get("/api/bank").get_json() == [{"id": npc_id, "nom": "Brom", "metier": "", "lieu": "", "portrait": 0}]
         npc = client.get(f"/api/bank/{npc_id}").get_json()
         assert npc["salutation"] == "Salut." and npc["voix"]["name"] in {"bob", "carl"}
         npc["metier"] = "forgeron"

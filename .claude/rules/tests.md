@@ -13,8 +13,11 @@ node --test tests/js/        # fonctions pures de static/js/scene.js (Node 22+)
 python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran (NAVIGATEUR=... pour le choisir)
 ```
 
-- `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance` ; fixtures `cfg` (config dans tmp_path),
-  `moteurs`, `tts`, `app` (`create_app` avec les faux), `client`, `ctx`.
+- `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance`, `FauxPortraits` (`PNG`, `erreur`, `actif`) ;
+  fixtures `cfg` (config dans tmp_path), `moteurs`, `tts`, `portraits`, `app` (`create_app` avec les faux),
+  `client`, `ctx`.
+- `test_portraits.py` : description (modèle de langage ou repli), moteurs (Pollinations simulé par `urlopen`),
+  stockage, export/import, routes. Aucun test ne charge diffusers ni ne contacte Pollinations.
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
@@ -33,5 +36,6 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     toujours en dernier). `window.confirm` est remplacé par `() => true` avant les clics qui demandent confirmation.
   - Le serveur sur le réseau local (ex. 192.168.1.21:5000) peut être celui de l'utilisateur : ne pas le relancer ;
     pour essayer une page à la main, lancer une copie de `tests/e2e/donnees/` sur un autre port.
+  - `tests/e2e/donnees/pnj/ysolde-0001.png` (8×8) : portrait affiché dans la fiche quand on aborde Ysolde.
   - Fin par `Browser.close` : sous Windows, `kill()` laisse vivre les processus d'Edge (port 9333 pris ensuite).
 - Ajouter un test à chaque changement de logique ; pour index.html, une étape dans l'e2e.
