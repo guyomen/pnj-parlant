@@ -40,7 +40,7 @@ pnj-banque = "pnj_parlant.generer:main"    # remplit la banque de PNJ en lot
 where = ["src"]
 
 [tool.setuptools.package-data]
-pnj_parlant = ["static/**/*"]
+pnj_parlant = ["static/**/*", "exemples/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

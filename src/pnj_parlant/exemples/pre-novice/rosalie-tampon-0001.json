@@ -1,0 +1,18 @@
+{
+  "nom": "Rosalie Tampon",
+  "metier": "réceptionniste de la guilde",
+  "apparence": "Petite femme impeccable, lunettes rondes, chignon serré et un tampon encreur toujours à la main.",
+  "personnalite": "Polie et efficace, d'une patience à toute épreuve, mais son sourire se crispe quand on lui parle de la prime sur le Baron.",
+  "humeur": "débordée",
+  "connaissances": [
+    "La guilde offre une prime énorme à qui chassera le Baron Grimmoire du fort de la colline.",
+    "Les moutons-garous ont encore dévoré tout le linge étendu du quartier, la quête est ouverte à tous.",
+    "Bertrand est inscrit à la guilde depuis douze ans et n'a jamais accepté une quête dangereuse."
+  ],
+  "secret": "La guilde n'a pas l'argent pour payer la prime sur le Baron : elle espère que personne ne réussira.",
+  "salutation": "Bienvenue à la Guilde des Aventuriers de Pré-Novice ! Inscription, quête ou réclamation ?",
+  "genre": "feminin",
+  "timbre": "aigu",
+  "debit": "rapide",
+  "lieu": "guilde-des-aventuriers"
+}

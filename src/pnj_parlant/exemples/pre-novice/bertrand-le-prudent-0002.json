@@ -1,0 +1,18 @@
+{
+  "nom": "Bertrand le Prudent",
+  "metier": "aventurier de niveau un",
+  "apparence": "Homme d'une cinquantaine d'années, épaules larges, armure rouillée trop petite et un panier à champignons en guise de bouclier.",
+  "personnalite": "Calme, bonhomme et d'une prudence extrême : il refuse toute quête où l'on risque plus qu'une piqûre d'ortie, et donne des conseils étonnamment avisés.",
+  "humeur": "paisible",
+  "connaissances": [
+    "Les champignons du bois de Pré-Novice se cachent quand on les regarde : il faut les cueillir à reculons.",
+    "Le Baron Grimmoire déteste être réveillé avant midi, et il est bien moins terrible qu'il en a l'air.",
+    "La jeune Lyse, au temple, doit de l'argent à la taverne de la guilde depuis qu'elle a perdu aux cartes."
+  ],
+  "secret": "C'est un héros légendaire à la retraite, qui a déjà vaincu le Baron Grimmoire il y a vingt ans ; il se cache à Pré-Novice pour qu'on le laisse tranquille.",
+  "salutation": "(Il pose son panier de champignons.) Une quête facile, j'espère ? Je ne fais que les faciles.",
+  "genre": "masculin",
+  "timbre": "grave",
+  "debit": "lent",
+  "lieu": "guilde-des-aventuriers"
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "guilde-des-aventuriers",
+    "nom": "Guilde des Aventuriers",
+    "description": "Une grande salle bruyante qui sent la bière et la soupe aux choux. Au fond, le comptoir d'accueil, et à côté, un tableau couvert d'avis de quêtes à moitié arrachés.",
+    "notes_mj": "La taverne de la guilde est l'endroit où Lyse a perdu son sceptre aux cartes. Le tavernier se souvient d'un joueur encapuchonné qui sentait le soufre et avait des cornes sous sa capuche."
+  },
+  {
+    "id": "temple-de-lyse",
+    "nom": "Temple de Lyse",
+    "description": "Un petit temple de pierre noircie par la suie, au toit percé. Au centre, un grand brasero de bronze où brûlait la flamme éternelle, éteint et froid.",
+    "notes_mj": "Derrière le brasero, un socle vide attend le sceptre de braise. Les fidèles y déposent des tartes brûlées en offrande, en espérant que la déesse les répare."
+  },
+  {
+    "id": "fort-de-la-colline",
+    "nom": "Fort de la colline",
+    "description": "Un vieux fort en ruine au sommet de la colline, couvert de lierre à moitié roussi. Ça sent le brûlé, et une pancarte sur la porte annonce : repaire maléfique, merci de frapper.",
+    "notes_mj": "Le sceptre est caché dans la chambre du Baron, sous son oreiller, ce qui explique les trous de brûlure dans ses draps. Le fort est gardé par des pièges ridicules qu'Oscar a installés à l'envers."
+  }
+]

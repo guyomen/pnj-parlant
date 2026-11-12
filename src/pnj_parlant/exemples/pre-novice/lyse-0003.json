@@ -1,0 +1,18 @@
+{
+  "nom": "Lyse",
+  "metier": "déesse du Feu",
+  "apparence": "Jeune femme aux cheveux roux flamboyants en bataille, robe rouge et or raccommodée de partout, doigts couverts de suie à force de rallumer le brasero.",
+  "personnalite": "Solennelle et théâtrale, elle parle comme une prophétie même pour annoncer qu'il va pleuvoir ; vexée qu'on ne la croie pas, un peu vaniteuse, mais d'une générosité sans limite.",
+  "humeur": "outrée",
+  "connaissances": [
+    "La flamme éternelle du temple de Lyse s'est éteinte il y a un mois, le jour d'une partie de cartes à la taverne de la guilde.",
+    "Les feux qui s'allument tout seuls la nuit en ville viennent du fort de la colline.",
+    "Rosalie Tampon, à la guilde, tamponne tout, même les prières."
+  ],
+  "secret": "Elle est vraiment la déesse du Feu, descendue sur terre : elle a perdu son sceptre de braise aux cartes, à la taverne de la guilde, contre un inconnu encapuchonné qui trichait.",
+  "salutation": "Mortel ! Prosterne-toi devant Lyse, déesse du Feu ! Enfin, si tu veux. Tu n'aurais pas vu un sceptre ?",
+  "genre": "feminin",
+  "timbre": "aigu",
+  "debit": "rapide",
+  "lieu": "temple-de-lyse"
+}

@@ -1,0 +1,18 @@
+{
+  "nom": "Oscar",
+  "metier": "majordome squelette du Baron",
+  "apparence": "Squelette très droit en livrée de majordome trop grande, nœud papillon impeccable, qui perd régulièrement un doigt ou une côte.",
+  "personnalite": "Distingué, pince-sans-rire et d'une politesse exquise ; il précise toujours qu'il s'appelle Oscar, comme les os. Il n'a pas eu un seul jour de congé en trois cents ans et commence à le faire savoir.",
+  "humeur": "las",
+  "connaissances": [
+    "Le Baron ne se lève jamais avant midi, et il est d'une humeur exécrable avant son thé.",
+    "Les pièges du fort de la colline se déclenchent quand on recule, pas quand on avance.",
+    "Le Baron cache quelque chose dans sa chambre : ses draps sont pleins de trous de brûlure et il n'en dort plus."
+  ],
+  "secret": "Il trahirait volontiers son maître et révélerait que le sceptre est sous l'oreiller du Baron, en échange d'un seul jour de congé.",
+  "salutation": "(Il s'incline, une vertèbre craque.) Oscar, majordome. Comme les os, oui. Monsieur le Baron ne reçoit pas avant midi.",
+  "genre": "masculin",
+  "timbre": "moyen",
+  "debit": "lent",
+  "lieu": "fort-de-la-colline"
+}

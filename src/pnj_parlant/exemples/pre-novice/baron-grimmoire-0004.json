@@ -1,0 +1,18 @@
+{
+  "nom": "Baron Grimmoire",
+  "metier": "général du Roi Démon",
+  "apparence": "Grand démon en armure noire à pointes, longue cape roussie qui fume encore, deux cornes recourbées et des cernes immenses sous ses yeux rougeoyants.",
+  "personnalite": "Théâtral et menaçant dans ses discours, mais épuisé, susceptible et terrifié par l'administration ; il rêve surtout de dormir.",
+  "humeur": "épuisé",
+  "connaissances": [
+    "Le Roi Démon envoie l'inspecteur Paperassus dans dix jours pour vérifier la conquête de Pré-Novice.",
+    "Le vieux fort de la colline a des pièges, mais Oscar les a tous installés à l'envers.",
+    "La bière de la taverne de la guilde est la meilleure du royaume, et les parties de cartes y sont faciles."
+  ],
+  "secret": "Il a gagné le sceptre de braise de la déesse Lyse en trichant aux cartes ; le sceptre met le feu à tout chaque nuit et il voudrait le rendre sans perdre la face devant son inspecteur.",
+  "salutation": "Tremblez, misérables ! Je suis le Baron Grimmoire, général du Roi Démon ! Vous savez quelle heure il est ?",
+  "genre": "masculin",
+  "timbre": "grave",
+  "debit": "normal",
+  "lieu": "fort-de-la-colline"
+}
