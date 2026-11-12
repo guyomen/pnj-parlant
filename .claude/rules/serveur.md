@@ -41,6 +41,8 @@ Serveur sans état : l'historique vit dans le navigateur.
   id `[a-z0-9-]{1,40}` sinon `""` = défaut ; la liste des thèmes vit côté navigateur).
 - `GET|PUT /api/lieux` (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. Description connue de tous les PNJ
   et lue par le narrateur ; notes du MJ pour la création seulement.
+- `DELETE /api/univers` → `Banque.vider()` : « Nouvelle table » de l'accueil, supprime tous les PNJ, vide le scénario
+  (thème compris) et les lieux ; renvoie `{pnj: nombre supprimé}`.
 - `GET /api/scenario/export` : zip à plat (`_scenario.json`, `_lieux.json`, fiches). `POST /api/scenario/import`
   (multipart `fichiers` : un zip ou les .json d'un dossier ; `remplacer` "0" garde les PNJ) → `Banque.importer` :
   tout est vérifié avant d'écrire (`lire_zip` : noms aplatis, taille et nombre limités ; fichier renommé à la main →

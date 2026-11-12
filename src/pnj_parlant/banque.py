@@ -151,6 +151,16 @@ class Banque:
         self.chemin(npc_id).unlink()
         return True
 
+    def vider(self):
+        """Nouvelle table : supprime tous les PNJ, vide le scénario (thème compris) et les lieux.
+        Renvoie le nombre de PNJ supprimés."""
+        pnjs = self.liste()
+        for item in pnjs:
+            self.supprimer(item["id"])
+        self.enregistrer_scenario({})
+        self.enregistrer_lieux([])
+        return len(pnjs)
+
     # --- Export et import d'un scénario complet ------------------------------------
     def exporter_zip(self):
         """Archive zip à plat : _scenario.json, _lieux.json et une fiche JSON par PNJ."""

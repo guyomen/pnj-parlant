@@ -47,6 +47,12 @@ export const resumeUnivers = (nbLieux, nbPnj) => nbLieux || nbPnj
   ? `Univers actuel : ${pluriel(nbLieux, "lieu", "x")} et ${pluriel(nbPnj, "PNJ", "")}.`
   : "Aucun univers chargé : chargez-en un ci-dessous, ou créez le vôtre.";
 
+// Question posée avant une nouvelle table (tout l'univers et la conversation sont supprimés)
+export const confirmationNouvelleTable = (nbLieux, nbPnj) =>
+  `Nouvelle table : le texte de l’univers, son thème, ${pluriel(nbLieux, "lieu", "x")} et `
+  + `${pluriel(nbPnj, "PNJ", "")} de la banque seront supprimés, ainsi que la conversation en cours. `
+  + "Exportez d’abord l’univers (page de préparation) pour le garder. Continuer ?";
+
 // Question posée avant d'écraser la banque (nbPnj : PNJ actuellement enregistrés)
 export function confirmationImport(nbPnj, garder) {
   return garder

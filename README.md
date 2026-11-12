@@ -44,6 +44,8 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 - **Discuter avec un PNJ** : un PNJ de l'univers au hasard, ou un PNJ inventé par le modèle d'après un métier.
 - **Créer son univers** : la page de préparation (voir plus bas).
 
+**Nouvelle table**, à côté du résumé de l'univers, repart de zéro : le texte de l'univers, son thème, les lieux, les PNJ de la banque et la conversation en cours sont supprimés (après confirmation ; exportez d'abord l'univers pour le garder).
+
 La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
 
 Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
@@ -67,20 +69,26 @@ La page **Options** (mémorisées par le navigateur) règle aussi le modèle loc
 
 Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par Claude : faites-la avant de partir, avec le réseau.
 
-1. **Scénario**, en deux parties :
+La page a trois onglets : **Scénario**, **Lieux** et **PNJ** (avec le nombre de lieux et de PNJ). Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
+
+1. **Scénario** :
    - **Univers** : lieux, factions, personnages connus, événements. Connu de tous les PNJ, il est aussi transmis pendant les dialogues.
    - **Notes du MJ** : l'intrigue et ses secrets. Elles servent seulement à créer des PNJ cohérents et ne sont jamais transmises pendant les dialogues, pour qu'un PNJ ne révèle pas ce qu'il n'est pas censé savoir.
-   - **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs (Vert-de-gris, Parchemin, Sylve, Givre ou Donjon), en clair ou en sombre selon le réglage de chaque appareil (Donjon reste sombre). Un clic l'essaie sur la page ; « Enregistrer le scénario » le garde. Il voyage avec l'univers exporté.
-2. **Demander un PNJ** : métier, nom, genre (tous facultatifs) et son rôle dans le scénario. Claude propose une fiche qui ne cite que des noms présents dans le scénario ou vos consignes.
-3. **Relire et ajuster** la fiche, écouter sa voix (bouton « Autre voix » si elle ne convient pas), puis l'**enregistrer dans la banque**. Les PNJ de la banque peuvent être modifiés ou supprimés.
+   - **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs (Vert-de-gris, Parchemin, Sylve, Givre ou Donjon), en clair ou en sombre selon le réglage de chaque appareil (Donjon reste sombre). Il est enregistré dès qu'on le choisit et voyage avec l'univers exporté.
+   - **Partager l'univers** : export et import (voir plus bas).
+2. **Lieux** : voir plus bas.
+3. **PNJ** : la banque à gauche (groupée par lieu), et à droite :
+   - **Demander un PNJ au modèle** : métier, nom, genre (tous facultatifs) et son rôle dans le scénario. Claude propose une fiche qui ne cite que des noms présents dans le scénario ou vos consignes.
+   - **La fiche**, par rubriques (identité, caractère, rôle dans le scénario, voix) : relisez-la, ajustez-la, écoutez sa voix (choisissez-en une autre si elle ne convient pas), puis **enregistrez-la dans la banque**. Cliquez sur un PNJ de la banque pour le modifier, sur ✕ pour le supprimer ; **Nouveau PNJ** repart d'une fiche vierge.
 
 Sur la page de jeu, choisissez un PNJ dans la banque et cliquez sur **Jouer** (voir [Jouer](#jouer)).
 
 ### Lieux
 
-Dans la page de préparation, le panneau **Lieux** décrit les endroits du scénario (auberge, forge, porte nord…) :
-un nom, une **description** (lue par le narrateur quand on y arrive, et connue de tous les PNJ) et des **notes
-du MJ** (secrets du lieu : elles servent seulement à créer des PNJ cohérents, jamais pendant les dialogues).
+Dans la page de préparation, l'onglet **Lieux** décrit les endroits du scénario (auberge, forge, porte nord…), un
+par carte : un nom, une **description** (lue par le narrateur quand on y arrive, et connue de tous les PNJ) et des
+**notes du MJ** (secrets du lieu : elles servent seulement à créer des PNJ cohérents, jamais pendant les dialogues).
+Chaque carte liste les PNJ qui y vivent ; **Créer un PNJ ici** ouvre la demande au modèle avec ce lieu.
 Chaque PNJ peut avoir un **lieu habituel**, choisi dans sa fiche ou dans la demande de création.
 
 En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouvent apparaissent dessous :
@@ -93,7 +101,7 @@ Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, note
 
 ### Partager un univers
 
-Dans la page de préparation, **Exporter l'univers** télécharge un zip (scénario, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque.
+Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque.
 
 ### Univers d'exemple : Pré-Novice
 

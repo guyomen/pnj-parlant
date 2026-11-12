@@ -13,6 +13,7 @@ Routes :
     GET|PUT /api/lieux                lieux du scénario
     GET|PUT /api/scenario             univers et notes du MJ
     GET  /api/scenario/export         scénario complet (scénario, lieux, PNJ) en zip
+    DELETE /api/univers               nouvelle table : supprime scénario, lieux et PNJ
     POST /api/scenario/import         copie un scénario dans la banque (zip ou fichiers JSON d'un dossier)
     GET  /api/exemples, POST /api/exemples/<id>   univers d'exemple fournis : liste, chargement dans la banque
     GET|POST /api/bank, GET|PUT|DELETE /api/bank/<id>   banque de PNJ
@@ -187,6 +188,11 @@ def create_app(cfg, **moteurs):
             return jsonify(ctx.banque.importer(fichiers, remplacer=request.form.get("remplacer", "1") != "0"))
         except ValueError as e:
             return erreur(str(e), 400)
+
+    @app.delete("/api/univers")
+    def univers_vider():
+        """Nouvelle table : supprime le scénario, les lieux et tous les PNJ de la banque."""
+        return jsonify({"pnj": ctx.banque.vider()})
 
     @app.get("/api/exemples")
     def exemples_liste():

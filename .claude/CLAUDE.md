@@ -28,7 +28,7 @@ src/pnj_parlant/
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (accueil, partie, options), creation.html, style.css (thèmes),
+  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ), style.css (thèmes),
                      # js/scene.js (testé) + js/univers.js (univers, thèmes)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)

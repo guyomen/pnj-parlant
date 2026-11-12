@@ -29,6 +29,17 @@ def test_scenario_theme(banque, theme, attendu):
     assert banque.scenario()["theme"] == attendu
 
 
+def test_vider(banque):
+    banque.enregistrer_scenario({"monde": "Valmer.", "notes_mj": "Secret.", "theme": "donjon"})
+    banque.enregistrer_lieux([{"nom": "Forge"}])
+    banque.ajouter({"nom": "Brom"})
+    banque.ajouter({"nom": "Ysolde"})
+    assert banque.vider() == 2
+    assert banque.liste() == [] and banque.lieux() == []
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""}
+    assert Banque(banque.dossier).vider() == 0  # déjà vide : rien à supprimer
+
+
 def test_ajouter_lire_lister_supprimer(banque):
     npc_id = banque.ajouter({"nom": "Ysolde la Rousse", "metier": "aubergiste"})
     assert npc_id.startswith("ysolde-la-rousse-")

@@ -8,10 +8,19 @@ paths:
 # Pages web (index.html, creation.html, js/scene.js)
 
 - `index.html` : un seul `<script type="module">` et trois vues selon l'adresse (`afficherVue`, `body[data-vue]`) :
-  accueil `/` (charger un univers, PNJ au hasard ou inventé, créer son univers), partie `/#jeu`, options `/#options`
-  (cases à cocher, modèle local, état machine ; « Retour » vers la vue d'origine). Une seule page : le clic de
-  l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
-- `creation.html` (module ES) : scénario, lieux, fiches, banque, export/import de l'univers.
+  accueil `/` (charger un univers, PNJ au hasard ou inventé, créer son univers, « Nouvelle table »), partie `/#jeu`,
+  options `/#options` (cases à cocher, modèle local, état machine ; « Retour » vers la vue d'origine). Une seule
+  page : le clic de l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
+- « Nouvelle table » (`nouvelleTableBtn`) : `confirm(confirmationNouvelleTable)`, `DELETE /api/univers`, puis remise
+  à zéro de la partie (npcs, history, rencontres, positions, lieu, journal, tokens, `CLE_PARTIE`) et rechargement
+  des lieux, de la banque et du thème.
+- `creation.html` (module ES) : même principe d'une seule page, trois parties selon l'adresse (`afficherSection`,
+  `body[data-section]`, `nav.sections`) : Scénario `#scenario` (univers, notes du MJ, thème enregistré dès le clic,
+  export/import), Lieux `#lieux` (une `.carte.lieu-fiche` par lieu, PNJ qui y vivent, « Créer un PNJ ici » →
+  `#pnj` avec `reqLieu`), PNJ `#pnj` (banque groupée par lieu via `parLieu`, `details#demande` ouvert pour une
+  fiche vierge, fiche par rubriques, barre d'enregistrement collante). `majModifs()` met un point
+  (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche) ; recalculé après
+  chaque `input`/`change`/`click` et après chaque chargement ou enregistrement.
 - Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :
@@ -30,7 +39,8 @@ paths:
   `theme`), `chargerTheme()` (relit /api/scenario). Un petit script dans le `<head>` des deux pages pose le thème
   gardé avant l'affichage (pas de flash), puis `chargerTheme()` au chargement et après un import d'univers.
 - Préparation : `fieldset#themes`, une carte par thème portant son propre `data-theme` (aperçu dans ses couleurs) ;
-  le clic essaie le thème sans le garder, « Enregistrer le scénario » l'envoie (`themeChoisi`, `nonEnregistre`).
+  le clic l'enregistre aussitôt (PUT /api/scenario avec le texte *enregistré* `scenarioCharge`, pour ne pas envoyer
+  une saisie en cours).
 - Ajouter un thème : bloc(s) dans `style.css` + entrée dans `THEMES` (le serveur accepte tout id `[a-z0-9-]`).
 - `js/univers.js` : import (exemple, zip, dossier `webkitdirectory`), export, messages ; partagé par les deux pages.
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans

@@ -140,6 +140,25 @@ await js(`location.hash = "options"`);
 verifier("options affichées, retour vers la partie", await quand(`document.body.dataset.vue === "options" && document.getElementById("optionsRetour").getAttribute("href") === "#jeu" && document.getElementById("optInterrompre").offsetParent !== null`));
 verifier("barre du haut : onglet Options actif, même place que dans la partie", await quand(`document.querySelector(".onglets [aria-current=page]")?.dataset.vue === "options" && document.querySelectorAll(".onglets a").length === 4 && ${placeBarre} === ${JSON.stringify(barreJeu)}`));
 
+// Préparation : trois parties (scénario, lieux, PNJ) ; « Créer un PNJ ici » ouvre la demande avec ce lieu
+await cdp("Page.navigate", { url: "http://127.0.0.1:5917/creation.html#lieux" });
+await quand(`document.readyState === "complete"`);
+verifier("préparation : partie Lieux seule affichée, comptes sur les onglets", await quand(`document.body.dataset.section === "lieux" && document.querySelectorAll(".lieu-fiche").length === 3 && document.getElementById("section-scenario").offsetParent === null && document.getElementById("nbLieux").textContent === "3" && document.getElementById("nbPnj").textContent === "5"`));
+await js(`document.querySelector("[data-creer]").click()`);
+verifier("préparation : « Créer un PNJ ici » mène aux PNJ, lieu prérempli", await quand(`document.body.dataset.section === "pnj" && document.getElementById("demande").open && document.getElementById("reqLieu").value === document.querySelector(".lieu-fiche [data-creer]")?.dataset.creer && document.querySelectorAll("#bankList [data-edit]").length === 5`));
+await js(`document.querySelector("#bankList [data-edit]").click()`);
+await quand(`document.getElementById("mode").textContent.startsWith("Modification")`);
+await js(`const h = document.getElementById("f-humeur"); h.value += " !"; h.dispatchEvent(new Event("input", { bubbles: true }))`);
+verifier("préparation : fiche modifiée signalée sur l'onglet PNJ", await quand(`!document.getElementById("demande").open && [...document.querySelectorAll(".sections a.a-enregistrer")].map(a => a.dataset.section).join() === "pnj"`));
+
+// Accueil : « Nouvelle table » supprime l'univers et la conversation
+await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
+await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
+await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
+await quand(`!document.getElementById("accReprendreBtn").hidden`);
+await js(`window.confirm = () => true; document.getElementById("nouvelleTableBtn").click()`);
+verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && document.querySelectorAll("#log .line").length === 0`));
+
 console.log(resultats.join("\n"));
 // Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)
 await Promise.race([cdp("Browser.close"), pause(2000)]);

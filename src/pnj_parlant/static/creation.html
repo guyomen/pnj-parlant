@@ -9,10 +9,24 @@
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
-  .colonnes { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 60rem) { .colonnes { grid-template-columns: 26rem minmax(0, 1fr); align-items: start; } }
+  /* Trois parties (« #scenario », « #lieux », « #pnj ») dans une seule page : rien n'est perdu en passant
+     de l'une à l'autre ; un point signale une partie qui a des modifications non enregistrées. */
+  body:not([data-section=scenario]) #section-scenario, body:not([data-section=lieux]) #section-lieux,
+  body:not([data-section=pnj]) #section-pnj { display: none; }
+  .sections { display: flex; gap: .25rem; margin: -.5rem 0 1.5rem; border-bottom: 1px solid var(--line);
+              overflow-x: auto; scrollbar-width: none; }
+  .sections a { display: flex; align-items: center; gap: .45rem; padding: .55rem 1.1rem; white-space: nowrap;
+                color: var(--muted); text-decoration: none; font: 400 1.3rem var(--display);
+                border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .sections a:hover { color: var(--glass); }
+  .sections a[aria-current=page] { color: var(--ink); border-bottom-color: var(--glass); }
+  .sections .nb { font: 500 .8rem var(--body); color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+                  border-radius: 999px; padding: .05rem .5rem; }
+  .sections .nb:empty { display: none; }
+  .sections .modif { display: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--wax); }
+  .sections a.a-enregistrer .modif { display: inline-block; }
 
-  .carte + .carte { margin-top: 1.5rem; }
+  .pile > .carte + .carte { margin-top: 1.5rem; }
   .carte h2 { margin-bottom: .25rem; }
   .carte .hint { font-size: .92rem; margin: 0 0 .9rem; }
   label { display: block; font-weight: 500; margin: .8rem 0 .3rem; }
@@ -22,34 +36,18 @@
   .grid2 > div { display: flex; flex-direction: column; }
   .grid2 input, .grid2 select { flex: none; width: 100%; }
   .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
-  .status { min-height: 1.5rem; color: var(--muted); font-style: italic; margin-top: .5rem; }
-  .sheet { border-left: 6px solid var(--glass); border-radius: 0 var(--rayon) var(--rayon) 0; }
-  .sheet .mode { color: var(--glass); font: italic 1.1rem var(--display); margin: 0 0 .5rem; }
-  .voice { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .8rem;
-           padding-top: .8rem; border-top: 1px solid var(--line); color: var(--muted); }
-  .voice span { flex: 1; min-width: 12rem; }
-
-  .bank-list { list-style: none; margin: 0; padding: 0; }
-  .bank-list li { display: flex; align-items: center; gap: .5rem; padding: .45rem 0; border-bottom: 1px solid var(--line); }
-  .bank-list .who { flex: 1; min-width: 0; }
-  .bank-list .who small { display: block; color: var(--muted); }
-  .bank-list button { padding: .3rem .7rem; font-size: .9rem; }
-  .bank-list li.current .who { font-weight: 700; }
-
-  .lieu-fiche { border-top: 1px solid var(--line); padding: .6rem 0 .8rem; }
-  .lieu-fiche:first-child { border-top: none; padding-top: 0; }
-  .lieu-fiche .titre { display: flex; gap: .5rem; align-items: center; }
-  .lieu-fiche .titre input { flex: 1; font-weight: 700; }
-  .lieu-fiche .titre button { padding: .3rem .7rem; font-size: .9rem; }
-  .lieu-fiche textarea { margin-top: .4rem; }
-  .sous-titre { font: 400 1.15rem var(--display); margin: 1.4rem 0 .2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .actions label.check { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-weight: 400; }
+  .status { min-height: 1.5rem; color: var(--muted); font-style: italic; margin: .5rem 0 0; }
+  .actions .status { margin: 0; }
+  .sous-titre { font: 400 1.2rem var(--display); margin: 1.4rem 0 .1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  button.petit { padding: .3rem .7rem; font-size: .9rem; }
 
-  /* Thème graphique : chaque carte porte son propre data-theme, donc s'affiche dans les couleurs du thème */
-  .themes { border: 0; padding: 0; margin: .8rem 0 0; min-width: 0;
-            display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
-  .themes legend { font-weight: 500; padding: 0; margin-bottom: .3rem; }
-  .themes legend small { font-weight: 400; color: var(--muted); }
+  /* Scénario : le texte à gauche, le thème et le partage à droite */
+  .colonnes-scenario { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 60rem) { .colonnes-scenario { grid-template-columns: minmax(0, 1fr) 24rem; } }
+  .themes { border: 0; padding: 0; margin: 0; min-width: 0;
+            display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+  /* Chaque carte de thème porte son propre data-theme, donc s'affiche dans les couleurs du thème */
   label.theme-choix { margin: 0; position: relative; display: flex; flex-direction: column; gap: .1rem;
                       padding: .6rem .75rem; border-radius: 10px; cursor: pointer; font-weight: 400;
                       background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
@@ -61,9 +59,57 @@
   .theme-choix:has(input:checked) { box-shadow: 0 0 0 2px var(--glass); border-color: var(--glass); }
   .theme-choix:has(input:checked) .nom::after { content: " ✓"; color: var(--glass); }
   .theme-choix:has(input:focus-visible) { outline: 3px solid var(--verdigris); outline-offset: 2px; }
+
+  /* Lieux : une carte par lieu */
+  .barre-section { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .barre-section .hint { flex: 1 1 24rem; margin: 0; }
+  .barre-section .actions { margin: 0; }
+  .grille-lieux { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
+  .lieu-fiche .titre { display: flex; gap: .5rem; align-items: center; }
+  .lieu-fiche .titre input { flex: 1; min-width: 0; font: 400 1.3rem var(--display); }
+  .lieu-fiche .habitants { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .9rem 0 0;
+                           padding-top: .75rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .95rem; }
+  .lieu-fiche .habitants span { flex: 1; min-width: 10rem; }
+  .vide { color: var(--muted); font-style: italic; }
+
+  /* PNJ : la banque à gauche, la demande et la fiche à droite */
+  .colonnes-pnj { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 60rem) {
+    .colonnes-pnj { grid-template-columns: 19rem minmax(0, 1fr); }
+    .liste-pnj { position: sticky; top: calc(var(--barre-h) + 1rem); max-height: calc(100vh - var(--barre-h) - 2rem);
+                 overflow-y: auto; }
+  }
+  .liste-pnj .tete { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+  .liste-pnj h2 { margin: 0; }
+  .bank-list { list-style: none; margin: 0; padding: 0; }
+  .bank-list .groupe { font: 400 1.05rem var(--display); color: var(--glass); margin: .9rem 0 .2rem; }
+  .bank-list .groupe:first-child { margin-top: 0; }
+  .bank-list li:not(.groupe) { display: flex; align-items: center; gap: .25rem; border-radius: 8px; }
+  .bank-list .who { flex: 1; min-width: 0; text-align: left; background: transparent; border: 0; color: var(--ink);
+                    padding: .4rem .5rem; border-radius: 8px; font-weight: 500; }
+  .bank-list .who small { display: block; color: var(--muted); font-weight: 400; font-size: .85rem; }
+  .bank-list .who:hover { filter: none; background: color-mix(in srgb, var(--glass) 10%, transparent); }
+  .bank-list li.current .who { background: color-mix(in srgb, var(--glass) 18%, transparent); }
+  .bank-list .suppr { border: 0; padding: .35rem .55rem; color: var(--muted); }
+
+  .demande summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .6rem; }
+  .demande summary::-webkit-details-marker { display: none; }
+  .demande summary::before { content: "▸"; color: var(--glass); transition: transform .15s; }
+  .demande[open] summary::before { transform: rotate(90deg); }
+  .demande summary h2 { margin: 0; }
+  .demande[open] summary { margin-bottom: .6rem; }
+  .demande .hint { margin-top: .2rem; }
+
+  .sheet { border-left: 6px solid var(--glass); border-radius: 0 var(--rayon) var(--rayon) 0; padding-bottom: 0; }
+  .sheet .sous-titre:first-of-type { border-top: 0; padding-top: 0; margin-top: .6rem; }
+  .voice { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .8rem; color: var(--muted); }
+  .voice span { flex: 1 1 100%; }
+  /* barre d'enregistrement toujours visible en bas de la fiche, même longue */
+  .sheet .collante { position: sticky; bottom: 0; background: var(--surface); margin: 1.25rem -1.5rem 0;
+                     padding: .8rem 1.5rem; border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) 0; }
 </style>
 </head>
-<body>
+<body data-section="scenario">
 <header class="entete">
   <div class="entete-in">
     <a class="marque" href="/"><span class="sceau" aria-hidden="true"></span>PNJ parlants</a>
@@ -80,123 +126,154 @@
     <h1>Préparer l’univers</h1>
     <p class="accroche">Écrivez le monde, ses lieux et ses secrets, puis demandez des PNJ qui s’y rattachent. Exportez l’univers pour le partager.</p>
   </div>
-  <div class="colonnes">
-  <div>
-    <section class="carte">
-      <h2>Scénario</h2>
-      <p class="hint">Les PNJ s’appuient sur ce contexte au lieu d’inventer des lieux, des factions ou des personnages.</p>
-      <label for="monde">Univers <small>— connu de tous les PNJ, transmis pendant les dialogues</small></label>
-      <textarea id="monde" rows="9" placeholder="Ex. : La ville de Brumecôte, port de pêche sur la côte nord. Le bourgmestre Aldric Ventemer. La guilde des Saleurs contrôle le commerce du poisson. Depuis un mois, les bateaux disparaissent en mer…"></textarea>
-      <label for="notes">Notes du MJ <small>— servent à créer les PNJ, jamais transmises pendant les dialogues</small></label>
-      <textarea id="notes" rows="6" placeholder="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…"></textarea>
-      <fieldset class="themes" id="themes">
-        <legend>Thème graphique <small>— couleurs des pages pour tous les joueurs, en clair ou en sombre selon leur appareil</small></legend>
-      </fieldset>
-      <div class="actions">
-        <button id="saveScenarioBtn">Enregistrer le scénario</button>
-        <span class="status" id="scenarioStatus"></span>
-      </div>
-      <h3 class="sous-titre">Partager l’univers</h3>
-      <p class="hint">Scénario, lieux et PNJ de la banque, dans un seul fichier zip.</p>
-      <div class="actions">
-        <button class="ghost" id="exportUniversBtn">Exporter l’univers</button>
-        <button class="ghost" id="importZipBtn">Importer un zip</button>
-        <button class="ghost" id="importDossierBtn">Importer un dossier</button>
-        <label class="check"><input type="checkbox" id="garderPnj"> Garder les PNJ actuels</label>
-        <input type="file" id="importZip" accept=".zip,application/zip" hidden>
-        <input type="file" id="importDossier" webkitdirectory multiple hidden>
-      </div>
-      <p class="status" id="universStatus"></p>
-    </section>
+  <nav class="sections" aria-label="Parties de la préparation">
+    <a href="#scenario" data-section="scenario">Scénario <i class="modif" title="Modifications non enregistrées"></i></a>
+    <a href="#lieux" data-section="lieux">Lieux <span class="nb" id="nbLieux"></span><i class="modif" title="Modifications non enregistrées"></i></a>
+    <a href="#pnj" data-section="pnj">PNJ <span class="nb" id="nbPnj"></span><i class="modif" title="Modifications non enregistrées"></i></a>
+  </nav>
 
-    <section class="carte">
-      <h2>Lieux</h2>
+  <!-- Scénario : univers, notes du MJ, thème, partage -->
+  <section id="section-scenario" aria-label="Scénario">
+    <div class="colonnes-scenario">
+      <section class="carte">
+        <h2>Univers et secrets</h2>
+        <p class="hint">Les PNJ s’appuient sur ce contexte au lieu d’inventer des lieux, des factions ou des personnages.</p>
+        <label for="monde">Univers <small>— connu de tous les PNJ, transmis pendant les dialogues</small></label>
+        <textarea id="monde" rows="14" placeholder="Ex. : La ville de Brumecôte, port de pêche sur la côte nord. Le bourgmestre Aldric Ventemer. La guilde des Saleurs contrôle le commerce du poisson. Depuis un mois, les bateaux disparaissent en mer…"></textarea>
+        <label for="notes">Notes du MJ <small>— servent à créer les PNJ, jamais transmises pendant les dialogues</small></label>
+        <textarea id="notes" rows="8" placeholder="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…"></textarea>
+        <div class="actions">
+          <button id="saveScenarioBtn">Enregistrer le scénario</button>
+          <span class="status" id="scenarioStatus"></span>
+        </div>
+      </section>
+      <div class="pile">
+        <section class="carte">
+          <h2>Thème graphique</h2>
+          <p class="hint">Couleurs des pages pour tous les joueurs, en clair ou en sombre selon leur appareil. Enregistré dès le choix.</p>
+          <fieldset class="themes" id="themes" aria-label="Thème graphique"></fieldset>
+          <p class="status" id="themeStatus"></p>
+        </section>
+        <section class="carte">
+          <h2>Partager l’univers</h2>
+          <p class="hint">Scénario, thème, lieux et PNJ de la banque, dans un seul fichier zip.</p>
+          <div class="actions">
+            <button id="exportUniversBtn">Exporter l’univers</button>
+          </div>
+          <div class="actions">
+            <button class="ghost" id="importZipBtn">Importer un zip</button>
+            <button class="ghost" id="importDossierBtn">Importer un dossier</button>
+            <label class="check"><input type="checkbox" id="garderPnj"> Garder les PNJ actuels</label>
+            <input type="file" id="importZip" accept=".zip,application/zip" hidden>
+            <input type="file" id="importDossier" webkitdirectory multiple hidden>
+          </div>
+          <p class="status" id="universStatus"></p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lieux -->
+  <section id="section-lieux" aria-label="Lieux">
+    <div class="barre-section">
       <p class="hint">Où se passent les scènes. La description est lue par le narrateur à l’arrivée et connue de tous les PNJ ; les notes du MJ servent seulement à créer des PNJ cohérents.</p>
-      <div id="lieuxListe"></div>
       <div class="actions">
         <button class="ghost" id="ajoutLieuBtn">Ajouter un lieu</button>
         <button id="saveLieuxBtn">Enregistrer les lieux</button>
-        <span class="status" id="lieuxStatus"></span>
       </div>
-    </section>
+    </div>
+    <p class="status" id="lieuxStatus"></p>
+    <div class="grille-lieux" id="lieuxListe"></div>
+  </section>
 
-    <section class="carte">
-      <h2>Banque de PNJ</h2>
-      <ul class="bank-list" id="bankList"></ul>
-    </section>
-  </div>
+  <!-- PNJ : banque, demande au modèle, fiche -->
+  <section id="section-pnj" aria-label="PNJ">
+    <div class="colonnes-pnj">
+      <aside class="carte liste-pnj" aria-label="Banque de PNJ">
+        <div class="tete">
+          <h2>Banque</h2>
+          <button class="petit" id="newBtn">Nouveau PNJ</button>
+        </div>
+        <ul class="bank-list" id="bankList"></ul>
+      </aside>
 
-  <div>
-    <section class="carte">
-      <h2>Demander un PNJ</h2>
-      <p class="hint">Le modèle de création (Claude par défaut, réseau nécessaire) propose une fiche à partir du scénario et de vos consignes. Vous pouvez ensuite tout modifier.</p>
-      <div class="grid2">
-        <div><label for="reqRole">Métier <small>(vide = au hasard)</small></label>
-          <input type="text" id="reqRole" placeholder="Ex. aubergiste"></div>
-        <div><label for="reqNom">Nom <small>(vide = inventé)</small></label>
-          <input type="text" id="reqNom" placeholder="Ex. Maïwenn Salicorne"></div>
-        <div><label for="reqGenre">Genre</label>
-          <select id="reqGenre">
-            <option value="">Au choix</option><option value="feminin">Féminin</option>
-            <option value="masculin">Masculin</option><option value="neutre">Neutre</option>
-          </select></div>
-        <div><label for="reqLieu">Lieu habituel <small>(ses notes du MJ guident la création)</small></label>
-          <select id="reqLieu" class="lieux-sel"></select></div>
-      </div>
-      <label for="reqConsignes">Rôle dans le scénario <small>— ce qu’il sait, ce qu’il cache, son lien avec l’intrigue</small></label>
-      <textarea id="reqConsignes" rows="4" placeholder="Ex. : Tient l’auberge du port. A vu des lumières sur l’îlot la nuit des disparitions, mais a peur du bourgmestre."></textarea>
-      <div class="actions">
-        <button id="genBtn">Proposer un PNJ</button>
-        <span class="status" id="genStatus"></span>
-      </div>
-    </section>
+      <div class="pile">
+        <details class="carte demande" id="demande" open>
+          <summary><h2>Demander un PNJ au modèle</h2></summary>
+          <p class="hint">Le modèle de création (Claude par défaut, réseau nécessaire) propose une fiche à partir du scénario et de vos consignes. Vous pouvez ensuite tout modifier.</p>
+          <div class="grid2">
+            <div><label for="reqRole">Métier <small>(vide = au hasard)</small></label>
+              <input type="text" id="reqRole" placeholder="Ex. aubergiste"></div>
+            <div><label for="reqNom">Nom <small>(vide = inventé)</small></label>
+              <input type="text" id="reqNom" placeholder="Ex. Maïwenn Salicorne"></div>
+            <div><label for="reqGenre">Genre</label>
+              <select id="reqGenre">
+                <option value="">Au choix</option><option value="feminin">Féminin</option>
+                <option value="masculin">Masculin</option><option value="neutre">Neutre</option>
+              </select></div>
+            <div><label for="reqLieu">Lieu habituel <small>(ses notes du MJ guident la création)</small></label>
+              <select id="reqLieu" class="lieux-sel"></select></div>
+          </div>
+          <label for="reqConsignes">Rôle dans le scénario <small>— ce qu’il sait, ce qu’il cache, son lien avec l’intrigue</small></label>
+          <textarea id="reqConsignes" rows="3" placeholder="Ex. : Tient l’auberge du port. A vu des lumières sur l’îlot la nuit des disparitions, mais a peur du bourgmestre."></textarea>
+          <div class="actions">
+            <button id="genBtn">Proposer un PNJ</button>
+            <span class="status" id="genStatus"></span>
+          </div>
+        </details>
 
-    <section class="carte sheet">
-      <p class="mode" id="mode">Nouveau PNJ</p>
-      <div class="grid2">
-        <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
-        <div><label for="f-metier">Métier</label><input type="text" id="f-metier"></div>
-        <div><label for="f-genre">Genre</label>
-          <select id="f-genre"><option value="feminin">Féminin</option><option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
-        <div><label for="f-humeur">Humeur</label><input type="text" id="f-humeur"></div>
-        <div><label for="f-timbre">Timbre de voix</label>
-          <select id="f-timbre"><option value="grave">Grave</option><option value="moyen">Moyen</option><option value="aigu">Aigu</option></select></div>
-        <div><label for="f-debit">Débit</label>
-          <select id="f-debit"><option value="lent">Lent</option><option value="normal">Normal</option><option value="rapide">Rapide</option></select></div>
-        <div><label for="f-lieu">Lieu habituel</label><select id="f-lieu" class="lieux-sel"></select></div>
+        <section class="carte sheet" aria-labelledby="mode">
+          <h2 id="mode">Nouveau PNJ</h2>
+          <h3 class="sous-titre">Identité</h3>
+          <div class="grid2">
+            <div><label for="f-nom">Nom</label><input type="text" id="f-nom"></div>
+            <div><label for="f-metier">Métier</label><input type="text" id="f-metier"></div>
+            <div><label for="f-genre">Genre</label>
+              <select id="f-genre"><option value="feminin">Féminin</option><option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
+            <div><label for="f-lieu">Lieu habituel</label><select id="f-lieu" class="lieux-sel"></select></div>
+          </div>
+          <h3 class="sous-titre">Caractère</h3>
+          <label for="f-humeur">Humeur</label><input type="text" id="f-humeur">
+          <label for="f-apparence">Apparence</label><textarea id="f-apparence" rows="2"></textarea>
+          <label for="f-personnalite">Personnalité</label><textarea id="f-personnalite" rows="2"></textarea>
+          <h3 class="sous-titre">Dans le scénario</h3>
+          <label for="f-connaissances">Ce qu’il sait et peut révéler <small>— une information par ligne</small></label>
+          <textarea id="f-connaissances" rows="4"></textarea>
+          <label for="f-secret">Secret <small>— révélé seulement si le joueur gagne sa confiance</small></label>
+          <textarea id="f-secret" rows="2"></textarea>
+          <label for="f-salutation">Première réplique</label><textarea id="f-salutation" rows="2"></textarea>
+          <h3 class="sous-titre">Voix</h3>
+          <div class="grid2">
+            <div><label for="f-timbre">Timbre</label>
+              <select id="f-timbre"><option value="grave">Grave</option><option value="moyen">Moyen</option><option value="aigu">Aigu</option></select></div>
+            <div><label for="f-debit">Débit</label>
+              <select id="f-debit"><option value="lent">Lent</option><option value="normal">Normal</option><option value="rapide">Rapide</option></select></div>
+          </div>
+          <div class="voice">
+            <span id="voiceLabel">Voix : —</span>
+            <select id="engineSel" aria-label="Moteur de voix">
+              <option value="pocket">Pocket TTS (naturel)</option>
+              <option value="piper">Piper (léger)</option>
+              <option value="edge">Edge (en ligne)</option>
+            </select>
+            <select id="voiceSel" aria-label="Choisir une voix"></select>
+            <button class="ghost" id="listenBtn">Écouter</button>
+          </div>
+          <div class="actions collante">
+            <button id="saveBtn">Enregistrer dans la banque</button>
+            <span class="status" id="saveStatus"></span>
+          </div>
+        </section>
       </div>
-      <label for="f-apparence">Apparence</label><textarea id="f-apparence" rows="2"></textarea>
-      <label for="f-personnalite">Personnalité</label><textarea id="f-personnalite" rows="2"></textarea>
-      <label for="f-connaissances">Ce qu’il sait et peut révéler <small>— une information par ligne</small></label>
-      <textarea id="f-connaissances" rows="4"></textarea>
-      <label for="f-secret">Secret <small>— révélé seulement si le joueur gagne sa confiance</small></label>
-      <textarea id="f-secret" rows="2"></textarea>
-      <label for="f-salutation">Première réplique</label><textarea id="f-salutation" rows="2"></textarea>
-      <div class="voice">
-        <span id="voiceLabel">Voix : —</span>
-        <select id="engineSel" aria-label="Moteur de voix">
-          <option value="pocket">Pocket TTS (naturel)</option>
-          <option value="piper">Piper (léger)</option>
-          <option value="edge">Edge (en ligne)</option>
-        </select>
-        <select id="voiceSel" aria-label="Choisir une voix"></select>
-        <button class="ghost" id="listenBtn">Écouter</button>
-      </div>
-      <div class="actions">
-        <button id="saveBtn">Enregistrer dans la banque</button>
-        <button class="ghost" id="newBtn">Nouveau PNJ</button>
-        <span class="status" id="saveStatus"></span>
-      </div>
-    </section>
-  </div>
-  </div>
+    </div>
+  </section>
 </main>
 
 <script type="module">
+import { esc, parLieu } from "./js/scene.js";
 import { THEMES, THEME_DEFAUT, appliquerTheme, confirmationImport, exporter, importerFichiers,
          resumeImport } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "lieu", "apparence", "personnalite",
                 "connaissances", "secret", "salutation"];
 let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
@@ -211,6 +288,24 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
   return data;
 }
 
+// --- Parties de la page : scénario (« #scenario »), lieux (« #lieux »), PNJ (« #pnj ») ---------
+function afficherSection() {
+  const section = { "#lieux": "lieux", "#pnj": "pnj" }[location.hash] ?? "scenario";
+  document.body.dataset.section = section;
+  for (const a of document.querySelectorAll(".sections a")) {
+    if (a.dataset.section === section) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+}
+window.addEventListener("hashchange", afficherSection);
+afficherSection();
+
+// Un point sur l'onglet d'une partie qui a des modifications non enregistrées
+function majModifs() {
+  const modifs = { scenario: scenarioModifie(), lieux: lieuxDirty, pnj: dirty };
+  for (const a of document.querySelectorAll(".sections a")) a.classList.toggle("a-enregistrer", modifs[a.dataset.section]);
+}
+for (const type of ["input", "change", "click"]) document.addEventListener(type, () => queueMicrotask(majModifs));
+
 // --- Fiche éditable ----------------------------------------------------------
 function fillForm(npc) {
   current = npc;
@@ -222,9 +317,11 @@ function fillForm(npc) {
   if (!npc.timbre) $("f-timbre").value = "moyen";
   if (!npc.debit) $("f-debit").value = "normal";
   $("mode").textContent = npc.id ? `Modification de ${npc.nom}` : (npc.nom ? "Proposition (non enregistrée)" : "Nouveau PNJ");
+  $("demande").open = !npc.nom;  // la demande au modèle sert pour une fiche vierge
   showVoice();
   dirty = false;
   renderBank();
+  majModifs();
 }
 
 function readForm() {
@@ -277,23 +374,34 @@ function showVoice() {
 const confirmDiscard = () => !dirty || confirm("Les modifications de la fiche en cours seront perdues. Continuer ?");
 
 // --- Scénario ----------------------------------------------------------------
-// Thème graphique : une carte par thème, dans ses propres couleurs ; un clic l'essaie sur la page,
-// « Enregistrer le scénario » le garde (pour toutes les pages et tous les joueurs)
-$("themes").insertAdjacentHTML("beforeend", THEMES.map(t => `
+let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT };  // dernière version enregistrée
+const scenarioModifie = () => $("monde").value !== scenarioCharge.monde || $("notes").value !== scenarioCharge.notes_mj;
+
+// Thème graphique : une carte par thème, dans ses propres couleurs ; enregistré dès le choix
+// (avec le texte enregistré du scénario : les modifications en cours du texte ne partent pas avec lui)
+$("themes").innerHTML = THEMES.map(t => `
   <label class="theme-choix" data-theme="${t.id}">
     <input type="radio" name="theme" value="${t.id}">
     <span class="pastilles" aria-hidden="true"><i style="background: var(--bg)"></i><i style="background: var(--glass)"></i><i style="background: var(--verdigris)"></i><i style="background: var(--wax)"></i></span>
     <span class="nom">${esc(t.nom)}</span><small>${esc(t.resume)}</small>
-  </label>`).join(""));
+  </label>`).join("");
 const themeChoisi = () => document.querySelector("input[name=theme]:checked")?.value ?? THEME_DEFAUT;
 function afficherTheme(id) {
   const theme = appliquerTheme(id);
   document.querySelector(`input[name=theme][value="${theme}"]`).checked = true;
   return theme;
 }
-$("themes").onchange = () => {
-  document.documentElement.dataset.theme = themeChoisi();  // essai : gardé seulement à l'enregistrement
-  $("scenarioStatus").textContent = themeChoisi() === scenarioCharge.theme ? "" : "Thème à enregistrer avec le scénario.";
+$("themes").onchange = async () => {
+  const theme = themeChoisi();
+  document.documentElement.dataset.theme = theme;
+  try {
+    const s = await api("/api/scenario", { monde: scenarioCharge.monde, notes_mj: scenarioCharge.notes_mj, theme }, "PUT");
+    scenarioCharge.theme = afficherTheme(s.theme);
+    $("themeStatus").textContent = `Thème « ${THEMES.find(t => t.id === scenarioCharge.theme).nom} » enregistré.`;
+  } catch (e) {
+    $("themeStatus").textContent = e.message;
+    afficherTheme(scenarioCharge.theme);
+  }
 };
 
 async function loadScenario() {
@@ -301,25 +409,23 @@ async function loadScenario() {
   $("monde").value = s.monde || "";
   $("notes").value = s.notes_mj || "";
   scenarioCharge = { monde: $("monde").value, notes_mj: $("notes").value, theme: afficherTheme(s.theme) };
+  majModifs();
 }
 async function saveScenario() {
   try {
     const s = await api("/api/scenario", { monde: $("monde").value, notes_mj: $("notes").value,
-                                           theme: themeChoisi() }, "PUT");
+                                           theme: scenarioCharge.theme }, "PUT");
     $("monde").value = s.monde;
     $("notes").value = s.notes_mj;
     scenarioCharge = { ...s, theme: afficherTheme(s.theme) };
     $("scenarioStatus").textContent = "Scénario enregistré.";
   } catch (e) { $("scenarioStatus").textContent = e.message; }
+  majModifs();
 }
 
 // --- Partager l'univers (export zip, import zip ou dossier) ----------------------
-let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT };  // dernière version enregistrée
-const nonEnregistre = () => lieuxDirty || $("monde").value !== scenarioCharge.monde
-                            || $("notes").value !== scenarioCharge.notes_mj || themeChoisi() !== scenarioCharge.theme;
-
 $("exportUniversBtn").onclick = () => {
-  if (nonEnregistre()) {
+  if (scenarioModifie() || lieuxDirty) {
     $("universStatus").textContent = "Enregistrez d’abord le scénario et les lieux : l’export prend la version enregistrée.";
     return;
   }
@@ -335,17 +441,18 @@ for (const id of ["importZip", "importDossier"]) {
     if (!fichiers.length || !confirm(confirmationImport(bank.length, $("garderPnj").checked))) return;
     try {
       const r = await importerFichiers(fichiers, $("garderPnj").checked);
-      await Promise.all([loadScenario(), loadLieux(), refreshBank()]);
       lieuxDirty = false;
+      await Promise.all([loadScenario(), loadLieux(), refreshBank()]);
       if (current.id && !bank.some(n => n.id === current.id)) delete current.id;  // fiche retirée de la banque
       $("universStatus").textContent = resumeImport(r);
     } catch (e) { $("universStatus").textContent = e.message; }
+    majModifs();
   };
 }
 
 // --- Lieux -------------------------------------------------------------------
 let lieux = [];          // lieux enregistrés (menus « Lieu habituel »)
-let lieuxEdit = [];      // lieux en cours d'édition dans le panneau
+let lieuxEdit = [];      // lieux en cours d'édition
 let lieuxDirty = false;
 
 async function loadLieux() {
@@ -355,16 +462,27 @@ async function loadLieux() {
   fillLieuOptions();
 }
 
+// Une carte par lieu : nom, description, notes du MJ, et les PNJ de la banque qui y vivent
 function renderLieux() {
-  $("lieuxListe").innerHTML = lieuxEdit.length ? lieuxEdit.map((l, i) => `
-    <div class="lieu-fiche">
+  $("nbLieux").textContent = lieux.length || "";
+  $("lieuxListe").innerHTML = lieuxEdit.length ? lieuxEdit.map((l, i) => {
+    const habitants = l.id ? bank.filter(n => n.lieu === l.id).map(n => n.nom) : [];
+    return `
+    <article class="carte lieu-fiche">
       <div class="titre">
         <input type="text" data-i="${i}" data-champ="nom" value="${esc(l.nom)}" placeholder="Nom du lieu (ex. Auberge du Sanglier)" aria-label="Nom du lieu">
-        <button class="ghost" data-suppr="${i}" aria-label="Supprimer ${esc(l.nom)}">Supprimer</button>
+        <button class="ghost petit" data-suppr="${i}" aria-label="Supprimer ${esc(l.nom)}">Supprimer</button>
       </div>
-      <textarea rows="2" data-i="${i}" data-champ="description" placeholder="Description lue par le narrateur, connue des PNJ" aria-label="Description">${esc(l.description)}</textarea>
-      <textarea rows="2" data-i="${i}" data-champ="notes_mj" placeholder="Notes du MJ (secrets du lieu)" aria-label="Notes du MJ">${esc(l.notes_mj)}</textarea>
-    </div>`).join("") : `<p class="hint">Aucun lieu : les PNJ ne sont rattachés à aucun endroit.</p>`;
+      <label for="lieu-${i}-description">Description <small>— lue par le narrateur, connue des PNJ</small></label>
+      <textarea id="lieu-${i}-description" rows="3" data-i="${i}" data-champ="description" placeholder="Ex. : Une salle basse et enfumée, des tonneaux en guise de tables.">${esc(l.description)}</textarea>
+      <label for="lieu-${i}-notes">Notes du MJ <small>— secrets du lieu</small></label>
+      <textarea id="lieu-${i}-notes" rows="2" data-i="${i}" data-champ="notes_mj" placeholder="Ex. : Une trappe sous le comptoir mène aux égouts.">${esc(l.notes_mj)}</textarea>
+      <p class="habitants">
+        <span>${habitants.length ? `PNJ : ${esc(habitants.join(", "))}` : l.id ? "Aucun PNJ ici." : "Lieu pas encore enregistré."}</span>
+        ${l.id ? `<button class="ghost petit" data-creer="${esc(l.id)}">Créer un PNJ ici</button>` : ""}
+      </p>
+    </article>`;
+  }).join("") : `<p class="vide">Aucun lieu : les PNJ ne sont rattachés à aucun endroit. Ajoutez-en un pour commencer.</p>`;
 }
 
 // Menus « Lieu habituel » de la demande et de la fiche
@@ -384,6 +502,15 @@ $("lieuxListe").oninput = (e) => {
   lieuxDirty = true;
 };
 $("lieuxListe").onclick = (e) => {
+  const creer = e.target.dataset.creer;
+  if (creer !== undefined) {  // nouvelle fiche, demande au modèle préremplie avec ce lieu
+    if (!confirmDiscard()) return;
+    fillForm({});
+    $("reqLieu").value = creer;
+    location.hash = "pnj";
+    $("reqRole").focus();
+    return;
+  }
   const i = e.target.dataset.suppr;
   if (i === undefined) return;
   const l = lieuxEdit[Number(i)];
@@ -408,22 +535,28 @@ $("saveLieuxBtn").onclick = async () => {
     renderBank();
     $("lieuxStatus").textContent = `${lieux.length} lieu${lieux.length > 1 ? "x" : ""} enregistré${lieux.length > 1 ? "s" : ""}.`;
   } catch (e) { $("lieuxStatus").textContent = e.message; }
+  majModifs();
 };
 
 // --- Banque ------------------------------------------------------------------
 let bank = [];
-async function refreshBank() { bank = await api("/api/bank").catch(() => []); renderBank(); }
+async function refreshBank() {
+  bank = await api("/api/bank").catch(() => []);
+  renderBank();
+  if (!lieuxDirty) renderLieux();  // PNJ de chaque lieu (sans effacer une saisie en cours)
+}
+// Banque groupée par lieu habituel ; le PNJ de la fiche est mis en évidence
 function renderBank() {
-  const lieuDe = (n) => lieux.find(l => l.id === n.lieu)?.nom;
-  $("bankList").innerHTML = bank.length ? bank.map(n => `
+  $("nbPnj").textContent = bank.length || "";
+  $("bankList").innerHTML = bank.length ? parLieu(bank, lieux).map(({ lieu, pnjs }) =>
+    `<li class="groupe">${lieu ? esc(lieu.nom) : "Sans lieu"}</li>` + pnjs.map(n => `
     <li class="${n.id === current.id ? "current" : ""}">
-      <span class="who">${esc(n.nom)}<small>${esc(n.metier)}${lieuDe(n) ? " · " + esc(lieuDe(n)) : ""}</small></span>
-      <button class="ghost" data-edit="${esc(n.id)}">Modifier</button>
-      <button class="ghost" data-del="${esc(n.id)}" aria-label="Supprimer ${esc(n.nom)}">Supprimer</button>
-    </li>`).join("") : `<li class="hint">Aucun PNJ enregistré.</li>`;
+      <button class="who" data-edit="${esc(n.id)}">${esc(n.nom)}<small>${esc(n.metier)}</small></button>
+      <button class="ghost suppr" data-del="${esc(n.id)}" aria-label="Supprimer ${esc(n.nom)}" title="Supprimer">✕</button>
+    </li>`).join("")).join("") : `<li class="vide">Aucun PNJ enregistré. Demandez-en un au modèle, ou remplissez la fiche.</li>`;
 }
 $("bankList").onclick = async (e) => {
-  const edit = e.target.dataset.edit, del = e.target.dataset.del;
+  const edit = e.target.closest("[data-edit]")?.dataset.edit, del = e.target.closest("[data-del]")?.dataset.del;
   try {
     if (edit && confirmDiscard()) fillForm(await api(`/api/bank/${encodeURIComponent(edit)}`));
     if (del) {
@@ -444,7 +577,9 @@ async function generate() {
     fillForm(await api("/api/npc/generate", { role: $("reqRole").value, nom: $("reqNom").value,
                                               genre: $("reqGenre").value, consignes: $("reqConsignes").value,
                                               lieu: $("reqLieu").value }));
-    $("genStatus").textContent = "Proposition prête : relisez et ajustez la fiche ci-dessous.";
+    $("genStatus").textContent = "";
+    $("saveStatus").textContent = "Proposition prête : relisez et ajustez la fiche, puis enregistrez-la.";
+    document.querySelector(".sheet").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) { $("genStatus").textContent = e.message; }
   $("genBtn").disabled = false;
 }
@@ -492,14 +627,14 @@ async function listen() {
 
 $("genBtn").onclick = generate;
 $("saveBtn").onclick = save;
-$("newBtn").onclick = () => { if (confirmDiscard()) fillForm({}); };
+$("newBtn").onclick = () => { if (confirmDiscard()) { fillForm({}); $("saveStatus").textContent = ""; } };
 $("voiceSel").onchange = pickVoice;
 $("engineSel").onchange = pickEngine;
 $("listenBtn").onclick = listen;
 $("saveScenarioBtn").onclick = saveScenario;
 document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
 $("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
-window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty) e.preventDefault(); });
+window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty || scenarioModifie()) e.preventDefault(); });
 
 loadEngine();
 fillForm({});

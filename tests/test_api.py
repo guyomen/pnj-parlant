@@ -77,6 +77,12 @@ class TestUnivers:
         client.put("/api/lieux", json=[{"id": "forge", "nom": "Forge"}])
         return client.post("/api/bank", json=YSOLDE).get_json()["id"]
 
+    def test_nouvelle_table_vide_l_univers(self, client):
+        self._remplir(client)
+        assert client.delete("/api/univers").get_json() == {"pnj": 1}
+        assert client.get("/api/bank").get_json() == [] and client.get("/api/lieux").get_json() == []
+        assert client.get("/api/scenario").get_json() == {"monde": "", "notes_mj": "", "theme": ""}
+
     def test_export_puis_import_du_zip(self, client):
         ysolde = self._remplir(client)
         reponse = client.get("/api/scenario/export")

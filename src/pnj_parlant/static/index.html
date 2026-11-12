@@ -35,8 +35,9 @@
   body:not([data-vue=options]) #options { display: none; }
   #modelRow { align-items: center; }
   #modelRow[hidden] { display: none; }
-  .univers-actuel { margin: .9rem 0 0; font-style: italic; color: var(--glass); }
-  .univers-actuel:empty { display: none; }
+  .univers-ligne { display: flex; align-items: center; gap: .4rem 1rem; flex-wrap: wrap; margin-top: .9rem; }
+  .univers-actuel { margin: 0; font-style: italic; color: var(--glass); }
+  .univers-ligne button.petit { padding: .25rem .7rem; font-size: .9rem; }
   .carte { display: flex; flex-direction: column; gap: .75rem; }
   .carte h2 { margin: 0; }
   .carte .hint { color: var(--muted); margin: 0; }
@@ -142,7 +143,10 @@
   <div class="titre-page">
     <h1 id="accueilTitre">Bienvenue à la table</h1>
     <p class="accroche">Parlez à voix haute avec les personnages de votre univers de jeu de rôle : ils vous répondent dans leur rôle.</p>
-    <p class="univers-actuel" id="universActuel"></p>
+    <div class="univers-ligne">
+      <p class="univers-actuel" id="universActuel"></p>
+      <button class="ghost petit" id="nouvelleTableBtn" title="Supprime l’univers actuel et la conversation en cours">Nouvelle table</button>
+    </div>
   </div>
   <div class="cartes">
     <article class="carte">
@@ -289,8 +293,8 @@
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix } from "./js/scene.js";
-import { chargerExemple, chargerTheme, confirmationImport, importerFichiers, resumeImport,
-         resumeUnivers } from "./js/univers.js";
+import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, importerFichiers,
+         resumeImport, resumeUnivers } from "./js/univers.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -1246,6 +1250,25 @@ $("accInventerBtn").onclick = () => {
 };
 $("accRole").addEventListener("keydown", (e) => { if (e.key === "Enter") $("accInventerBtn").click(); });
 $("accReprendreBtn").onclick = () => { location.hash = "jeu"; };
+
+// Nouvelle table : l'univers (scénario, thème, lieux, banque) est supprimé sur le serveur et la partie repart de zéro
+$("nouvelleTableBtn").onclick = async () => {
+  if (busy || !confirm(confirmationNouvelleTable(lieux.length, banque.length))) return;
+  stopNpc();
+  try { await api("/api/univers", undefined, "DELETE"); }
+  catch (e) { $("accStatus").textContent = e.message; return; }
+  npcs = []; history = []; dernier = null; rencontres = []; positions = {}; lieuActuel = "";
+  masquerProposition();
+  $("log").innerHTML = "";
+  reinitialiserUsage();
+  try { localStorage.removeItem(CLE_PARTIE); } catch {}
+  await chargerLieux();
+  await refreshBank();
+  await chargerTheme();
+  setBusy(false);
+  $("accStatus").textContent = "";
+  majAccueil();
+};
 
 const confirmerImport = () => !(banque.length || lieux.length)
   || confirm(confirmationImport(banque.length, $("accGarder").checked));
