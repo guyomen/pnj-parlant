@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PNJ parlants</title>
+<!-- thème du scénario gardé par le navigateur : posé avant l'affichage (puis relu depuis le serveur) -->
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") || ""; } catch {}</script>
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
@@ -109,7 +111,7 @@
   .sys { margin-top: 1rem; font-size: .85rem; color: var(--muted); display: grid; gap: .35rem; }
   .sys .bar { height: .4rem; background: var(--line); border-radius: .2rem; overflow: hidden; }
   .sys .bar i { display: block; height: 100%; background: var(--glass); width: 0; transition: width .4s; }
-  .sys .alert { color: #b3261e; font-weight: 700; }
+  .sys .alert { color: var(--wax); font-weight: 700; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
@@ -287,7 +289,8 @@
 import { esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix } from "./js/scene.js";
-import { chargerExemple, confirmationImport, importerFichiers, resumeImport, resumeUnivers } from "./js/univers.js";
+import { chargerExemple, chargerTheme, confirmationImport, importerFichiers, resumeImport,
+         resumeUnivers } from "./js/univers.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -1253,6 +1256,7 @@ async function importerUnivers(charger) {
     const r = await charger($("accGarder").checked);
     await chargerLieux();
     await refreshBank();
+    await chargerTheme();
     $("accStatus").textContent = resumeImport(r);
   } catch (e) { $("accStatus").textContent = e.message; }
   majAccueil();
@@ -1326,6 +1330,7 @@ async function refreshSys() {
 refreshSys();
 setInterval(() => { if (!document.hidden) refreshSys(); }, 3000);
 setBusy(false);
+chargerTheme();
 chargerLieux().then(() => refreshBank()).then(() => { restaurerPartie(); majAccueil(); });
 </script>
 </body>

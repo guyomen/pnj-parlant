@@ -70,6 +70,7 @@ Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans l
 1. **Scénario**, en deux parties :
    - **Univers** : lieux, factions, personnages connus, événements. Connu de tous les PNJ, il est aussi transmis pendant les dialogues.
    - **Notes du MJ** : l'intrigue et ses secrets. Elles servent seulement à créer des PNJ cohérents et ne sont jamais transmises pendant les dialogues, pour qu'un PNJ ne révèle pas ce qu'il n'est pas censé savoir.
+   - **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs (Vert-de-gris, Parchemin, Sylve, Givre ou Donjon), en clair ou en sombre selon le réglage de chaque appareil (Donjon reste sombre). Un clic l'essaie sur la page ; « Enregistrer le scénario » le garde. Il voyage avec l'univers exporté.
 2. **Demander un PNJ** : métier, nom, genre (tous facultatifs) et son rôle dans le scénario. Claude propose une fiche qui ne cite que des noms présents dans le scénario ou vos consignes.
 3. **Relire et ajuster** la fiche, écouter sa voix (bouton « Autre voix » si elle ne convient pas), puis l'**enregistrer dans la banque**. Les PNJ de la banque peuvent être modifiés ou supprimés.
 
@@ -88,7 +89,7 @@ En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouven
 case « Vous accompagne » est cochée ; on les retrouve là où on les a laissés. Chaque PNJ sait où il se trouve
 et connaît les lieux du scénario.
 
-Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario, `_lieux.json` pour les lieux, puis un fichier JSON par PNJ, lisible et modifiable à la main.
+Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, notes du MJ, thème), `_lieux.json` pour les lieux, puis un fichier JSON par PNJ, lisible et modifiable à la main.
 
 ### Partager un univers
 

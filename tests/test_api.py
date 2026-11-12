@@ -61,8 +61,8 @@ class TestBanque:
         assert client.put(f"/api/bank/{npc_id}", json=npc).status_code == 404
 
     def test_scenario(self, client):
-        client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret."})
-        assert client.get("/api/scenario").get_json() == {"monde": "Valmer.", "notes_mj": "Secret."}
+        client.put("/api/scenario", json={"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve"})
+        assert client.get("/api/scenario").get_json() == {"monde": "Valmer.", "notes_mj": "Secret.", "theme": "sylve"}
 
 
 LIEUX = [{"nom": "Auberge du Sanglier", "description": "Une salle enfumée.", "notes_mj": "Une trappe mène aux égouts."},

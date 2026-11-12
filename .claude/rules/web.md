@@ -17,7 +17,21 @@ paths:
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :
   `aria-current="page"` (posé par `afficherVue` dans index.html, en dur dans creation.html).
 - `style.css` : jetons (couleurs, `--rayon`, `--ombre`, `--page`, `--gouttiere`), `.page` + `.titre-page` (accueil,
-  options, préparation), `.carte`, champs et boutons ; chaque page n'ajoute que sa mise en page.
+  options, préparation), `.carte`, champs et boutons ; chaque page n'ajoute que sa mise en page. N'utiliser que les
+  variables de couleur (jamais de couleur en dur) : elles changent avec le thème.
+
+## Thèmes graphiques
+- Choisi par le scénario (`theme` de `_scenario.json`), posé sur `<html data-theme>` ; vide ou inconnu = défaut.
+- Couleurs dans `style.css` : un bloc `[data-theme=<id>]` (clair) + son `@media (prefers-color-scheme: dark)` par
+  thème ; `:root, [data-theme=vert-de-gris]` = défaut ; `donjon` toujours sombre. Variables : `--bg --surface --ink
+  --muted --line --glass` (principale, texte des boutons = `--surface`) `--verdigris` (appoint) `--wax --wax-ink`
+  (sceau « Parler »). Contraste visé ≥ 4,5 pour ink/bg, muted/surface, surface/glass, wax-ink/wax.
+- Liste (id, nom, résumé) : `THEMES` dans `js/univers.js` ; `appliquerTheme(id)` (pose + garde dans localStorage
+  `theme`), `chargerTheme()` (relit /api/scenario). Un petit script dans le `<head>` des deux pages pose le thème
+  gardé avant l'affichage (pas de flash), puis `chargerTheme()` au chargement et après un import d'univers.
+- Préparation : `fieldset#themes`, une carte par thème portant son propre `data-theme` (aperçu dans ses couleurs) ;
+  le clic essaie le thème sans le garder, « Enregistrer le scénario » l'envoie (`themeChoisi`, `nonEnregistre`).
+- Ajouter un thème : bloc(s) dans `style.css` + entrée dans `THEMES` (le serveur accepte tout id `[a-z0-9-]`).
 - `js/univers.js` : import (exemple, zip, dossier `webkitdirectory`), export, messages ; partagé par les deux pages.
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans
   `tests/js/scene.test.mjs` ; index.html n'est testé que par l'e2e.

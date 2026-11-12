@@ -14,11 +14,19 @@ def banque(tmp_path):
 
 
 def test_scenario_vide_puis_enregistre(banque):
-    assert banque.scenario() == {"monde": "", "notes_mj": ""}
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""}
     banque.enregistrer_scenario({"monde": "  Valmer.  ", "notes_mj": "x" * 30000, "autre": "ignoré"})
     scenario = banque.scenario()
     assert scenario["monde"] == "Valmer."
     assert len(scenario["notes_mj"]) == 20000
+    assert scenario["theme"] == ""
+
+
+@pytest.mark.parametrize("theme, attendu", [("parchemin", "parchemin"), (" Donjon ", "donjon"), (None, ""),
+                                            ("../x", ""), ("a" * 41, ""), (3, "3")])
+def test_scenario_theme(banque, theme, attendu):
+    assert banque.enregistrer_scenario({"monde": "Valmer.", "theme": theme})["theme"] == attendu
+    assert banque.scenario()["theme"] == attendu
 
 
 def test_ajouter_lire_lister_supprimer(banque):
@@ -108,7 +116,7 @@ def test_import_remplace_ou_garde_les_pnj(banque):
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'})
     assert [n["nom"] for n in banque.liste()] == ["Ysolde"]
-    assert banque.scenario() == {"monde": "", "notes_mj": ""} and banque.lieux() == []  # absents : vidés
+    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": ""} and banque.lieux() == []  # absents : vidés
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'}, remplacer=False)
     assert [n["nom"] for n in banque.liste()] == ["Brom", "Ysolde"]

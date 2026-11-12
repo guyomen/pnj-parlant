@@ -28,7 +28,8 @@ src/pnj_parlant/
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (accueil, partie, options), creation.html, js/scene.js + js/univers.js (testés)
+  static/            # index.html (accueil, partie, options), creation.html, style.css (thèmes),
+                     # js/scene.js (testé) + js/univers.js (univers, thèmes)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
@@ -42,7 +43,8 @@ Moteurs choisis dans `config.toml` : `[moteurs] creation` / `dialogue` = `"claud
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
 - `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage.
-- `web.md` : vues (accueil, partie, options), conversation gardée, dialogue, lieux, univers, micro.
+- `web.md` : vues (accueil, partie, options), barre du haut, thèmes graphiques, conversation gardée, dialogue,
+  lieux, univers, micro.
 - `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance.
 - `systeme.md` : dépendances, config.toml, lanceurs, Docker/Ollama, documentation.
 - `tests.md` : pytest, node, e2e et ses pièges.
@@ -60,10 +62,14 @@ pytest && node --test tests/js/      # tests, sans réseau ni modèle ; e2e : py
 - Ajouter un test à chaque changement de logique ; une fonction JS testable va dans `static/js/scene.js`.
 - Tout nouveau réglage : `config.toml.example` (commenté) et README.md.
 - Garder README.md, docs/installation-windows.md et ces règles à jour quand le comportement change.
+- Fichiers en CRLF dans la copie de travail (Windows) : les modifier avec Edit, ou en gardant les fins de ligne.
+- Interface : barre du haut et styles communs dans `style.css` ; couleurs seulement par variables (thèmes).
 
 ## État
 - Machine de dev Linux en tout-local (`qwen3:4b-instruct`, NVIDIA T400 4 Go, port 7800 en HTTPS),
   Ollama dans Docker sur le GPU.
+- Poste Windows : serveur lancé par l'utilisateur sur 192.168.1.21:5000 (fichiers statiques servis depuis le dépôt :
+  un rechargement suffit ; le code Python demande de relancer le serveur).
 
 ## Pistes pour la suite
 - Contexte de monde plus riche (ville, rumeurs du jour) et inventaire/prix fixes pour les marchands.

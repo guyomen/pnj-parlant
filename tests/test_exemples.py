@@ -6,6 +6,7 @@ from pnj_parlant.fiches import NPC_SCHEMA
 from pnj_parlant.serveur import EXEMPLES as DOSSIER, exemples
 
 EXEMPLES = sorted(p for p in DOSSIER.iterdir() if p.is_dir())
+STYLE = (DOSSIER.parent / "static" / "style.css").read_text(encoding="utf-8")
 
 
 def test_il_y_a_au_moins_un_exemple_presente():
@@ -18,6 +19,8 @@ def test_exemple_complet_et_coherent(dossier):
     banque = Banque(dossier)
     scenario = banque.scenario()
     assert scenario["monde"] and scenario["notes_mj"]
+    if scenario["theme"]:  # thème graphique : doit exister dans la feuille de style
+        assert f"[data-theme={scenario['theme']}]" in STYLE, f"thème inconnu : {scenario['theme']}"
     lieux = {lieu["id"] for lieu in banque.lieux()}
     assert len(lieux) >= 2 and all(NPC_ID.match(i) for i in lieux)
 

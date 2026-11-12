@@ -3,6 +3,32 @@
 
 export const URL_EXPORT = "/api/scenario/export";
 
+// --- Thème graphique du scénario -----------------------------------------------------
+// Couleurs définies dans style.css ([data-theme=...]) ; le premier est le thème par défaut.
+export const THEMES = [
+  { id: "vert-de-gris", nom: "Vert-de-gris", resume: "Verre ancien et cire rouge" },
+  { id: "parchemin", nom: "Parchemin", resume: "Taverne, cuir et laiton" },
+  { id: "sylve", nom: "Sylve", resume: "Forêt féerique, mousse et baies" },
+  { id: "givre", nom: "Givre", resume: "Contrées du nord, glace et sang" },
+  { id: "donjon", nom: "Donjon", resume: "Pierre et torches, toujours sombre" },
+];
+export const THEME_DEFAUT = THEMES[0].id;
+const CLE_THEME = "theme";  // gardé dans le navigateur : appliqué dès le chargement, avant la réponse du serveur
+
+// Pose le thème sur la page (identifiant inconnu ou vide : thème par défaut) et le garde pour la prochaine fois
+export function appliquerTheme(id) {
+  const theme = THEMES.some(t => t.id === id) ? id : THEME_DEFAUT;
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem(CLE_THEME, theme); } catch {}
+  return theme;
+}
+
+// Thème du scénario enregistré sur le serveur (après le chargement, ou après un import d'univers)
+export async function chargerTheme() {
+  const s = await fetch("/api/scenario").then(r => r.json()).catch(() => null);
+  return s ? appliquerTheme(s.theme) : document.documentElement.dataset.theme;
+}
+
 // Fichiers utiles d'une sélection (zip, ou fichiers .json d'un dossier choisi avec webkitdirectory)
 export const fichiersImportables = (fichiers) => [...fichiers].filter(f => /\.(json|zip)$/i.test(f.name));
 

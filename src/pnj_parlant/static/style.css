@@ -1,8 +1,5 @@
 /* Styles communs : page de jeu (index.html) et page de création (creation.html). */
 :root {
-  --bg: #DCE3DB; --surface: #EEF2EC; --ink: #18241F; --muted: #4D5F57;
-  --glass: #2F5D50; --verdigris: #6FA392; --wax: #9B2D2A; --wax-ink: #FBEFEA;
-  --line: #B9C7BD;
   --display: "IM Fell English", "Iowan Old Style", Georgia, serif;
   --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
   --rayon: 12px;
@@ -13,12 +10,59 @@
   --gouttiere: 1.5rem;
 }
 @media (prefers-color-scheme: dark) {
-  :root { color-scheme: dark;
-    --bg: #121A17; --surface: #1C2723; --ink: #DCE3DB; --muted: #9DB0A6;
-    --glass: #7DB8A6; --verdigris: #4F8A7B; --wax: #C0443F; --wax-ink: #FFF4F0;
-    --line: #2E3D37;
-    --ombre: 0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18); }
+  :root { --ombre: 0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18); }
 }
+
+/* --- Thèmes graphiques ---------------------------------------------------------------
+   Choisis par le scénario (champ « theme » de _scenario.json), posés sur <html data-theme="...">.
+   Chaque thème définit les mêmes couleurs, en clair et en sombre (selon le système) :
+   --bg fond, --surface cartes, --ink texte, --muted texte secondaire, --line traits,
+   --glass couleur principale (boutons, liens), --verdigris couleur d'appoint, --wax sceau « Parler »
+   et --wax-ink son texte. Le sélecteur [data-theme=...] marche sur n'importe quel élément :
+   la page de préparation s'en sert pour les aperçus. Liste des thèmes : THEMES dans js/univers.js. */
+
+/* Vert-de-gris (par défaut) : verre ancien et cire rouge */
+:root, [data-theme=vert-de-gris] {
+  --bg: #DCE3DB; --surface: #EEF2EC; --ink: #18241F; --muted: #4D5F57;
+  --glass: #2F5D50; --verdigris: #6FA392; --wax: #9B2D2A; --wax-ink: #FBEFEA; --line: #B9C7BD; }
+@media (prefers-color-scheme: dark) {
+  :root, [data-theme=vert-de-gris] { color-scheme: dark;
+    --bg: #121A17; --surface: #1C2723; --ink: #DCE3DB; --muted: #9DB0A6;
+    --glass: #7DB8A6; --verdigris: #4F8A7B; --wax: #C0443F; --wax-ink: #FFF4F0; --line: #2E3D37; }
+}
+/* Parchemin : taverne, cuir et laiton */
+[data-theme=parchemin] { color-scheme: light;
+  --bg: #E9DFC9; --surface: #F6EFDF; --ink: #2B2118; --muted: #6B5A48;
+  --glass: #7A4A1E; --verdigris: #B08A4A; --wax: #8E2A22; --wax-ink: #FBEFEA; --line: #D3C2A0; }
+@media (prefers-color-scheme: dark) {
+  [data-theme=parchemin] { color-scheme: dark;
+    --bg: #1C1712; --surface: #27201A; --ink: #EDE3CF; --muted: #B3A38A;
+    --glass: #D9A86A; --verdigris: #A07E44; --wax: #B4483A; --wax-ink: #FFF4EC; --line: #3B3129; }
+}
+/* Sylve : forêt féerique, mousse et baies */
+[data-theme=sylve] { color-scheme: light;
+  --bg: #E1E9D6; --surface: #F2F6EA; --ink: #1D2617; --muted: #56644B;
+  --glass: #3F6B2A; --verdigris: #A88A2E; --wax: #7B3F8C; --wax-ink: #F8EFFA; --line: #C2CFB1; }
+@media (prefers-color-scheme: dark) {
+  [data-theme=sylve] { color-scheme: dark;
+    --bg: #11170E; --surface: #1A2316; --ink: #E3EAD9; --muted: #A2B094;
+    --glass: #9BC77E; --verdigris: #C9A84E; --wax: #93509F; --wax-ink: #FBF2FD; --line: #2C3826; }
+}
+/* Givre : contrées du nord, glace et sang */
+[data-theme=givre] { color-scheme: light;
+  --bg: #DCE4EB; --surface: #EEF3F7; --ink: #16212B; --muted: #4C5D6C;
+  --glass: #2C5878; --verdigris: #7AA6C2; --wax: #9B2D3A; --wax-ink: #FBEEF0; --line: #B6C5D2; }
+@media (prefers-color-scheme: dark) {
+  [data-theme=givre] { color-scheme: dark;
+    --bg: #0F151B; --surface: #18212A; --ink: #DDE5EC; --muted: #98A9B8;
+    --glass: #86B6D6; --verdigris: #4F7F9E; --wax: #B83C50; --wax-ink: #FFF1F3; --line: #2A3744; }
+}
+/* Donjon : pierre et torches ; toujours sombre */
+[data-theme=donjon] { color-scheme: dark;
+  --bg: #131315; --surface: #1D1D21; --ink: #E4E1DA; --muted: #A19C92;
+  --glass: #E0A050; --verdigris: #9C6B2E; --wax: #B23A2E; --wax-ink: #FFF1E8; --line: #34343A;
+  --ombre: 0 1px 2px rgb(0 0 0 / .35), 0 4px 14px rgb(0 0 0 / .25); }
+
 @media (max-width: 40rem) { :root { --gouttiere: 1rem; } }
 * { box-sizing: border-box; }
 /* place de la barre de défilement réservée : rien ne se décale entre une page courte et une page longue */

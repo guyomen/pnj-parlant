@@ -36,8 +36,9 @@ Serveur sans état : l'historique vit dans le navigateur.
   apparence, personnalite, humeur, connaissances, secret, salutation, genre, timbre, debit, lieu). Humeur, trait et
   initiale du nom tirés au sort en Python pour varier les PNJ. Le serveur ajoute `voix` (voix du genre du PNJ +
   réglages, et pitch/rate pour le repli navigateur).
-- `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues) et `notes_mj` (création
-  seulement, jamais envoyées pendant les dialogues).
+- `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues), `notes_mj` (création
+  seulement, jamais envoyées pendant les dialogues) et `theme` (thème graphique des pages, `banque.theme_valide` :
+  id `[a-z0-9-]{1,40}` sinon `""` = défaut ; la liste des thèmes vit côté navigateur).
 - `GET|PUT /api/lieux` (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. Description connue de tous les PNJ
   et lue par le narrateur ; notes du MJ pour la création seulement.
 - `GET /api/scenario/export` : zip à plat (`_scenario.json`, `_lieux.json`, fiches). `POST /api/scenario/import`

@@ -1,7 +1,7 @@
 """
 Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiable à la main.
 
-    pnj/_scenario.json      {"monde": ..., "notes_mj": ...}  (« _ » : jamais pris pour un PNJ)
+    pnj/_scenario.json      {"monde": ..., "notes_mj": ..., "theme": ...}  (« _ » : jamais pris pour un PNJ)
     pnj/_lieux.json         [{"id", "nom", "description", "notes_mj"}, ...]
     pnj/<nom>-<hex>.json    fiche d'un PNJ
 
@@ -16,6 +16,7 @@ import zipfile
 from pathlib import PurePosixPath
 
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
+THEME = re.compile(r"^[a-z0-9-]{1,40}$")   # thème graphique : identifiant défini dans static/style.css
 SCENARIO, LIEUX = "_scenario.json", "_lieux.json"
 IMPORT_MAX_FICHIERS = 500
 IMPORT_MAX_OCTETS = 10_000_000  # contenu décompressé : protège contre les archives piégées
@@ -30,6 +31,12 @@ def slug(texte, defaut="pnj"):
     return re.sub(r"[^a-z0-9]+", "-", sans_accents(texte).lower()).strip("-")[:60] or defaut
 
 
+def theme_valide(theme):
+    """Identifiant de thème graphique, ou "" (thème par défaut) s'il est absent ou mal formé."""
+    theme = str(theme or "").strip().lower()
+    return theme if THEME.match(theme) else ""
+
+
 LIEUX_MAX = 60
 
 
@@ -41,15 +48,18 @@ class Banque:
 
     # --- Scénario ---------------------------------------------------------------
     def scenario(self):
-        """{"monde": connu de tous les PNJ, "notes_mj": réservé à la création des PNJ}."""
+        """{"monde": connu de tous les PNJ, "notes_mj": réservé à la création des PNJ,
+        "theme": thème graphique des pages ("" : thème par défaut)}."""
         try:
             data = json.loads(self.scenario_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
-        return {"monde": data.get("monde", ""), "notes_mj": data.get("notes_mj", "")}
+        return {"monde": data.get("monde", ""), "notes_mj": data.get("notes_mj", ""),
+                "theme": theme_valide(data.get("theme"))}
 
     def enregistrer_scenario(self, data):
         scenario = {k: str(data.get(k, "")).strip()[:20000] for k in ("monde", "notes_mj")}
+        scenario["theme"] = theme_valide(data.get("theme"))
         self.dossier.mkdir(parents=True, exist_ok=True)
         self.scenario_path.write_text(json.dumps(scenario, ensure_ascii=False, indent=2), encoding="utf-8")
         return scenario

@@ -117,8 +117,10 @@ verifier("« Parler » coupe le PNJ et transmet la question", await quand(`(() =
 await quand(`!document.getElementById("ask").disabled`);
 await js(`location.hash = ""`);
 verifier("accueil affiché, conversation à reprendre", await quand(`document.body.dataset.vue === "accueil" && !document.getElementById("accReprendreBtn").hidden && document.querySelector("[data-exemple='pre-novice']")`));
+const fondAvant = await js(`getComputedStyle(document.body).backgroundColor`);  // thème par défaut
 await js(`document.querySelector("[data-exemple='pre-novice']").click()`);
 verifier("exemple Pré-Novice chargé", await quand(`document.getElementById("accStatus").textContent === "Univers chargé : 3 lieux et 5 PNJ." && document.getElementById("universActuel").textContent.includes("3 lieux et 5 PNJ")`));
+verifier("thème de l'univers appliqué et gardé (Parchemin)", await quand(`document.documentElement.dataset.theme === "parchemin" && localStorage.getItem("theme") === "parchemin" && getComputedStyle(document.body).backgroundColor !== ${JSON.stringify(fondAvant)}`));
 await js(`document.getElementById("accHasardBtn").click()`);
 const pnjPreNovice = `["Rosalie Tampon", "Bertrand le Prudent", "Lyse", "Baron Grimmoire", "Oscar"]`;
 verifier("PNJ au hasard : partie lancée", await quand(`document.body.dataset.vue === "jeu" && ${pnjPreNovice}.includes(document.querySelector(".pnj-card h1")?.textContent) && document.querySelectorAll("#log .line").length === 1`));
