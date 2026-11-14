@@ -7,6 +7,7 @@ Réglages :   config.toml du dossier courant (à créer à partir de config.toml
 Routes :
     GET  /api/config                  moteurs utilisés, voix, reconnaissance locale, modèles Ollama
     GET  /api/etat                    carte graphique et Ollama
+    GET  /api/sante                   ce qui ne marche pas alors que le serveur tourne (bandeau des pages)
     GET|PUT /api/reglages             réglages du serveur de la page Options (écrits dans config.toml, à chaud)
     POST /api/reglages/verifier       vérifie le mot de passe du MJ
     POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes, lieu}
@@ -27,6 +28,7 @@ Routes :
 """
 import argparse
 import copy
+import importlib.util
 import io
 import json
 import logging
@@ -67,6 +69,14 @@ def exemples(dossier=EXEMPLES):
 
 # Sous Windows, le registre associe parfois .js à text/plain : le navigateur refuse alors les modules JS.
 mimetypes.add_type("text/javascript", ".js")
+
+
+def paquet_installe(module):
+    """Vrai si le module Python peut être importé (sans l'importer : certains chargent PyTorch)."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 class Contexte:
@@ -133,6 +143,52 @@ class Contexte:
         """Suite du prompt des portraits : le style choisi par le scénario, sinon celui de config.toml."""
         return prompt_du_style(self.banque.scenario()["style_portrait"], self.banque.styles()["portraits"],
                                self.style_defaut)
+
+    def problemes(self):
+        """Ce qui ne marche pas alors que le serveur tourne (dépendance absente, moteur injoignable, clé manquante),
+        pour le bandeau des pages : [{cle, niveau ("erreur" | "avertissement"), message}]. Un avertissement a un
+        repli (voix ou reconnaissance du navigateur) ; une erreur bloque une fonction."""
+        liste = []
+        signaler = lambda cle, niveau, message: liste.append({"cle": cle, "niveau": niveau, "message": message})
+        maj = "mettez l'environnement à jour : uv sync --extra tout"
+        if not paquet_installe("tomlkit"):
+            signaler("tomlkit", "erreur", f"Paquet tomlkit absent : les réglages de la page Options ne peuvent pas "
+                                          f"être enregistrés ({maj}).")
+        if not self.tts.catalogue():
+            module = {"pocket": "pocket_tts", "piper": "piper", "edge": "edge_tts"}.get(self.tts.nom)
+            cause = (f"paquet absent ({maj})" if module and not paquet_installe(module)
+                     else "aucune voix utilisable (voix Piper à télécharger, ou réseau coupé pour Edge)")
+            signaler("voix", "avertissement", f"Synthèse vocale « {self.tts.nom} » : {cause}. "
+                                              "La voix du navigateur la remplace.")
+        if self.reconnaissance.choisie and not self.reconnaissance.disponible():
+            cause = (f"paquet faster-whisper absent ({maj})" if not paquet_installe("faster_whisper")
+                     else f"modèle Whisper absent de {self.reconnaissance.dossier} (voir README)")
+            signaler("reconnaissance", "avertissement", f"Reconnaissance vocale locale : {cause}. Celle du "
+                                                        "navigateur (en ligne) la remplace.")
+        if self.cfg.section("portraits").get("moteur") == "local" and not self.portraits.disponible():
+            signaler("portraits", "erreur", "Portraits locaux : option portraits non installée "
+                                            "(uv sync --extra tout --extra portraits).")
+        choix = set(self.moteurs.choix.values())
+        if "claude" in choix and not (reglages.lire(self.cfg.reglages, "claude.cle_api")
+                                      or os.environ.get("ANTHROPIC_API_KEY")):
+            signaler("claude", "erreur", "Clé API Claude absente : ajoutez-la dans les options (rubrique Claude) ou "
+                                         "dans config.toml, ou choisissez un moteur local.")
+        if "local" in choix:
+            url = self.moteurs.local_cfg.get("url", "http://localhost:11434")
+            if not systeme.etat_ollama(url)["ok"]:
+                signaler("ollama", "erreur", f"Ollama ne répond pas ({url}) : démarrez-le (lancer.bat le fait sous "
+                                             "Windows ; sous Linux : docker compose up -d).")
+            else:
+                modele = self.moteurs.local_cfg.get("modele", "")
+                installes = self.moteurs.modeles_locaux()
+                if modele and installes and self.moteurs.modele_local_installe(installes) not in [m["nom"] for m in installes]:
+                    signaler("ollama-modele", "erreur", f"Modèle « {modele} » absent d'Ollama : téléchargez-le "
+                                                        f"(ollama pull {modele}) ou choisissez-en un autre dans les options.")
+        if "lmstudio" in choix:
+            etat = self.moteurs.etat_lmstudio()
+            if not etat["ok"]:
+                signaler("lmstudio", "erreur", etat["message"])
+        return liste
 
     def styles(self):
         """Pour la page : thèmes de l'univers ({id: thème}) et liste complète des styles de portrait."""
@@ -221,6 +277,11 @@ def create_app(cfg, **moteurs):
             return erreur("Mot de passe du MJ incorrect.", 403)
         return erreur("Ces réglages ne se modifient que depuis le PC du serveur (ou définissez un mot de passe "
                       "du MJ pour les modifier depuis un autre appareil).", 403)
+
+    @app.get("/api/sante")
+    def sante():
+        """Problèmes à afficher dans le bandeau des pages (vide si tout va bien)."""
+        return jsonify({"problemes": ctx.problemes()})
 
     @app.get("/api/reglages")
     def reglages_get():
@@ -547,12 +608,10 @@ def main(argv=None):
     ctx = app.extensions["pnj"]
 
     threading.Thread(target=ctx.tts.prechauffer, daemon=True).start()  # voix prêtes avant la 1re réplique
-    if ctx.reconnaissance.choisie:
-        if ctx.reconnaissance.disponible():
-            threading.Thread(target=ctx.reconnaissance.charger, daemon=True).start()  # prêt avant la 1re question
-        else:
-            print(f"[reconnaissance] modèle Whisper absent de {ctx.reconnaissance.dossier} : la reconnaissance "
-                  "du navigateur sera utilisée. Téléchargez-le avec le réseau (voir README).")
+    if ctx.reconnaissance.disponible():
+        threading.Thread(target=ctx.reconnaissance.charger, daemon=True).start()  # prêt avant la 1re question
+    for p in ctx.problemes():  # les mêmes messages s'affichent dans le bandeau des pages
+        print(f"[{'ERREUR' if p['niveau'] == 'erreur' else 'attention'}] {p['message']}")
     srv = cfg.section("serveur")
     ssl = certificat(cfg) if srv.get("https") else None
     app.run(host=srv.get("hote", "0.0.0.0"), port=srv.get("port", 5000), ssl_context=ssl)

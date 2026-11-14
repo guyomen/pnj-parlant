@@ -224,3 +224,16 @@ export const groupeUtile = (groupe, valeurs) =>
   !groupe.si || [valeurs["moteurs.creation"], valeurs["moteurs.dialogue"]].includes(groupe.si);
 
 export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifié${n > 1 ? "s" : ""}` : "";
+
+// --- Bandeau d'alertes (js/bandeau.js) -----------------------------------------------------------
+// Ajoute une alerte {cle, niveau, message} (même clé : remplacée) ; la plus récente en dernier, `max` au plus
+export const ajouterAlerte = (alertes, alerte, max = 5) =>
+  [...alertes.filter(a => a.cle !== alerte.cle), alerte].slice(-max);
+
+// Problèmes du diagnostic (/api/sante) : remplacent ceux d'avant (clés « sante:… »), en tête ; ceux que le
+// joueur a fermés (« clé|message ») restent cachés tant que leur message ne change pas
+export function alertesSante(alertes, problemes, fermees = []) {
+  const sante = problemes.map(p => ({ cle: `sante:${p.cle}`, niveau: p.niveau, message: p.message }))
+    .filter(a => !fermees.includes(`${a.cle}|${a.message}`));
+  return [...sante, ...alertes.filter(a => !a.cle.startsWith("sante:"))];
+}

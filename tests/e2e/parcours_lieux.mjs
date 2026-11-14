@@ -42,6 +42,10 @@ await cdp("Page.navigate", { url: "http://127.0.0.1:5917/#jeu" });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await js(simulations);  // après le chargement : le script d'initialisation de page ne prend pas en Edge sans écran
 verifier("menu des lieux rempli (aucun + 2 lieux)", await quand(`document.querySelectorAll("#lieuSel option").length === 3`));
+// Bandeau : le diagnostic du serveur signale les voix Piper absentes (avertissement) ; une alerte fermée disparaît
+verifier("bandeau : voix Piper absentes signalées", await quand(`[...document.querySelectorAll("#bandeau .alerte.avertissement")].some(a => a.textContent.includes("« piper »"))`));
+await js(`document.querySelector('#bandeau [data-fermer="sante:voix"]').click()`);
+verifier("bandeau : alerte fermée", await quand(`document.getElementById("bandeau").hidden && JSON.parse(sessionStorage.getItem("alertes-fermees")).length === 1`));
 
 await js(`(() => { const s = document.getElementById("lieuSel"); s.value = "auberge-du-sanglier"; s.dispatchEvent(new Event("change")); })()`);
 verifier("narration de l'arrivée à l'auberge", await quand(`document.querySelector(".narration-line")?.textContent.includes("Vous arrivez : Auberge du Sanglier. Une salle enfumée.")`));

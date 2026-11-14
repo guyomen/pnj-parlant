@@ -46,6 +46,8 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 
 **Nouvelle table**, à côté du résumé de l'univers, repart de zéro : le texte de l'univers, son thème, les lieux, les PNJ de la banque et la conversation en cours sont supprimés (après confirmation ; exportez d'abord l'univers pour le garder).
 
+**Bandeau d'alertes** : sous la barre du haut, sur toutes les pages, un bandeau signale ce qui ne marche pas alors que le serveur tourne, avec la marche à suivre : paquet absent (tomlkit, moteur de voix, faster-whisper, option portraits), voix ou modèle Whisper manquants, Ollama ou LM Studio arrêtés, modèle local absent, clé API Claude manquante. Il affiche aussi les erreurs en cours de route : serveur injoignable, moteur indisponible pendant une réplique ou une création, micro refusé, synthèse vocale du serveur en échec (la voix du navigateur prend le relais). Les mêmes problèmes s'affichent dans la console au démarrage. Chaque message se ferme d'un clic (×) ; un problème fermé ne revient pas avant la fermeture de l'onglet, sauf si son message change.
+
 La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
 
 Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
@@ -262,7 +264,7 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js
+  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows

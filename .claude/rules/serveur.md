@@ -20,6 +20,7 @@ paths:
   - "tests/test_banque.py"
   - "tests/test_portraits.py"
   - "tests/test_reglages.py"
+  - "tests/test_sante.py"
 ---
 
 # Serveur Flask, routes et dialogue
@@ -41,6 +42,12 @@ Serveur sans état : l'historique vit dans le navigateur.
   `modele_local`, `intervention`, `contexte_max`.
 - `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
 - `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir « Réglages à chaud » ci-dessous.
+- `GET /api/sante` → `{problemes: [{cle, niveau, message}]}` (`Contexte.problemes`, aussi affiché dans la console au
+  démarrage) : tomlkit absent (erreur), voix sans catalogue (avertissement : paquet absent ou aucune voix), reconnaissance
+  locale choisie mais indisponible (avertissement : faster-whisper ou modèle absent), portraits locaux sans l'option
+  (erreur), clé Claude absente (config ni ANTHROPIC_API_KEY ; erreur), Ollama injoignable ou modèle non installé,
+  LM Studio injoignable (erreurs). Paquets testés par `paquet_installe` (find_spec, sans importer). Un nouveau cas
+  « dépendance absente mais le serveur démarre » va ici, avec un conseil (commande à lancer).
 - `POST /api/npc/generate {role, nom, genre, consignes, lieu}` : fiche JSON imposée par un schéma (nom, metier,
   apparence, personnalite, humeur, connaissances, secret, salutation, genre, timbre, debit, lieu). Humeur, trait et
   initiale du nom tirés au sort en Python pour varier les PNJ. Le serveur ajoute `voix` (voix du genre du PNJ +

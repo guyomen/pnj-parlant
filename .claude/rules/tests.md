@@ -16,6 +16,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance`, `FauxPortraits` (`PNG`, `erreur`, `actif`) ;
   fixtures `cfg` (config dans tmp_path), `moteurs`, `tts`, `portraits`, `app` (`create_app` avec les faux),
   `client`, `ctx`.
+- `test_sante.py` : `Contexte.problemes` / `/api/sante`, avec `serveur.paquet_installe` et
+  `serveur.systeme.etat_ollama` remplacés (aucun réseau). Tests JS : `ajouterAlerte`, `alertesSante`.
 - `test_reglages.py` : catalogue (défauts dans les bornes), `valider`, `ecrire` (commentaires gardés), routes
   `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
   distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé). `test_moteurs.py` couvre LM Studio
@@ -37,7 +39,7 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     Edge sans écran.
   - Avant d'agir, attendre que le contrôle soit réactivé (`quand(...)`) : une action pendant une narration ou une
     réplique est ignorée (`busy`).
-  - Le parcours commence sur `/#jeu`, puis passe par l'accueil (exemple Pré-Novice et son thème Parchemin, PNJ au
+  - Le parcours commence sur `/#jeu` (bandeau : voix Piper absentes signalées, puis fermées), puis passe par l'accueil (exemple Pré-Novice et son thème Parchemin, PNJ au
     hasard), un rechargement (conversation reprise), les options (onglet actif, barre du haut immobile, sous-options
     grisées, réglage du serveur enregistré dans le config.toml temporaire), la page de
     préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence) et finit

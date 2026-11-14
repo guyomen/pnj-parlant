@@ -22,6 +22,16 @@ paths:
   (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche),
   `apparenceModifiee()` (éditeur ouvert et modifié) ; recalculé après
   chaque `input`/`change`/`click` et après chaque chargement ou enregistrement.
+- Bandeau d'alertes (`js/bandeau.js`, élément `#bandeau` juste sous la barre du haut des deux pages, styles dans
+  style.css) : `signaler(message, {cle, niveau: "erreur" | "avertissement"})` (même clé : remplacée, 5 au plus),
+  `retirer(cle)`, `requete(url, opts)` (fetch qui signale « serveur injoignable » et retire l'alerte dès qu'une
+  requête aboutit ; AbortError ignorée), `verifierSante()` (/api/sante : alertes `sante:<cle>` remplacées à chaque
+  appel ; fermées = « clé|message » en sessionStorage `alertes-fermees`). Logique pure dans scene.js
+  (`ajouterAlerte`, `alertesSante`, testées). index.html : `api`/`apiStream` passent par `requete` ; `alerte(message,
+  niveau, cle)` pour les erreurs des actions (création, banque, réplique, transcription, import, micro, `tts` en
+  échec) ; `status()` reste pour les messages d'information. Diagnostic au chargement, toutes les minutes, à
+  l'ouverture des options et après un changement de réglages. creation.html : `api` via `requete`, et les erreurs
+  5xx vont aussi au bandeau (en plus du message près de l'action) ; diagnostic au chargement.
 - Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :

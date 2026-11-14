@@ -180,6 +180,7 @@
     </nav>
   </div>
 </header>
+<div class="bandeau" id="bandeau" role="alert" aria-live="assertive" hidden></div>
 <main class="page">
   <div class="titre-page">
     <h1>Préparer l’univers</h1>
@@ -399,6 +400,7 @@
 
 <script type="module">
 import { adressePortrait, esc, parLieu } from "./js/scene.js";
+import { requete, signaler, verifierSante } from "./js/bandeau.js";
 import { COULEURS, THEMES, THEME_DEFAUT, alertesContraste, appliquerTheme, confirmationImport, exporter, identifiant,
          importerFichiers, poserThemesPerso, resumeImport, tousLesThemes } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
@@ -407,12 +409,18 @@ const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "lieu", "
 let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
 let dirty = false;    // modifications non enregistrées
 
+// Serveur injoignable (requete) ou en panne (5xx : moteur indisponible, portrait impossible…) : signalé dans le
+// bandeau sous la barre du haut, en plus du message près de l'action
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
   const opts = { method, headers: { "Content-Type": "application/json" } };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
+  const r = await requete(path, opts);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
+  if (!r.ok) {
+    const message = data.error || `Erreur serveur (${r.status})`;
+    if (r.status >= 500) signaler(message);
+    throw new Error(message);
+  }
   return data;
 }
 
@@ -1054,6 +1062,7 @@ api("/api/config").then(c => {
   renderBank();
 }).catch(() => {});
 chargerStyles().then(loadScenario);
+verifierSante();
 loadLieux().then(refreshBank);
 </script>
 </body>

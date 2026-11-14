@@ -257,3 +257,18 @@ test("options : valeur d'un champ, groupes utiles, résumé", () => {
   assert.equal(scene.resumeModifs(1), "1 réglage modifié");
   assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
 });
+
+test("bandeau : ajout sans doublon, limite, problèmes du serveur", () => {
+  let a = scene.ajouterAlerte([], { cle: "serveur", niveau: "erreur", message: "Injoignable" });
+  a = scene.ajouterAlerte(a, { cle: "tts", niveau: "avertissement", message: "Voix" });
+  a = scene.ajouterAlerte(a, { cle: "serveur", niveau: "erreur", message: "Toujours injoignable" });
+  assert.deepEqual(a.map(x => x.message), ["Voix", "Toujours injoignable"]);  // même clé : remplacée, en dernier
+  assert.equal(scene.ajouterAlerte(a, { cle: "c", message: "3" }, 2).length, 2);
+  const sante = scene.alertesSante(a, [{ cle: "ollama", niveau: "erreur", message: "Ollama arrêté" },
+                                      { cle: "voix", niveau: "avertissement", message: "Pas de voix" }],
+                                   ["sante:voix|Pas de voix"]);
+  assert.deepEqual(sante.map(x => x.cle), ["sante:ollama", "tts", "serveur"]);  // « voix » fermée par le joueur
+  assert.deepEqual(scene.alertesSante(sante, []).map(x => x.cle), ["tts", "serveur"]);  // problème réglé : retiré
+  assert.deepEqual(scene.alertesSante([], [{ cle: "voix", niveau: "avertissement", message: "Autre" }],
+                                      ["sante:voix|Pas de voix"]).length, 1);  // message changé : revient
+});

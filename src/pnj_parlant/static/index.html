@@ -198,6 +198,7 @@
     </nav>
   </div>
 </header>
+<div class="bandeau" id="bandeau" role="alert" aria-live="assertive" hidden></div>
 <section id="accueil" class="page" aria-labelledby="accueilTitre">
   <div class="titre-page">
     <h1 id="accueilTitre">Bienvenue à la table</h1>
@@ -383,6 +384,7 @@
 import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs } from "./js/scene.js";
+import { requete, signaler, verifierSante } from "./js/bandeau.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, importerFichiers,
          resumeImport, resumeUnivers } from "./js/univers.js";
 
@@ -436,10 +438,13 @@ function reinitialiserUsage() {
   afficherUsage();
 }
 
+// Erreur à montrer dans le bandeau sous la barre du haut (js/bandeau.js) ; même clé : remplace la précédente
+const alerte = (message, niveau = "erreur", cle = message) => signaler(message, { cle, niveau });
+
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
   const opts = { method, headers: { "Content-Type": "application/json" } };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
+  const r = await requete(path, opts);  // serveur injoignable : signalé dans le bandeau
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
   return data;
@@ -447,8 +452,8 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
 
 // Lit une réponse NDJSON (un objet JSON par ligne) au fur et à mesure qu'elle arrive
 async function apiStream(path, body, onItem, signal) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(body), signal });
+  const r = await requete(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(body), signal });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
     throw new Error(data.error || `Erreur serveur (${r.status})`);
@@ -666,7 +671,7 @@ async function veiller(p) {
   } catch (e) {
     fermerVeille(v);
     if (veille === v) veille = null;
-    if (e.name === "NotAllowedError") status("Micro refusé : impossible de couper le PNJ en parlant.");
+    if (e.name === "NotAllowedError") alerte("Micro refusé : impossible de couper le PNJ en parlant.", "avertissement", "micro");
   }
 }
 
@@ -709,7 +714,11 @@ function prepareSegment(text, narrateur, p, onStart, n) {
                           body: JSON.stringify({ text, voice: n?.voix ?? {}, narrateur,
                                                  eviter: npcs.map(x => x.voix).filter(Boolean) }),
                           signal: p.ctrl.signal })
-        .then(r => r.ok ? r.blob() : null).catch(() => null)
+        .then(r => {
+          if (r.ok) return r.blob();
+          alerte("La synthèse vocale du serveur a échoué : la voix du navigateur prend le relais.", "avertissement", "tts");
+          return null;
+        }).catch(() => null)
     : Promise.resolve(null);
   return async () => {
     const blob = await audioFile;
@@ -843,7 +852,7 @@ async function aborder(i) {
     const n = rencontres.find(r => r.nom === c.nom) ?? await api(`/api/bank/${encodeURIComponent(c.id)}`);
     if (!$("optMulti").checked) { npcs = []; history = []; }
     await joinScene(n);
-  } catch (e) { status(e.message); }
+  } catch (e) { alerte(e.message); }
   setBusy(false);
   if (npcs.length) $("ask").focus();
 }
@@ -869,7 +878,7 @@ async function chargerLieux() {
 async function generate() {
   setBusy(true); status("Le PNJ prend forme…");
   try { await startScene(await api("/api/npc/generate", { role: $("role").value, lieu: lieuActuel })); }
-  catch (e) { status(e.message); }
+  catch (e) { alerte(e.message); }
   setBusy(false);
   if (npcs.length) $("ask").focus();
 }
@@ -883,7 +892,7 @@ async function faireEntrer() {
   try {
     await joinScene(await api("/api/npc/generate", { consignes, lieu: lieuActuel }));  // un habitué du lieu
     $("entree").value = "";
-  } catch (e) { status(e.message); }
+  } catch (e) { alerte(e.message); }
   setBusy(false);
 }
 
@@ -901,7 +910,7 @@ async function loadFromBank(ajout, id = $("bankSel").value) {
   try {
     const n = await api(`/api/bank/${encodeURIComponent(id)}`);
     await (ajout ? joinScene(n) : startScene(n));
-  } catch (e) { status(e.message); }
+  } catch (e) { alerte(e.message); }
   setBusy(false);
   if (npcs.length) $("ask").focus();
 }
@@ -915,7 +924,7 @@ async function saveToBank() {
     }
     await refreshBank(npcs[0].id);
     status(`${noms.join(" et ")} ${noms.length > 1 ? "sont enregistrés" : "est enregistré"} dans la banque.`);
-  } catch (e) { status(e.message); }
+  } catch (e) { alerte(e.message); }
 }
 
 // --- Export de la conversation -----------------------------------------------
@@ -940,7 +949,7 @@ function exportConversation() {
 async function importerConversation(fichier) {
   if (busy) return;
   let lu;
-  try { lu = lireExport(await fichier.text()); } catch (e) { status(e.message); return; }
+  try { lu = lireExport(await fichier.text()); } catch (e) { alerte(e.message); return; }
   if (history.length > 1 && !confirm("Remplacer la conversation en cours par celle du fichier ?")) return;
   stopNpc();
   setBusy(true);
@@ -983,7 +992,7 @@ async function importerConversation(fichier) {
     status(!npcs.length ? "Conversation importée. Personne n’est resté avec vous : abordez quelqu’un ou jouez un PNJ."
       : lu.lieu && !lieu ? `Conversation importée. Le lieu « ${lu.lieu} » n’existe plus dans le scénario.`
       : "Conversation importée : vous pouvez la reprendre.");
-  } catch (e) { status(e.message); }
+  } catch (e) { alerte(e.message); }
   setBusy(false);
   if (npcs.length) $("ask").focus();
 }
@@ -1083,7 +1092,7 @@ async function tourDe(n, p, voice) {
       voice = voice.then(prepareSpeech(item.phrase, p, show, n));
     }, p.ctrl.signal);
   } catch (e) {
-    if (!p.ctrl.signal.aborted) { erreur = e; status(e.message); }
+    if (!p.ctrl.signal.aborted) { erreur = e; alerte(e.message); status(""); }
   }
   if (reply) {
     entry.content = reply;
@@ -1118,7 +1127,7 @@ async function listenLocal(ouvert = null) {
   if (!stream) try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
-    status("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).");
+    alerte("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).", "erreur", "micro");
     return;
   }
   let rec, ctx, analyser;
@@ -1135,7 +1144,7 @@ async function listenLocal(ouvert = null) {
     ctx.createMediaStreamSource(stream).connect(analyser);
   } catch (e) {
     stream.getTracks().forEach(t => t.stop());
-    status(`Micro inutilisable : ${e.message}`);
+    alerte(`Micro inutilisable : ${e.message}`, "erreur", "micro");
     return;
   }
   const samples = new Float32Array(analyser.fftSize);
@@ -1180,7 +1189,7 @@ async function listenLocal(ouvert = null) {
       if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
       text = data.text;
       status(text ? "" : "Je n’ai pas compris. Recommencez ou tapez votre question.");
-    } catch (e) { status(e.message); }
+    } catch (e) { alerte(e.message); }
     setBusy(false);
     if (text) send(text);
   };
@@ -1203,9 +1212,10 @@ if (SR) {
     $("ask").value = finalText || interim;
   };
   recognition.onerror = (ev) => {
-    status(ev.error === "not-allowed"
+    if (ev.error === "no-speech" || ev.error === "aborted") status("Je n’ai rien entendu.");  // pas une panne
+    else alerte(ev.error === "not-allowed"
       ? "Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS)."
-      : `Reconnaissance vocale : ${ev.error}`);
+      : `Reconnaissance vocale du navigateur : ${ev.error} (réseau coupé ?).`, "erreur", "micro");
   };
   recognition.onend = async () => {
     micPressed(false);
@@ -1307,7 +1317,7 @@ function afficherVue() {
   $("optionsRetour").href = versJeu ? "#jeu" : "#";
   $("optionsRetour").textContent = versJeu ? "← Retour à la partie" : "← Retour à l’accueil";
   // au tour suivant : au premier affichage, le code des options (plus bas) n'est pas encore exécuté
-  if (vue === "options") queueMicrotask(() => { if (!Object.keys(modifsReglages).length) chargerReglages(); refreshSys(); });
+  if (vue === "options") queueMicrotask(() => { if (!Object.keys(modifsReglages).length) chargerReglages(); refreshSys(); verifierSante(); });
   if (vue === "accueil") majAccueil();
   window.scrollTo(0, 0);
 }
@@ -1420,6 +1430,8 @@ async function chargerConfig(premiere = false) {
   else if (premiere && !c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
 }
 chargerConfig(true);
+verifierSante();
+setInterval(() => { if (!document.hidden) verifierSante(); }, 60000);
 
 // --- Options : rubriques ---------------------------------------------------------------------------
 // Un bouton par rubrique (carte de la colonne de droite) : il y fait défiler la page
@@ -1591,6 +1603,7 @@ $("reglagesEnregistrer").onclick = async () => {
       + (d.redemarrage.length ? ` Au prochain démarrage du serveur : ${d.redemarrage.join(", ")}.` : ""));
     chargerConfig();
     refreshSys();
+    verifierSante();
   } catch (err) {
     messageOptions(err.message, true);
     if (!mdpMJ()) afficherAcces();

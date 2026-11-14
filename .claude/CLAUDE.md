@@ -31,7 +31,7 @@ src/pnj_parlant/
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
   static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes),
-                     # js/scene.js (testé) + js/univers.js (univers, thèmes)
+                     # js/scene.js (testé) + js/univers.js (univers, thèmes) + js/bandeau.js (alertes)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
