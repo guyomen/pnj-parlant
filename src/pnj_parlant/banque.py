@@ -3,6 +3,7 @@ Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiab
 
     pnj/_scenario.json      {"monde", "notes_mj", "theme", "style_portrait"}  (« _ » : jamais pris pour un PNJ)
     pnj/_lieux.json         [{"id", "nom", "description", "notes_mj"}, ...]
+    pnj/_styles.json        thèmes et styles de portrait créés ou modifiés pour l'univers (voir valider_styles)
     pnj/<nom>-<hex>.json    fiche d'un PNJ
     pnj/<nom>-<hex>.png     son portrait, facultatif (.png, .jpg ou .webp)
 
@@ -20,7 +21,11 @@ from .portraits import style_valide, type_image
 
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
 THEME = re.compile(r"^[a-z0-9-]{1,40}$")   # thème graphique : identifiant défini dans static/style.css
-SCENARIO, LIEUX = "_scenario.json", "_lieux.json"
+SCENARIO, LIEUX, STYLES_UNIVERS = "_scenario.json", "_lieux.json", "_styles.json"
+COULEURS = ("bg", "surface", "ink", "muted", "line", "glass", "verdigris", "wax", "wax-ink")  # voir style.css
+COULEUR = re.compile(r"^#[0-9a-fA-F]{6}$")
+MODES = ("auto", "sombre", "clair")  # auto : palettes claire et sombre selon l'appareil
+STYLES_MAX = 30                       # thèmes, et styles de portrait, par univers
 IMPORT_MAX_FICHIERS = 500
 IMPORT_MAX_OCTETS = 60_000_000  # contenu décompressé (portraits compris) : protège contre les archives piégées
 IMAGES = ("png", "jpg", "webp")  # portraits des PNJ
@@ -33,6 +38,46 @@ def sans_accents(texte):
 def slug(texte, defaut="pnj"):
     """« Forge de Brom » → « forge-de-brom »."""
     return re.sub(r"[^a-z0-9]+", "-", sans_accents(texte).lower()).strip("-")[:60] or defaut
+
+
+def _texte(valeur, longueur):
+    return " ".join(str(valeur or "").split())[:longueur]
+
+
+def valider_styles(data):
+    """Thèmes et styles de portrait de l'univers, vérifiés ; lève ValueError (message pour l'utilisateur).
+        {"themes": {id: {nom, resume, mode, clair: {couleur: "#rrggbb"}, sombre: {...}}},
+         "portraits": {id: {nom, resume, prompt}}}
+    Un identifiant prédéfini (thème de style.css, style de portraits.STYLES) le remplace pour cet univers.
+    mode « auto » : deux palettes ; « sombre » ou « clair » : la seule palette de ce nom."""
+    if not isinstance(data, dict):
+        raise ValueError("Styles illisibles.")
+    themes, portraits = {}, {}
+    for tid, t in (data.get("themes") or {}).items():
+        if not THEME.match(str(tid)) or not isinstance(t, dict):
+            raise ValueError(f"Identifiant de thème invalide : {tid}.")
+        nom, mode = _texte(t.get("nom"), 60), t.get("mode", "auto")
+        if not nom:
+            raise ValueError("Chaque thème a besoin d'un nom.")
+        if mode not in MODES:
+            raise ValueError(f"Thème « {nom} » : mode inconnu.")
+        theme = {"nom": nom, "resume": _texte(t.get("resume"), 120), "mode": mode}
+        for palette in ("clair", "sombre") if mode == "auto" else (mode,):
+            couleurs = t.get(palette)
+            if not isinstance(couleurs, dict) or not all(COULEUR.match(str(couleurs.get(c, ""))) for c in COULEURS):
+                raise ValueError(f"Thème « {nom} » : couleurs incomplètes ou invalides.")
+            theme[palette] = {c: couleurs[c].lower() for c in COULEURS}
+        themes[tid] = theme
+    for sid, st in (data.get("portraits") or {}).items():
+        if not THEME.match(str(sid)) or not isinstance(st, dict):
+            raise ValueError(f"Identifiant de style invalide : {sid}.")
+        nom, prompt = _texte(st.get("nom"), 60), _texte(st.get("prompt"), 600)
+        if not nom or not prompt:
+            raise ValueError("Chaque style de portrait a besoin d'un nom et d'une description.")
+        portraits[sid] = {"nom": nom, "resume": _texte(st.get("resume"), 160), "prompt": prompt}
+    if len(themes) > STYLES_MAX or len(portraits) > STYLES_MAX:
+        raise ValueError(f"Au plus {STYLES_MAX} thèmes et {STYLES_MAX} styles de portrait par univers.")
+    return {"themes": themes, "portraits": portraits}
 
 
 def theme_valide(theme):
@@ -60,12 +105,13 @@ class Banque:
         except (OSError, ValueError):
             data = {}
         return {"monde": data.get("monde", ""), "notes_mj": data.get("notes_mj", ""),
-                "theme": theme_valide(data.get("theme")), "style_portrait": style_valide(data.get("style_portrait"))}
+                "theme": theme_valide(data.get("theme")),
+                "style_portrait": style_valide(data.get("style_portrait"), self.styles()["portraits"])}
 
     def enregistrer_scenario(self, data):
         scenario = {k: str(data.get(k, "")).strip()[:20000] for k in ("monde", "notes_mj")}
         scenario["theme"] = theme_valide(data.get("theme"))
-        scenario["style_portrait"] = style_valide(data.get("style_portrait"))
+        scenario["style_portrait"] = style_valide(data.get("style_portrait"), self.styles()["portraits"])
         self.dossier.mkdir(parents=True, exist_ok=True)
         self.scenario_path.write_text(json.dumps(scenario, ensure_ascii=False, indent=2), encoding="utf-8")
         return scenario
@@ -105,6 +151,21 @@ class Banque:
         self.dossier.mkdir(parents=True, exist_ok=True)
         self.lieux_path.write_text(json.dumps(lieux, ensure_ascii=False, indent=2), encoding="utf-8")
         return lieux
+
+    # --- Thèmes et styles de portrait de l'univers -------------------------------------
+    def styles(self):
+        """Thèmes et styles créés ou modifiés pour l'univers (voir valider_styles) ; vides si absents ou abîmés."""
+        try:
+            return valider_styles(json.loads((self.dossier / STYLES_UNIVERS).read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return {"themes": {}, "portraits": {}}
+
+    def enregistrer_styles(self, data):
+        """Remplace les thèmes et styles de l'univers ; lève ValueError s'ils sont invalides."""
+        styles = valider_styles(data)
+        self.dossier.mkdir(parents=True, exist_ok=True)
+        (self.dossier / STYLES_UNIVERS).write_text(json.dumps(styles, ensure_ascii=False, indent=2), encoding="utf-8")
+        return styles
 
     # --- PNJ --------------------------------------------------------------------
     def chemin(self, npc_id):
@@ -189,22 +250,23 @@ class Banque:
         return chemin is not None
 
     def vider(self):
-        """Nouvelle table : supprime tous les PNJ, vide le scénario (thème compris) et les lieux.
-        Renvoie le nombre de PNJ supprimés."""
+        """Nouvelle table : supprime tous les PNJ, vide le scénario (thème compris), les lieux, les thèmes et
+        styles de l'univers. Renvoie le nombre de PNJ supprimés."""
         pnjs = self.liste()
         for item in pnjs:
             self.supprimer(item["id"])
+        self.enregistrer_styles({})
         self.enregistrer_scenario({})
         self.enregistrer_lieux([])
         return len(pnjs)
 
     # --- Export et import d'un scénario complet ------------------------------------
     def exporter_zip(self):
-        """Archive zip à plat : _scenario.json, _lieux.json, une fiche JSON par PNJ et son portrait."""
+        """Archive zip à plat : _scenario.json, _lieux.json, _styles.json, une fiche JSON par PNJ et son portrait."""
         tampon = io.BytesIO()
         with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
             for f in sorted(self.dossier.iterdir()) if self.dossier.exists() else []:
-                if f.name in (SCENARIO, LIEUX) or (NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
+                if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
                     archive.write(f, f.name)
         return tampon.getvalue()
 
@@ -214,8 +276,9 @@ class Banque:
         sinon les PNJ importés s'ajoutent (même identifiant : remplacé) et seuls le scénario et les lieux fournis
         remplacent les actuels. Tout est vérifié avant d'écrire quoi que ce soit.
         Les portraits (<id du PNJ>.png, .jpg, .webp) suivent leur fiche ; un portrait sans fiche est ignoré.
+        Les thèmes et styles de l'univers (_styles.json) suivent la même règle que le scénario.
         Renvoie {"scenario": bool, "lieux": nombre, "pnj": nombre, "ignores": [noms]}."""
-        scenario, lieux, pnjs, ignores = None, None, {}, []
+        scenario, lieux, styles, pnjs, ignores = None, None, None, {}, []
         images, ids = {}, {}  # portraits : nom du fichier sans extension → (octets, ext) ; nom de fiche → id
         for nom, octets in fichiers.items():
             stem, _, ext = nom.rpartition(".")
@@ -235,6 +298,11 @@ class Banque:
                 scenario = data
             elif nom == LIEUX and isinstance(data, list):
                 lieux = data
+            elif nom == STYLES_UNIVERS:
+                try:
+                    styles = valider_styles(data)
+                except ValueError:
+                    ignores.append(nom)
             elif not stem.startswith("_") and isinstance(data, dict) and str(data.get("nom") or "").strip():
                 # fichier renommé à la main : il reçoit un identifiant valide, tiré du nom du PNJ
                 npc_id = stem if NPC_ID.match(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
@@ -248,6 +316,8 @@ class Banque:
         if remplacer:
             for item in self.liste():
                 self.supprimer(item["id"])
+        if styles is not None or remplacer:  # avant le scénario : son style de portrait peut en venir
+            self.enregistrer_styles(styles or {})
         if scenario is not None or remplacer:
             self.enregistrer_scenario(scenario or {})
         nb_lieux = len(self.enregistrer_lieux(lieux or [])) if lieux is not None or remplacer else len(self.lieux())

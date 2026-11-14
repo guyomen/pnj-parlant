@@ -139,4 +139,14 @@ button:disabled { opacity: .5; cursor: wait; }
 :focus-visible { outline: 3px solid var(--verdigris); outline-offset: 2px; }
 a.link { color: var(--glass); font-weight: 500; text-decoration: none; }
 a.link:hover { text-decoration: underline; }
+
+/* Interrupteur : case à cocher avec role="switch" et la classe interrupteur (page Options) */
+input.interrupteur { appearance: none; width: 2.6rem; height: 1.5rem; margin: 0; flex: none; position: relative;
+                     border-radius: 999px; background: var(--line); cursor: pointer; transition: background-color .15s; }
+input.interrupteur::after { content: ""; position: absolute; top: .2rem; left: .2rem; width: 1.1rem; height: 1.1rem;
+                            border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .3);
+                            transition: transform .15s; }
+input.interrupteur:checked { background: var(--glass); }
+input.interrupteur:checked::after { transform: translateX(1.1rem); }
+input.interrupteur:disabled { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

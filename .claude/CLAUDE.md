@@ -23,13 +23,14 @@ src/pnj_parlant/
   fiches.py          # création des fiches (prompt, schéma JSON, tirages au sort)
   dialogue.py        # consignes du PNJ, scène vue par chaque PNJ, séquences d'arrêt
   texte.py           # nettoyage pour la voix, nombres en lettres, découpage en phrases
-  moteurs.py         # LLM : Claude (API Anthropic) ou modèle local (Ollama)
+  moteurs.py         # LLM : Claude (API Anthropic), Ollama ou LM Studio (API compatible OpenAI)
+  reglages.py        # réglages de la page Options : catalogue, validation, écriture de config.toml (tomlkit)
   voix.py, stt.py    # synthèse (Pocket TTS, Piper, Edge) ; reconnaissance (faster-whisper)
   portraits.py       # portraits des PNJ (facultatif) : SD-Turbo local (diffusers) ou Pollinations en ligne
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ), style.css (thèmes),
+  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes),
                      # js/scene.js (testé) + js/univers.js (univers, thèmes)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
@@ -38,14 +39,17 @@ lancer.bat, docker-compose.yml  # lancement Windows, Ollama dans Docker
 scripts/ecran.sh     # libère la VRAM sous Linux (écran graphique coupé)
 docs/                # installation-windows.md : guide pas à pas Windows
 ```
-Moteurs choisis dans `config.toml` : `[moteurs] creation` / `dialogue` = `"claude"` ou `"local"` (Ollama) ;
+Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` / `dialogue` = `"claude"`, `"local"`
+(Ollama) ou `"lmstudio"` ;
 `[voix] moteur` = `pocket`, `piper` ou `edge` ; `[reconnaissance] moteur` = `local` ou `navigateur` ;
 `[portraits] moteur` = `aucun` (défaut), `local` ou `en_ligne`.
 
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
-- `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage.
-- `web.md` : vues (accueil, partie, options), barre du haut, thèmes graphiques, conversation gardée, dialogue,
+- `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage,
+  réglages à chaud (`/api/reglages`, mot de passe du MJ).
+- `web.md` : vues (accueil, partie, options : réglages du navigateur et du serveur), barre du haut, thèmes graphiques et onglet Apparence (thèmes et
+  styles de portrait éditables par univers), conversation gardée, dialogue,
   lieux, univers, micro.
 - `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance.
 - `serveur.md` couvre aussi les portraits (portraits.py, stockage, routes) ; `web.md` leur affichage.
@@ -64,7 +68,9 @@ pytest && node --test tests/js/      # tests, sans réseau ni modèle ; e2e : py
 ## Conventions
 - Ajouter un test à chaque changement de logique ; une fonction JS testable va dans `static/js/scene.js`.
 - Tout nouveau réglage : `config.toml.example` (commenté) et README.md.
-- Garder README.md, docs/installation-windows.md et ces règles à jour quand le comportement change.
+- Garder README.md, docs/installation-windows.md et ces règles à jour quand le comportement change : un hook
+  (`.claude/hooks/doc_a_jour.py`, événement Stop) le rappelle si du code a changé sans la documentation.
+- Nouveau réglage utile en partie : l'ajouter aussi au `CATALOGUE` de reglages.py (page Options).
 - Fichiers en CRLF dans la copie de travail (Windows) : les modifier avec Edit, ou en gardant les fins de ligne.
 - Interface : barre du haut et styles communs dans `style.css` ; couleurs seulement par variables (thèmes).
 

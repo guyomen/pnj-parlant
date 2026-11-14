@@ -193,3 +193,67 @@ test("univers : fichiers importables, résumés et confirmation", () => {
   assert.match(univers.confirmationImport(4, false), /4 PNJ de la banque seront remplacés/);
   assert.match(univers.confirmationImport(4, true), /s’ajouteront/);
 });
+
+// --- univers.js : thèmes graphiques -------------------------------------------------------
+test("thèmes : palettes identiques à style.css, toutes lisibles", () => {
+  const css = readFileSync(new URL("../../src/pnj_parlant/static/style.css", import.meta.url), "utf8");
+  const zone = css.slice(css.indexOf("/* Vert-de-gris"), css.indexOf("@media (max-width: 40rem)"));
+  for (const t of univers.THEMES) {
+    const sel = t.id === univers.THEME_DEFAUT ? ":root, [data-theme=vert-de-gris]" : `[data-theme=${t.id}]`;
+    const blocs = zone.split(sel).slice(1).map(b => b.slice(b.indexOf("{") + 1, b.indexOf("}")));
+    const palettes = blocs.map(b => Object.fromEntries([...b.matchAll(/--([\w-]+):\s*(#[0-9A-Fa-f]{6})/g)]
+      .map(([, c, v]) => [c, v.toLowerCase()])));
+    const attendues = t.mode === "auto" ? [t.clair, t.sombre] : [t[t.mode]];
+    assert.deepEqual(palettes, attendues, t.id);
+    for (const p of attendues) assert.deepEqual(univers.alertesContraste(p), [], t.id);
+  }
+});
+
+test("thèmes : prédéfinis, modifiés et créés pour l'univers", () => {
+  const forge = { nom: "Forge", resume: "", mode: "sombre", sombre: univers.THEMES[4].sombre };
+  const tous = univers.tousLesThemes({ forge, parchemin: { ...univers.THEMES[1], nom: "Vieux parchemin" } });
+  assert.deepEqual(tous.map(t => `${t.id}:${t.origine}`), ["vert-de-gris:predefini", "parchemin:modifie",
+    "sylve:predefini", "givre:predefini", "donjon:predefini", "forge:perso"]);
+  assert.equal(tous[1].nom, "Vieux parchemin");
+  assert.equal(univers.tousLesThemes().length, 5);
+});
+
+test("thèmes : CSS des thèmes de l'univers", () => {
+  const p = univers.THEMES[0];
+  const css = univers.cssThemes({ forge: { mode: "auto", clair: p.clair, sombre: p.sombre },
+                                  nuit: { mode: "sombre", sombre: p.sombre }, "../x": { mode: "sombre", sombre: p.sombre } });
+  const lignes = css.split("\n");
+  assert.equal(lignes.length, 3);  // forge : clair + sombre ; nuit : une palette ; « ../x » ignoré
+  assert.match(lignes[0], /^html\[data-theme="forge"\], body \[data-theme="forge"\] \{ color-scheme: light; --bg: #dce3db;/);
+  assert.match(lignes[1], /^@media \(prefers-color-scheme: dark\) \{ html\[data-theme="forge"\].* --bg: #121a17;/);
+  assert.match(lignes[2], /data-theme="nuit"\] \{ color-scheme: dark; --bg: #121a17;.*--wax-ink: #fff4f0; --ombre:/);
+  assert.equal(univers.cssThemes({}), "");
+});
+
+test("thèmes : contraste, alertes, identifiants", () => {
+  assert.equal(Math.round(univers.contraste("#000000", "#ffffff")), 21);
+  assert.equal(univers.contraste("#777777", "#777777"), 1);
+  const illisible = { ...univers.THEMES[0].clair, ink: "#cfd6ce" };
+  assert.deepEqual(univers.alertesContraste(illisible).map(a => a.quoi), ["Texte sur le fond"]);
+  assert.equal(univers.identifiant("Forge noire !", []), "forge-noire");
+  assert.equal(univers.identifiant("Parchemin", ["parchemin", "parchemin-2"]), "parchemin-3");
+  assert.equal(univers.identifiant("Été brûlant", []), "ete-brulant");
+  assert.equal(univers.identifiant("???", []), "perso");
+});
+
+test("options : valeur d'un champ, groupes utiles, résumé", () => {
+  assert.equal(scene.valeurReglage("booleen", { checked: true }), true);
+  assert.equal(scene.valeurReglage("entier", { value: " 12 " }), 12);
+  assert.equal(scene.valeurReglage("nombre", { value: "0,5" }), 0.5);
+  assert.equal(scene.valeurReglage("nombre", { value: "" }), null);
+  assert.equal(scene.valeurReglage("entier", { value: "douze" }), null);
+  assert.equal(scene.valeurReglage("texte", { value: "  qwen3:8b " }), "qwen3:8b");
+  const valeurs = { "moteurs.creation": "claude", "moteurs.dialogue": "lmstudio" };
+  assert.equal(scene.groupeUtile({ id: "voix" }, valeurs), true);
+  assert.equal(scene.groupeUtile({ si: "claude" }, valeurs), true);
+  assert.equal(scene.groupeUtile({ si: "lmstudio" }, valeurs), true);
+  assert.equal(scene.groupeUtile({ si: "local" }, valeurs), false);
+  assert.equal(scene.resumeModifs(0), "");
+  assert.equal(scene.resumeModifs(1), "1 réglage modifié");
+  assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
+});

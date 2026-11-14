@@ -19,6 +19,8 @@ paths:
 # Installation, lancement, configuration, machine
 
 ## Paquet et dépendances
+- Dépendance `tomlkit` (obligatoire, pure Python) : la page Options réécrit config.toml en gardant ses commentaires ;
+  importée seulement à l'écriture, pour qu'un ancien `.venv` démarre quand même (message « uv sync »).
 - `pyproject.toml` : options `voix`, `stt`, `tout`, `portraits` (diffusers… : volontairement hors de `tout`, et non
   vérifiée par dependances.py : facultative), `dev` ; commandes `pnj-parlant` et `pnj-banque`.
   `uv.lock` fige les versions, `.python-version` = 3.13 (`requires-python >= 3.11` pour tomllib) : les deux sont
@@ -28,10 +30,11 @@ paths:
   peut pas démarrer. Il n'installe jamais rien.
 
 ## Configuration (config.py)
+- `Config(reglages, racine, fichier)` : `fichier` = config.toml (réécrit par la page Options, voir la règle serveur).
 - `config.toml` du dossier courant, sinon `PNJ_CONFIG` ou `--config` ; `pnj/`, `voices/`, `modeles-stt/`,
   `certs/` sont relatifs au dossier de config.toml. config.toml (clé API) n'est pas versionné.
-- Tout nouveau réglage se reporte, commenté, dans `config.toml.example`, et dans README.md si l'utilisateur doit
-  le connaître.
+- Tout nouveau réglage se reporte, commenté, dans `config.toml.example`, dans README.md si l'utilisateur doit
+  le connaître, et dans le `CATALOGUE` de reglages.py s'il est utile de le changer en partie.
 - `python -m pnj_parlant.config` : code 0 si un moteur « local » attend Ollama sur ce PC, 1 sinon, 2 si
   config.toml est absent (utilisé par lancer.bat).
 - `[serveur] https = true` : certificat auto-signé dans `certs/` (micro depuis un autre appareil).

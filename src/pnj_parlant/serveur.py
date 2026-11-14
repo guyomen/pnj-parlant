@@ -7,11 +7,13 @@ Réglages :   config.toml du dossier courant (à créer à partir de config.toml
 Routes :
     GET  /api/config                  moteurs utilisés, voix, reconnaissance locale, modèles Ollama
     GET  /api/etat                    carte graphique et Ollama
-    POST /api/model                   change de modèle local (jusqu'au redémarrage)
+    GET|PUT /api/reglages             réglages du serveur de la page Options (écrits dans config.toml, à chaud)
+    POST /api/reglages/verifier       vérifie le mot de passe du MJ
     POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes, lieu}
     POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu} (NDJSON, phrase par phrase)
     GET|PUT /api/lieux                lieux du scénario
     GET|PUT /api/scenario             univers et notes du MJ
+    GET|PUT /api/styles               thèmes et styles de portrait créés ou modifiés pour l'univers
     GET  /api/scenario/export         scénario complet (scénario, lieux, PNJ) en zip
     DELETE /api/univers               nouvelle table : supprime scénario, lieux et PNJ
     POST /api/scenario/import         copie un scénario dans la banque (zip ou fichiers JSON d'un dossier)
@@ -24,6 +26,7 @@ Routes :
     POST /api/stt                     reconnaissance vocale (audio webm/opus + indice)
 """
 import argparse
+import copy
 import io
 import json
 import logging
@@ -38,10 +41,10 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_file
 
 from . import config as configuration
-from . import dialogue, fiches, systeme, texte, voix
+from . import dialogue, fiches, reglages, systeme, texte, voix
 from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier
 from .moteurs import MoteurIndisponible, Moteurs
-from .portraits import STYLE, STYLES, PortraitIndisponible, prompt_portrait, styles
+from .portraits import STYLE, PortraitIndisponible, prompt_du_style, prompt_portrait, styles
 from .portraits import charger as charger_portraits
 from .stt import Reconnaissance
 
@@ -71,21 +74,70 @@ class Contexte:
 
     def __init__(self, cfg, moteurs=None, tts=None, reconnaissance=None, portraits=None):
         self.cfg = cfg
-        self.moteurs = moteurs or Moteurs(cfg.reglages)  # Claude ou modèle local, d'après [moteurs]
+        # moteurs fournis (tests) : jamais remplacés quand les réglages changent
+        self.injectes = {"moteurs": moteurs, "tts": tts, "reconnaissance": reconnaissance, "portraits": portraits}
+        self.moteurs = moteurs or Moteurs(cfg.reglages)  # Claude, Ollama ou LM Studio, d'après [moteurs]
         self.tts = tts or voix.charger(cfg.reglages, cfg.racine)  # Piper, Pocket TTS ou Edge, d'après [voix]
         self.tts_charges = {self.tts.nom: self.tts}  # on ne recharge pas Pocket TTS à chaque bascule
         self.reconnaissance = reconnaissance or Reconnaissance(cfg.section("reconnaissance"), cfg.racine)
         self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
-        self.style_defaut = cfg.section("portraits").get("style", STYLE)  # si le scénario n'a pas choisi de style
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
+        self.parametres()
+
+    def parametres(self):
+        """Réglages simples lus à chaque usage (dialogue, style des portraits par défaut)."""
+        cfg = self.cfg
+        self.style_defaut = cfg.section("portraits").get("style", STYLE)  # si le scénario n'a pas choisi de style
         self.historique = cfg.section("dialogue").get("historique", 12)  # messages gardés pour le contexte
         self.intervention = cfg.section("dialogue").get("intervention", 0.3)
         self.phrases_max = max(1, int(cfg.section("dialogue").get("phrases_max", dialogue.PHRASES_MAX)))
 
+    def appliquer_reglages(self, changements):
+        """Applique des réglages déjà vérifiés (reglages.valider) : écrits dans config.toml, puis pris en compte sans
+        redémarrer. Ce qui peut échouer (moteur de voix inutilisable…) est essayé avant d'écrire : en cas d'erreur
+        (ValueError), rien ne change. Renvoie les libellés des réglages qui attendent un redémarrage."""
+        avant, nouveaux = self.cfg.reglages, copy.deepcopy(self.cfg.reglages)
+        for cle, valeur in changements.items():
+            reglages.poser(nouveaux, cle, valeur)
+        change = lambda *prefixes: any(c.startswith(prefixes) and reglages.lire(avant, c) != v
+                                        for c, v in changements.items())
+        tts = None
+        nom_tts = reglages.lire(nouveaux, "voix.moteur")
+        if change("voix.") and not self.injectes["tts"] and nom_tts != self.tts.nom:
+            tts = self.tts_charges.get(nom_tts) or voix.charger(nouveaux, self.cfg.racine, nom_tts)
+            if not tts.catalogue():
+                raise ValueError(f"Le moteur de voix « {nom_tts} » n'est pas utilisable ici (paquet ou voix manquants).")
+        moteurs = None
+        if change("moteurs.", "claude.", "local.", "lmstudio.") and not self.injectes["moteurs"]:
+            moteurs = Moteurs(nouveaux)
+        if self.cfg.fichier:
+            reglages.ecrire(self.cfg.fichier, changements)
+        self.cfg.reglages = nouveaux
+        if moteurs:
+            self.moteurs = moteurs
+        if tts:
+            if tts.nom not in self.tts_charges:
+                self.tts_charges[tts.nom] = tts
+                threading.Thread(target=tts.prechauffer, daemon=True).start()
+            self.tts = tts
+        if change("reconnaissance.") and not self.injectes["reconnaissance"]:
+            self.reconnaissance = Reconnaissance(self.cfg.section("reconnaissance"), self.cfg.racine)
+            if self.reconnaissance.disponible():
+                threading.Thread(target=self.reconnaissance.charger, daemon=True).start()
+        if change("portraits.") and not self.injectes["portraits"]:
+            self.portraits = charger_portraits(self.cfg.section("portraits"))
+        self.parametres()
+        return reglages.a_redemarrer(changements, avant)
+
     def style_portrait(self):
         """Suite du prompt des portraits : le style choisi par le scénario, sinon celui de config.toml."""
-        choix = self.banque.scenario()["style_portrait"]
-        return STYLES[choix][2] if choix else self.style_defaut
+        return prompt_du_style(self.banque.scenario()["style_portrait"], self.banque.styles()["portraits"],
+                               self.style_defaut)
+
+    def styles(self):
+        """Pour la page : thèmes de l'univers ({id: thème}) et liste complète des styles de portrait."""
+        perso = self.banque.styles()
+        return {"themes": perso["themes"], "portraits": styles(perso["portraits"])}
 
     def changer_tts(self, nom):
         """Change de moteur de synthèse pour tout le serveur. Lève ValueError s'il est inutilisable."""
@@ -138,25 +190,63 @@ def create_app(cfg, **moteurs):
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
                         "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes),
                         "contexte_max": m.contexte_max(),
-                        "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None,
-                        "styles_portrait": styles()})
+                        "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None})
 
     @app.get("/api/etat")
     def etat():
-        """État de la machine pour la page de jeu : Ollama (si un moteur local est choisi) et GPU."""
-        ollama = None
+        """État de la machine pour la page Options : GPU, et Ollama ou LM Studio s'ils servent."""
+        ollama = lmstudio = None
         if "local" in ctx.moteurs.choix.values():
             ollama = systeme.etat_ollama(ctx.moteurs.local_cfg.get("url", "http://localhost:11434"))
-        return jsonify({"gpu": systeme.etat_gpu(), "ollama": ollama})
+        if "lmstudio" in ctx.moteurs.choix.values():
+            lmstudio = ctx.moteurs.etat_lmstudio()
+        return jsonify({"gpu": systeme.etat_gpu(), "ollama": ollama, "lmstudio": lmstudio})
 
-    @app.post("/api/model")
-    def choisir_modele():
-        """Change le modèle local pour tout le serveur, sans toucher à config.toml."""
+    # --- Réglages du serveur (page Options) ---------------------------------------
+    def depuis_le_serveur():
+        return request.remote_addr in ("127.0.0.1", "::1")
+
+    def reglages_pour_la_page():
+        suggestions = {}
+        if "local" in ctx.moteurs.choix.values():  # modèles installés dans Ollama (seulement s'il sert)
+            suggestions["local.modele"] = [m["nom"] for m in ctx.moteurs.modeles_locaux()]
+        return {"groupes": reglages.pour_la_page(ctx.cfg.reglages, suggestions),
+                "protege": bool(reglages.lire(ctx.cfg.reglages, "serveur.mot_de_passe_mj")),
+                "local": depuis_le_serveur(), "fichier": ctx.cfg.fichier.name if ctx.cfg.fichier else None}
+
+    def refus():
+        """Réponse 403, après une pause qui freine les essais de mot de passe."""
+        time.sleep(1)
+        if reglages.lire(ctx.cfg.reglages, "serveur.mot_de_passe_mj"):
+            return erreur("Mot de passe du MJ incorrect.", 403)
+        return erreur("Ces réglages ne se modifient que depuis le PC du serveur (ou définissez un mot de passe "
+                      "du MJ pour les modifier depuis un autre appareil).", 403)
+
+    @app.get("/api/reglages")
+    def reglages_get():
+        """Réglages du serveur pour la page Options (secrets masqués) et droits de cet appareil."""
+        return jsonify(reglages_pour_la_page())
+
+    @app.post("/api/reglages/verifier")
+    def reglages_verifier():
+        mdp = (request.get_json(silent=True) or {}).get("mot_de_passe")
+        if not reglages.autorise(ctx.cfg.reglages, mdp, depuis_le_serveur()):
+            return refus()
+        return jsonify({"ok": True})
+
+    @app.put("/api/reglages")
+    def reglages_put():
+        """{changements: {clé: valeur}} ; mot de passe du MJ dans l'en-tête X-Mot-De-Passe-MJ. Écrit config.toml et
+        applique aussitôt ; renvoie les réglages et `redemarrage` (libellés qui attendent un redémarrage)."""
+        if not reglages.autorise(ctx.cfg.reglages, request.headers.get("X-Mot-De-Passe-MJ"), depuis_le_serveur()):
+            return refus()
         try:
-            ctx.moteurs.choisir_modele_local((request.json or {}).get("modele", ""))
-        except MoteurIndisponible as e:
+            redemarrage = ctx.appliquer_reglages(reglages.valider((request.get_json(silent=True) or {}).get("changements")))
+        except ValueError as e:
             return erreur(str(e), 400)
-        return jsonify({"modele_local": ctx.moteurs.local_cfg["modele"]})
+        except OSError as e:
+            return erreur(f"config.toml n'a pas pu être écrit : {e}", 500)
+        return jsonify({**reglages_pour_la_page(), "redemarrage": redemarrage})
 
     # --- Création ---------------------------------------------------------------
     @app.post("/api/npc/generate")
@@ -178,6 +268,19 @@ def create_app(cfg, **moteurs):
     @app.put("/api/scenario")
     def scenario_put():
         return jsonify(ctx.banque.enregistrer_scenario(request.json or {}))
+
+    @app.get("/api/styles")
+    def styles_get():
+        return jsonify(ctx.styles())
+
+    @app.put("/api/styles")
+    def styles_put():
+        """Remplace les thèmes et styles de l'univers : {themes: {id: ...}, portraits: {id: ...}}."""
+        try:
+            ctx.banque.enregistrer_styles(request.get_json(silent=True))
+        except ValueError as e:
+            return erreur(str(e), 400)
+        return jsonify(ctx.styles())
 
     @app.get("/api/scenario/export")
     def scenario_export():

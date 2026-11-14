@@ -126,3 +126,5 @@ dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, m
 hote = "0.0.0.0"
 port = 5000
 https = false              # true : HTTPS auto-signé, nécessaire pour le micro depuis une autre machine
+mot_de_passe_mj = ""       # protège les réglages modifiables dans la page Options ; vide = depuis ce PC seulement
+# La page Options réécrit ce fichier (commentaires et mise en forme gardés) quand on y change un réglage.

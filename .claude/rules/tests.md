@@ -16,6 +16,13 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance`, `FauxPortraits` (`PNG`, `erreur`, `actif`) ;
   fixtures `cfg` (config dans tmp_path), `moteurs`, `tts`, `portraits`, `app` (`create_app` avec les faux),
   `client`, `ctx`.
+- `test_reglages.py` : catalogue (défauts dans les bornes), `valider`, `ecrire` (commentaires gardés), routes
+  `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
+  distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé). `test_moteurs.py` couvre LM Studio
+  (`urlopen` simulé, `etat_lmstudio`).
+- `test_styles.py` : `valider_styles` (refus, injection CSS impossible), `prompt_du_style`, stockage, export/import,
+  « Nouvelle table », routes `/api/styles`. Tests JS : palettes de `THEMES` = style.css et lisibles, `cssThemes`,
+  `tousLesThemes`, `contraste`, `identifiant`.
 - `test_portraits.py` : description (modèle de langage ou repli), moteurs (Pollinations simulé par `urlopen`),
   stockage, export/import, routes. Aucun test ne charge diffusers ni ne contacte Pollinations.
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
@@ -31,8 +38,10 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   - Avant d'agir, attendre que le contrôle soit réactivé (`quand(...)`) : une action pendant une narration ou une
     réplique est ignorée (`busy`).
   - Le parcours commence sur `/#jeu`, puis passe par l'accueil (exemple Pré-Novice et son thème Parchemin, PNJ au
-    hasard), un rechargement (conversation reprise), les options (onglet actif, barre du haut immobile), la page de
-    préparation (onglets, « Créer un PNJ ici », point de modification) et finit par « Nouvelle table » (destructive :
+    hasard), un rechargement (conversation reprise), les options (onglet actif, barre du haut immobile, sous-options
+    grisées, réglage du serveur enregistré dans le config.toml temporaire), la page de
+    préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence) et finit
+    par « Nouvelle table » (destructive :
     toujours en dernier). `window.confirm` est remplacé par `() => true` avant les clics qui demandent confirmation.
   - Le serveur sur le réseau local (ex. 192.168.1.21:5000) peut être celui de l'utilisateur : ne pas le relancer ;
     pour essayer une page à la main, lancer une copie de `tests/e2e/donnees/` sur un autre port.

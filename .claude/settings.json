@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc_a_jour.py\"",
+            "timeout": 20,
+            "statusMessage": "Vérification de la documentation…"
+          }
+        ]
+      }
+    ]
+  }
+}

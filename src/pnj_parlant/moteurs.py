@@ -64,12 +64,6 @@ class Moteurs:
         nom = self.local_cfg.get("modele", "")
         return next((x["nom"] for x in installes if x["nom"] in (nom, f"{nom}:latest")), nom)
 
-    def choisir_modele_local(self, nom):
-        """Change de modèle local jusqu'au redémarrage du serveur (config.toml n'est pas modifié)."""
-        if nom not in [x["nom"] for x in self.modeles_locaux()]:
-            raise MoteurIndisponible(f"Modèle local « {nom} » absent d'Ollama.")
-        self.local_cfg["modele"] = nom
-
     # --- Points d'entrée ------------------------------------------------------
     def fiche(self, system, demande, schema):
         """Texte JSON de la fiche d'un PNJ, conforme à `schema`."""
@@ -247,6 +241,13 @@ class Moteurs:
             if on_usage and usage and None not in usage.values():
                 on_usage(usage)
         return morceaux()
+
+    def etat_lmstudio(self):
+        """Pour la page Options : {"ok": True, "modele": id} ou {"ok": False, "message": raison}."""
+        try:
+            return {"ok": True, "modele": self._lmstudio_modele().get("id", "")}
+        except MoteurIndisponible as e:
+            return {"ok": False, "message": str(e)}
 
     def _lmstudio_modele(self):
         """Modèle chargé dans LM Studio (fiche de /api/v0/models), celui de config.toml s'il est renseigné."""

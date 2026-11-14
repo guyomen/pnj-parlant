@@ -4,8 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PNJ parlants</title>
-<!-- thème du scénario gardé par le navigateur : posé avant l'affichage (puis relu depuis le serveur) -->
-<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") || ""; } catch {}</script>
+<!-- thème du scénario (et CSS des thèmes de l'univers) gardés par le navigateur : posés avant l'affichage,
+     puis relus depuis le serveur (js/univers.js, chargerTheme) -->
+<script>try {
+  document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  const css = localStorage.getItem("theme-css");
+  if (css) document.head.appendChild(Object.assign(document.createElement("style"), { id: "themes-perso", textContent: css }));
+} catch {}</script>
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
@@ -33,8 +38,6 @@
      autorise aussitôt le son du PNJ */
   body:not([data-vue=jeu]) main, body:not([data-vue=accueil]) #accueil,
   body:not([data-vue=options]) #options { display: none; }
-  #modelRow { align-items: center; }
-  #modelRow[hidden] { display: none; }
   .univers-ligne { display: flex; align-items: center; gap: .4rem 1rem; flex-wrap: wrap; margin-top: .9rem; }
   .univers-actuel { margin: 0; font-style: italic; color: var(--glass); }
   .univers-ligne button.petit { padding: .25rem .7rem; font-size: .9rem; }
@@ -106,18 +109,69 @@
   .pnj-card.second .portrait { float: right; width: 4.5rem; margin: 0 0 .5rem .75rem; }
   .pnj-card.second::after { content: ""; display: block; clear: both; }
 
-  /* Options */
-  .options label { display: block; margin-bottom: .4rem; cursor: pointer; }
-  .options .sub { margin-left: 1.6rem; }
-  .options .sub[hidden] { display: none; }
-  .options .hint { color: var(--muted); font-size: .9rem; }
   .actions { display: flex; flex-direction: column; gap: .4rem; }
   .actions button[hidden] { display: none; }
+
+  /* Options : rubriques à gauche (en haut sur téléphone), réglages en lignes « libellé + aide | contrôle » */
+  .titre-options { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .titre-options .link { padding: .45rem .9rem; border: 1px solid var(--glass); border-radius: 8px; }
+  .options-mise { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
+  .options-nav { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; }
+  .options-nav button { background: transparent; border: 0; color: var(--muted); text-align: left; white-space: nowrap;
+                        padding: .45rem .75rem; border-radius: 8px; }
+  .options-nav button:hover { filter: none; color: var(--glass); background: color-mix(in srgb, var(--glass) 10%, transparent); }
+  .options-nav button.actif { color: var(--ink); background: color-mix(in srgb, var(--glass) 18%, transparent); }
+  .options-nav .sep { font: 500 .75rem var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+                      padding: .45rem .75rem; white-space: nowrap; align-self: center; }
+  @media (min-width: 60rem) {
+    .options-mise { grid-template-columns: 13rem minmax(0, 1fr); align-items: start; }
+    .options-nav { flex-direction: column; position: sticky; top: calc(var(--barre-h) + 1.5rem); }
+    .options-nav .sep { padding-top: 1rem; align-self: auto; }
+  }
+  .options-contenu { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+  .options-contenu > section { scroll-margin-top: calc(var(--barre-h) + 1rem); }
+  .tete-groupe { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .tete-groupe h2 { margin: 0; }
+  .etiquette { font: 500 .75rem/1.4 var(--body); color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
+               padding: .05rem .55rem; white-space: nowrap; }
+  .aide-groupe { color: var(--muted); font-size: .92rem; margin: .35rem 0 .2rem; }
+  .groupe.inutile { opacity: .62; }
+  .groupe.inutile:hover, .groupe.inutile:focus-within { opacity: 1; }
+  .reglage { display: flex; align-items: center; gap: .6rem 1.25rem; padding: .8rem 0; }
+  .reglage + .reglage { border-top: 1px solid var(--line); }
+  .reglage .texte { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; gap: .15rem; cursor: pointer; }
+  .reglage .texte strong { font-weight: 500; }
+  .reglage .texte small { color: var(--muted); font-size: .88rem; line-height: 1.35; }
+  .reglage .controle { flex: 0 1 17rem; display: flex; gap: .4rem; align-items: center; justify-content: flex-end; min-width: 0; }
+  .reglage .controle select, .reglage .controle input:not([type=checkbox]) { flex: 1 1 auto; min-width: 0; width: 100%; }
+  .reglage .controle input[type=number] { max-width: 8rem; }
+  .reglage.bool .controle { flex: none; }  /* un interrupteur : pas de place réservée */
+  .reglage.modifie .texte strong::after { content: " •"; color: var(--wax); }
+  .sous-reglages { margin-left: .4rem; padding-left: 1rem; border-left: 2px solid var(--line); transition: opacity .15s; }
+  .sous-reglages.inactif { opacity: .45; }
+  @media (max-width: 40rem) {
+    .reglage:not(.bool) { flex-direction: column; align-items: stretch; }
+    .reglage:not(.bool) .texte { flex: none; }  /* en colonne, la base de 14rem deviendrait une hauteur */
+    .reglage:not(.bool) .controle { flex-basis: auto; justify-content: flex-start; }
+  }
+  .acces { display: flex; align-items: center; gap: .6rem 1rem; flex-wrap: wrap; margin-top: .4rem; }
+  .acces p { flex: 1 1 18rem; margin: 0; }
+  .acces form { display: flex; gap: .5rem; flex: 1 1 18rem; }
+  .acces .petit, .reglage .petit { padding: .3rem .7rem; font-size: .9rem; }
+  .barre-reglages { position: sticky; bottom: 1rem; z-index: 5; display: flex; align-items: center; gap: .6rem 1rem;
+                    flex-wrap: wrap; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--glass);
+                    border-radius: var(--rayon); box-shadow: var(--ombre); }
+  .barre-reglages[hidden] { display: none; }
+  .barre-reglages .nb { flex: 1; font-weight: 500; }
+  .message-options { min-height: 1.4rem; margin: .6rem 0 0; color: var(--glass); font-weight: 500; }
+  .message-options.erreur { color: var(--wax); }
   /* État de la machine */
-  .sys { margin-top: 1rem; font-size: .85rem; color: var(--muted); display: grid; gap: .35rem; }
-  .sys .bar { height: .4rem; background: var(--line); border-radius: .2rem; overflow: hidden; }
+  .sys { font-size: .92rem; display: grid; gap: .45rem; margin-top: .4rem; }
+  .sys .ligne { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .sys .ligne > span:first-child { color: var(--muted); min-width: 9rem; }
+  .sys .bar { height: .45rem; background: var(--line); border-radius: .25rem; overflow: hidden; }
   .sys .bar i { display: block; height: 100%; background: var(--glass); width: 0; transition: width .4s; }
-  .sys .alert { color: var(--wax); font-weight: 700; }
+  .sys .alert { color: var(--wax); font-weight: 500; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
@@ -261,43 +315,74 @@
 </main>
 
 <section id="options" class="page" aria-labelledby="optionsTitre">
-  <div class="titre-page">
-    <h1 id="optionsTitre">Options</h1>
-    <p class="accroche">Réglages de la parole et de la scène, gardés dans ce navigateur ; état de la machine.</p>
+  <div class="titre-page titre-options">
+    <div>
+      <h1 id="optionsTitre">Options</h1>
+      <p class="accroche">Vos réglages de partie, ceux du serveur et l’état de la machine.</p>
+    </div>
+    <a class="link" id="optionsRetour" href="#jeu">← Retour à la partie</a>
   </div>
-  <div class="cartes">
-    <article class="carte options">
-      <h2>Parole</h2>
-      <label><input type="checkbox" id="optInterrompre"> « Parler » interrompt le PNJ
-        <span class="hint">: vous lui coupez la parole (barre d’espace aussi)</span></label>
-      <label><input type="checkbox" id="optCoupure"> Couper le PNJ dès que vous parlez
-        <span class="hint">: micro ouvert pendant qu’il parle ; casque conseillé, sinon sa propre voix peut le couper</span></label>
-    </article>
-    <article class="carte options">
-      <h2>Scène</h2>
-      <label><input type="checkbox" id="optMulti"> Plusieurs PNJ dans la scène</label>
-      <div class="sub" id="multiOpts">
-        <label><input type="checkbox" id="optIntervention"> Interventions spontanées
-          <span class="hint">: un autre PNJ réagit parfois de lui-même</span></label>
-        <label><input type="checkbox" id="optEntree"> Faire entrer un PNJ inventé d’après la conversation</label>
+  <div class="options-mise">
+    <nav class="options-nav" id="optionsNav" aria-label="Rubriques des options"></nav>
+    <div class="options-contenu">
+      <!-- Réglages de ce navigateur (chaque joueur a les siens) -->
+      <section class="carte groupe" id="opt-partie" data-titre="Cette partie">
+        <div class="tete-groupe"><h2>Cette partie</h2><span class="etiquette">ce navigateur</span></div>
+        <p class="aide-groupe">Gardés dans ce navigateur : chaque joueur règle les siens, sur son appareil.</p>
+        <div class="reglage bool">
+          <label class="texte" for="optInterrompre"><strong>« Parler » interrompt le PNJ</strong>
+            <small>Vous lui coupez la parole avec le bouton ou la barre d’espace.</small></label>
+          <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optInterrompre"></div>
+        </div>
+        <div class="reglage bool">
+          <label class="texte" for="optCoupure"><strong>Couper le PNJ dès que vous parlez</strong>
+            <small>Micro ouvert pendant qu’il parle. Casque conseillé : sinon sa propre voix peut le couper.</small></label>
+          <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optCoupure"></div>
+        </div>
+        <div class="reglage bool">
+          <label class="texte" for="optMulti"><strong>Plusieurs PNJ dans la scène</strong>
+            <small>Jusqu’à trois, qui se répondent entre eux.</small></label>
+          <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optMulti"></div>
+        </div>
+        <div class="sous-reglages" id="multiOpts">
+          <div class="reglage bool">
+            <label class="texte" for="optIntervention"><strong>Interventions spontanées</strong>
+              <small>Un autre PNJ réagit parfois de lui-même.</small></label>
+            <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optIntervention"></div>
+          </div>
+          <div class="reglage bool">
+            <label class="texte" for="optEntree"><strong>Faire entrer un PNJ inventé</strong>
+              <small>D’après la conversation, quand vous le demandez.</small></label>
+            <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optEntree"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Réglages du serveur (config.toml), protégés par le mot de passe du MJ -->
+      <section class="carte" id="opt-serveur" data-titre="Accès">
+        <div class="tete-groupe"><h2>Réglages du serveur</h2><span class="etiquette" id="fichierConfig">config.toml</span></div>
+        <div class="acces" id="acces"><p>Chargement…</p></div>
+        <p class="message-options" id="reglagesMessage" role="status"></p>
+      </section>
+      <div class="options-contenu" id="reglagesServeur"></div>
+      <div class="barre-reglages" id="barreReglages" hidden>
+        <span class="nb" id="reglagesNb"></span>
+        <button class="ghost" id="reglagesAnnuler">Annuler</button>
+        <button id="reglagesEnregistrer">Enregistrer</button>
       </div>
-    </article>
-    <article class="carte">
-      <h2>Machine</h2>
-      <div class="row" id="modelRow" hidden>
-        <label for="modelSel">Modèle local</label>
-        <select id="modelSel"></select>
-      </div>
-      <div class="sys" id="sys" aria-live="polite"></div>
-    </article>
+
+      <section class="carte" id="opt-machine" data-titre="Machine">
+        <div class="tete-groupe"><h2>Machine</h2></div>
+        <div class="sys" id="sys" aria-live="polite"></div>
+      </section>
+    </div>
   </div>
-  <p><a class="link" id="optionsRetour" href="#jeu">← Retour</a></p>
 </section>
 
 <script type="module">
 import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
-         consignesRecreation, detecteurVoix } from "./js/scene.js";
+         consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs } from "./js/scene.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, importerFichiers,
          resumeImport, resumeUnivers } from "./js/univers.js";
 
@@ -506,7 +591,8 @@ function setBusy(b) {
   $("addBtn").hidden = !multi;
   $("addBtn").disabled = b || !scene || npcs.length >= MAX_PNJ || !$("bankSel").value
                          || npcs.some(n => n.id === $("bankSel").value);
-  $("multiOpts").hidden = !multi;
+  $("multiOpts").classList.toggle("inactif", !multi);  // sous-options de « Plusieurs PNJ » : grisées sans elle
+  for (const c of $("multiOpts").querySelectorAll("input")) c.disabled = !multi;
   $("entreeRow").hidden = !opt("optEntree") || !scene;  // faire entrer quelqu'un : seulement dans une scène
   $("entreeBtn").disabled = b || !scene || npcs.length >= MAX_PNJ;
   $("discuterBtn").hidden = !multi || npcs.length < 2;
@@ -1220,6 +1306,8 @@ function afficherVue() {
   const versJeu = vuePrecedente === "jeu";
   $("optionsRetour").href = versJeu ? "#jeu" : "#";
   $("optionsRetour").textContent = versJeu ? "← Retour à la partie" : "← Retour à l’accueil";
+  // au tour suivant : au premier affichage, le code des options (plus bas) n'est pas encore exécuté
+  if (vue === "options") queueMicrotask(() => { if (!Object.keys(modifsReglages).length) chargerReglages(); refreshSys(); });
   if (vue === "accueil") majAccueil();
   window.scrollTo(0, 0);
 }
@@ -1307,12 +1395,6 @@ for (const id of ["accZip", "accDossier"]) {
 afficherVue();
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
-$("modelSel").onchange = async () => {
-  const r = await fetch("/api/model", {method: "POST", headers: {"Content-Type": "application/json"},
-                                       body: JSON.stringify({modele: $("modelSel").value})});
-  const d = await r.json();
-  status(r.ok ? `Modèle : ${d.modele_local} (le premier échange le charge, il peut être lent).` : d.error);
-};
 $("sendBtn").onclick = () => send($("ask").value);
 $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
 document.querySelectorAll("[data-length]").forEach((button) => {
@@ -1324,40 +1406,231 @@ document.querySelectorAll("[data-length]").forEach((button) => {
   };
 });
 
-fetch("/api/config").then(r => r.json()).then(c => {
+// Configuration du serveur pour la partie (moteurs, voix, reconnaissance…) : au chargement, et après un
+// changement de réglages dans les options
+async function chargerConfig(premiere = false) {
+  const c = await api("/api/config").catch(() => null);
+  if (!c) return;
   cfg = c;
   contextLimit = c.contexte_max;
   afficherUsage();
-  if (c.modeles_locaux.length) {
-    $("modelSel").innerHTML = c.modeles_locaux.map(m =>
-      `<option value="${esc(m.nom)}">${esc(m.nom)} (${(m.taille / 1e9).toFixed(1)} Go)</option>`).join("");
-    $("modelSel").value = c.modele_local;
-    $("modelRow").hidden = false;
-  }
   setBusy(busy);
-  if (!c.stt_local && !recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
-  else if (!c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
+  if (document.body.dataset.vue === "options") refreshSys();  // la carte Machine reprend la configuration
+  if (premiere && !c.stt_local && !recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
+  else if (premiere && !c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
+}
+chargerConfig(true);
+
+// --- Options : rubriques ---------------------------------------------------------------------------
+// Un bouton par rubrique (carte de la colonne de droite) : il y fait défiler la page
+function construireNav() {
+  const cartes = [...document.querySelectorAll(".options-contenu > section[id]")];
+  const intercalaires = { "opt-partie": "Ce navigateur", "opt-serveur": "Le serveur", "opt-machine": "État" };
+  $("optionsNav").innerHTML = cartes.map(c => (intercalaires[c.id] ? `<span class="sep">${intercalaires[c.id]}</span>` : "")
+    + `<button type="button" data-aller="${c.id}">${esc(c.dataset.titre)}</button>`).join("");
+}
+$("optionsNav").onclick = (e) => {
+  const id = e.target.closest("[data-aller]")?.dataset.aller;
+  if (!id) return;
+  document.getElementById(id).scrollIntoView({ behavior: "smooth", block: "start" });
+  for (const b of $("optionsNav").querySelectorAll("button")) b.classList.toggle("actif", b.dataset.aller === id);
+};
+construireNav();
+
+// --- Options : réglages du serveur (écrits dans config.toml, appliqués aussitôt) --------------------
+// /api/reglages : {groupes: [{id, titre, aide, si, reglages: [{cle, libelle, type, valeur, choix…}]}], protege, local}.
+// Les modifications s'accumulent (modifsReglages) jusqu'à « Enregistrer ». Mot de passe du MJ : gardé le temps
+// de l'onglet (sessionStorage), envoyé dans l'en-tête X-Mot-De-Passe-MJ.
+const CLE_MDP = "mdp-mj";
+let reglagesServeur = null;
+let modifsReglages = {};  // clé → nouvelle valeur ; secret : null = à effacer
+const mdpMJ = () => { try { return sessionStorage.getItem(CLE_MDP) || ""; } catch { return ""; } };
+const garderMdp = (m) => { try { if (m) sessionStorage.setItem(CLE_MDP, m); else sessionStorage.removeItem(CLE_MDP); } catch {} };
+const peutModifier = () => !!reglagesServeur && (reglagesServeur.protege ? !!mdpMJ() : reglagesServeur.local);
+const tousLesReglages = () => reglagesServeur?.groupes.flatMap(g => g.reglages) ?? [];
+const reglageDe = (cle) => tousLesReglages().find(r => r.cle === cle);
+const idChamp = (cle) => `r-${cle.replaceAll(".", "-")}`;
+const valeursCourantes = () => Object.fromEntries(tousLesReglages().map(r => [r.cle, r.cle in modifsReglages ? modifsReglages[r.cle] : r.valeur]));
+
+function messageOptions(texte, erreur = false) {
+  $("reglagesMessage").textContent = texte;
+  $("reglagesMessage").classList.toggle("erreur", erreur);
+}
+
+async function chargerReglages() {
+  try { reglagesServeur = await api("/api/reglages"); }
+  catch (e) { $("acces").innerHTML = `<p>${esc(e.message)}</p>`; return; }
+  modifsReglages = {};
+  afficherReglages();
+}
+
+function controle(r) {
+  const id = idChamp(r.cle), attr = `id="${id}" data-cle="${esc(r.cle)}"${peutModifier() ? "" : " disabled"}`;
+  switch (r.type) {
+    case "booleen":
+      return `<input type="checkbox" role="switch" class="interrupteur" ${attr}${r.valeur ? " checked" : ""}>`;
+    case "choix":
+      return `<select ${attr}>${r.choix.map(([v, nom]) =>
+        `<option value="${esc(v)}"${v === r.valeur ? " selected" : ""}>${esc(nom)}</option>`).join("")}</select>`;
+    case "entier": case "nombre":
+      return `<input type="number" inputmode="decimal" ${attr} value="${esc(r.valeur)}" min="${r.min}" max="${r.max}" step="${r.pas ?? (r.type === "entier" ? 1 : "any")}">`;
+    case "secret":
+      return `<input type="password" autocomplete="new-password" ${attr} placeholder="${r.defini ? "défini (vide : inchangé)" : "non défini"}">`
+        + (r.defini ? `<button class="ghost petit" data-effacer="${esc(r.cle)}"${peutModifier() ? "" : " disabled"}>Effacer</button>` : "");
+    default: {
+      const liste = r.suggestions?.length
+        ? `<datalist id="${id}-liste">${r.suggestions.map(x => `<option value="${esc(x)}">`).join("")}</datalist>` : "";
+      return `<input type="${r.type === "url" ? "url" : "text"}" ${attr} value="${esc(r.valeur)}"${liste ? ` list="${id}-liste"` : ""}>${liste}`;
+    }
+  }
+}
+
+function afficherReglages() {
+  const valeurs = valeursCourantes();
+  $("fichierConfig").textContent = reglagesServeur.fichier ?? "en mémoire";
+  $("reglagesServeur").innerHTML = reglagesServeur.groupes.map(g => `
+    <section class="carte groupe" id="opt-g-${esc(g.id)}" data-titre="${esc(g.titre)}" data-groupe="${esc(g.id)}">
+      <div class="tete-groupe"><h2>${esc(g.titre)}</h2><span class="etiquette" data-inutile hidden>non utilisé</span></div>
+      ${g.aide ? `<p class="aide-groupe">${esc(g.aide)}</p>` : ""}
+      ${g.reglages.map(r => `
+      <div class="reglage${r.type === "booleen" ? " bool" : ""}" data-ligne="${esc(r.cle)}">
+        <label class="texte" for="${idChamp(r.cle)}"><strong>${esc(r.libelle)}${r.redemarrage ? ` <span class="etiquette">au redémarrage</span>` : ""}</strong>${r.aide ? `<small>${esc(r.aide)}</small>` : ""}</label>
+        <div class="controle">${controle(r)}</div>
+      </div>`).join("")}
+    </section>`).join("");
+  majUtilite(valeurs);
+  afficherAcces();
+  majBarreReglages();
+  construireNav();
+}
+
+// Groupes des moteurs non choisis : en retrait (toujours modifiables)
+function majUtilite(valeurs = valeursCourantes()) {
+  for (const g of reglagesServeur.groupes) {
+    const carte = document.getElementById(`opt-g-${g.id}`), utile = groupeUtile(g, valeurs);
+    carte.classList.toggle("inutile", !utile);
+    carte.querySelector("[data-inutile]").hidden = utile;
+  }
+}
+
+function afficherAcces() {
+  const d = reglagesServeur;
+  const fichier = d.fichier ? `Enregistrés dans <code>${esc(d.fichier)}</code> et appliqués aussitôt.` : "Appliqués aussitôt.";
+  if (d.protege && mdpMJ()) {
+    $("acces").innerHTML = `<p><strong>Déverrouillé.</strong> ${fichier}</p><button class="ghost petit" id="verrouiller">Verrouiller</button>`;
+  } else if (d.protege) {
+    $("acces").innerHTML = `<p>Protégés par le mot de passe du MJ.</p>
+      <form id="formMdp"><input type="password" id="mdpSaisi" placeholder="Mot de passe du MJ" aria-label="Mot de passe du MJ"
+        autocomplete="current-password"><button>Déverrouiller</button></form>`;
+  } else if (d.local) {
+    $("acces").innerHTML = `<p>Modifiables depuis ce PC. ${fichier} Pour les modifier depuis un autre appareil, définissez un mot de passe du MJ (rubrique Serveur).</p>`;
+  } else {
+    $("acces").innerHTML = `<p>Lecture seule : sans mot de passe du MJ, ces réglages ne se modifient que depuis le PC du serveur.</p>`;
+  }
+}
+$("acces").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const mdp = $("mdpSaisi").value;
+  try {
+    await api("/api/reglages/verifier", { mot_de_passe: mdp });
+    garderMdp(mdp);
+    messageOptions("");
+    afficherReglages();
+  } catch (err) { messageOptions(err.message, true); }
 });
+$("acces").addEventListener("click", (e) => {
+  if (e.target.id !== "verrouiller") return;
+  garderMdp("");
+  afficherReglages();
+});
+
+function majBarreReglages() {
+  const n = Object.keys(modifsReglages).length;
+  $("barreReglages").hidden = !n;
+  $("reglagesNb").textContent = resumeModifs(n);
+  for (const ligne of document.querySelectorAll("[data-ligne]")) ligne.classList.toggle("modifie", ligne.dataset.ligne in modifsReglages);
+}
+
+function noterChangement(e) {
+  const cle = e.target.dataset.cle;
+  if (!cle) return;
+  const r = reglageDe(cle), v = valeurReglage(r.type, e.target);
+  if (r.type === "secret") { if (v) modifsReglages[cle] = v; else delete modifsReglages[cle]; }
+  else if (v === null || v === r.valeur) delete modifsReglages[cle];
+  else modifsReglages[cle] = v;
+  if (cle.startsWith("moteurs.")) majUtilite();
+  messageOptions("");
+  majBarreReglages();
+}
+$("reglagesServeur").addEventListener("input", noterChangement);
+$("reglagesServeur").addEventListener("change", noterChangement);
+$("reglagesServeur").addEventListener("click", (e) => {
+  const cle = e.target.dataset.effacer;
+  if (!cle) return;
+  modifsReglages[cle] = null;
+  const champ = document.getElementById(idChamp(cle));
+  champ.value = "";
+  champ.placeholder = "sera effacé à l’enregistrement";
+  majBarreReglages();
+});
+$("reglagesAnnuler").onclick = () => { modifsReglages = {}; afficherReglages(); messageOptions(""); };
+$("reglagesEnregistrer").onclick = async () => {
+  const changements = { ...modifsReglages };
+  $("reglagesEnregistrer").disabled = true;
+  try {
+    const r = await fetch("/api/reglages", { method: "PUT", body: JSON.stringify({ changements }),
+      headers: { "Content-Type": "application/json", "X-Mot-De-Passe-MJ": mdpMJ() } });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 403) garderMdp("");
+    if (!r.ok) throw new Error(d.error || `Erreur serveur (${r.status})`);
+    if ("serveur.mot_de_passe_mj" in changements) garderMdp(changements["serveur.mot_de_passe_mj"] || "");
+    reglagesServeur = d;
+    modifsReglages = {};
+    afficherReglages();
+    messageOptions(`Enregistré${d.fichier ? ` dans ${d.fichier}` : ""} et appliqué.`
+      + (d.redemarrage.length ? ` Au prochain démarrage du serveur : ${d.redemarrage.join(", ")}.` : ""));
+    chargerConfig();
+    refreshSys();
+  } catch (err) {
+    messageOptions(err.message, true);
+    if (!mdpMJ()) afficherAcces();
+  }
+  $("reglagesEnregistrer").disabled = false;
+};
+window.addEventListener("beforeunload", (e) => { if (Object.keys(modifsReglages).length) e.preventDefault(); });
+
+// --- Options : état de la machine ---------------------------------------------------------------
+const ligneSys = (titre, texte, alerte = false) =>
+  `<div class="ligne"><span>${esc(titre)}</span><span${alerte ? ' class="alert"' : ""}>${texte}</span></div>`;
 async function refreshSys() {
   const box = $("sys");
   try {
-    const e = await (await fetch("/api/etat")).json();
-    let h = "";
+    const e = await api("/api/etat");
+    const m = cfg.moteurs ?? {};
+    let h = ligneSys("Création", esc(m.creation ?? "—")) + ligneSys("Dialogues", esc(m.dialogue ?? "—"))
+      + ligneSys("Voix", cfg.tts ? esc(cfg.tts) : "voix du navigateur")
+      + ligneSys("Reconnaissance", cfg.stt_local ? "sur ce PC" : "navigateur")
+      + ligneSys("Portraits", cfg.portraits ? esc(cfg.portraits === "local" ? "sur ce PC" : "en ligne") : "aucun");
     if (e.ollama) {
       h += e.ollama.ok
-        ? `<div>Ollama : actif${e.ollama.charges.length ? " — " + e.ollama.charges.map(m => `${esc(m.nom)} (${m.vram_mo} Mo en VRAM)`).join(", ") : " — aucun modèle chargé"}</div>`
-        : `<div class="alert">Ollama ne répond pas : démarrez-le (sudo systemctl start ollama).</div>`;
+        ? ligneSys("Ollama", `actif — ${e.ollama.charges.length ? e.ollama.charges.map(x => `${esc(x.nom)} (${x.vram_mo} Mo en mémoire vidéo)`).join(", ") : "aucun modèle chargé"}`)
+        : ligneSys("Ollama", "ne répond pas : démarrez-le (lancer.bat le fait sous Windows ; sous Linux : docker compose up -d).", true);
+    }
+    if (e.lmstudio) {
+      h += e.lmstudio.ok ? ligneSys("LM Studio", `actif — ${esc(e.lmstudio.modele || "modèle chargé")}`)
+                         : ligneSys("LM Studio", esc(e.lmstudio.message), true);
     }
     if (e.gpu) {
       const pct = Math.round(100 * e.gpu.memoire_mo / e.gpu.memoire_totale_mo);
-      h += `<div>${esc(e.gpu.nom)} : calcul ${e.gpu.usage} %, mémoire ${e.gpu.memoire_mo} / ${e.gpu.memoire_totale_mo} Mo</div>
-            <div class="bar"><i style="width:${pct}%"></i></div>`;
+      h += ligneSys(e.gpu.nom, `calcul ${e.gpu.usage} %, mémoire ${e.gpu.memoire_mo} / ${e.gpu.memoire_totale_mo} Mo`)
+        + `<div class="bar"><i style="width:${pct}%"></i></div>`;
+    } else {
+      h += ligneSys("Carte graphique", "aucune carte NVIDIA détectée");
     }
     box.innerHTML = h;
-  } catch { box.innerHTML = `<div class="alert">Serveur injoignable.</div>`; }
+  } catch { box.innerHTML = ligneSys("Serveur", "injoignable", true); }
 }
-refreshSys();
-setInterval(() => { if (!document.hidden) refreshSys(); }, 3000);
+setInterval(() => { if (!document.hidden && document.body.dataset.vue === "options") refreshSys(); }, 3000);
 setBusy(false);
 chargerTheme();
 chargerLieux().then(() => refreshBank()).then(() => { restaurerPartie(); majAccueil(); });

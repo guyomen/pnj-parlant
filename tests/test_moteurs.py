@@ -234,3 +234,8 @@ class TestLMStudio:
         with pytest.raises(MoteurIndisponible, match="LM Studio injoignable"):
             lmstudio["moteurs"].replique("s", [{"role": "user", "content": "a"}])
         assert lmstudio["moteurs"].contexte_max() is None
+        etat = lmstudio["moteurs"].etat_lmstudio()
+        assert etat["ok"] is False and "injoignable" in etat["message"]
+
+    def test_etat_pour_la_page_options(self, lmstudio):
+        assert lmstudio["moteurs"].etat_lmstudio() == {"ok": True, "modele": "qwen-charge"}

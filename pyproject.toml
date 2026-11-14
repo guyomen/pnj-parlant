@@ -13,6 +13,7 @@ dependencies = [
     "anthropic>=2.4",               # output_config (effort, sorties structurées)
     "num2words>=0.5",               # nombres en toutes lettres avant la synthèse vocale
     "pyopenssl",                    # https = true dans config.toml (certificat auto-signé)
+    "tomlkit>=0.13",                # page Options : réécrit config.toml en gardant les commentaires
 ]
 
 [project.optional-dependencies]

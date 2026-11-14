@@ -9,17 +9,18 @@ paths:
 
 - `index.html` : un seul `<script type="module">` et trois vues selon l'adresse (`afficherVue`, `body[data-vue]`) :
   accueil `/` (charger un univers, PNJ au hasard ou inventé, créer son univers, « Nouvelle table »), partie `/#jeu`,
-  options `/#options` (cases à cocher, modèle local, état machine ; « Retour » vers la vue d'origine). Une seule
-  page : le clic de l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
+  options `/#options` (voir « Page Options » ; « Retour » vers la vue d'origine). Une seule page : le clic de
+  l'accueil autorise le son du PNJ, et la partie continue pendant qu'on navigue.
 - « Nouvelle table » (`nouvelleTableBtn`) : `confirm(confirmationNouvelleTable)`, `DELETE /api/univers`, puis remise
   à zéro de la partie (npcs, history, rencontres, positions, lieu, journal, tokens, `CLE_PARTIE`) et rechargement
   des lieux, de la banque et du thème.
-- `creation.html` (module ES) : même principe d'une seule page, trois parties selon l'adresse (`afficherSection`,
-  `body[data-section]`, `nav.sections`) : Scénario `#scenario` (univers, notes du MJ, thème enregistré dès le clic,
-  export/import), Lieux `#lieux` (une `.carte.lieu-fiche` par lieu, PNJ qui y vivent, « Créer un PNJ ici » →
+- `creation.html` (module ES) : même principe d'une seule page, quatre parties selon l'adresse (`afficherSection`,
+  `body[data-section]`, `nav.sections`) : Scénario `#scenario` (univers, notes du MJ, export/import), Apparence
+  `#apparence` (thèmes et styles de portrait, voir plus bas), Lieux `#lieux` (une `.carte.lieu-fiche` par lieu, PNJ qui y vivent, « Créer un PNJ ici » →
   `#pnj` avec `reqLieu`), PNJ `#pnj` (banque groupée par lieu via `parLieu`, `details#demande` ouvert pour une
   fiche vierge, fiche par rubriques, barre d'enregistrement collante). `majModifs()` met un point
-  (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche) ; recalculé après
+  (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche),
+  `apparenceModifiee()` (éditeur ouvert et modifié) ; recalculé après
   chaque `input`/`change`/`click` et après chaque chargement ou enregistrement.
 - Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
@@ -35,15 +36,28 @@ paths:
   thème ; `:root, [data-theme=vert-de-gris]` = défaut ; `donjon` toujours sombre. Variables : `--bg --surface --ink
   --muted --line --glass` (principale, texte des boutons = `--surface`) `--verdigris` (appoint) `--wax --wax-ink`
   (sceau « Parler »). Contraste visé ≥ 4,5 pour ink/bg, muted/surface, surface/glass, wax-ink/wax.
-- Liste (id, nom, résumé) : `THEMES` dans `js/univers.js` ; `appliquerTheme(id)` (pose + garde dans localStorage
-  `theme`), `chargerTheme()` (relit /api/scenario). Un petit script dans le `<head>` des deux pages pose le thème
-  gardé avant l'affichage (pas de flash), puis `chargerTheme()` au chargement et après un import d'univers.
-- Préparation : `fieldset#themes`, une carte par thème portant son propre `data-theme` (aperçu dans ses couleurs) ;
-  le clic l'enregistre aussitôt. Style des portraits : `#stylesCarte` (cachée sans moteur de portraits), liste reçue
-  de `/api/config` (`afficherStyles`), "" affiché comme le premier ; rappelé dans la fiche (`#portraitStyle`).
-  Tout enregistrement du scénario passe par `enregistrerScenario(changements)` = PUT `{...scenarioCharge,
-  ...changements}` : version *enregistrée* (pas la saisie en cours), et un champ n'en efface pas un autre.
-- Ajouter un thème : bloc(s) dans `style.css` + entrée dans `THEMES` (le serveur accepte tout id `[a-z0-9-]`).
+- `js/univers.js` : `THEMES` = prédéfinis avec leurs palettes (`mode`, `clair`, `sombre`), **identiques à style.css**
+  (test JS qui les compare, et qui vérifie leurs contrastes) ; `COULEURS` (variables + libellés de l'éditeur),
+  `tousLesThemes(perso)` (origine predefini / modifie / perso), `cssThemes(perso)` (sélecteurs `html[data-theme="id"],
+  body [data-theme="id"]` : plus précis que style.css, donc gagnants même placés avant ; `body […]` pour les
+  aperçus), `contraste`, `alertesContraste`, `identifiant(nom, pris)`, `poserThemesPerso(perso, garder)` (`<style
+  id="themes-perso">` ; garder = aussi dans localStorage `theme-css`, sinon simple aperçu), `appliquerTheme(id)`
+  (prédéfini ou de l'univers, sinon défaut ; localStorage `theme`), `chargerTheme()` (/api/scenario + /api/styles).
+  Le script du `<head>` des deux pages pose `theme` et `theme-css` gardés avant l'affichage (pas de flash).
+- Thèmes et styles de l'univers : `/api/styles` (`stylesUnivers` = {themes: {id: thème}, portraits: liste complète}),
+  PUT de tout (`enregistrerStyles(themes, portraitsPerso())`). Chargés avant le scénario (`chargerStyles().then(
+  loadScenario)`, idem après un import) : le thème ou le style choisi peut en venir.
+- Onglet Apparence : cartes de thèmes (`.theme-carte` : `label.theme-choix[data-theme]` + « Modifier ») et de styles
+  (`.style-carte`) ; un clic sur une carte choisit et enregistre aussitôt. Éditeur de thème (`editionTheme`,
+  `#editeurTheme`) : palettes en `input[type=color]` (`data-mode`, `data-couleur`), aperçu en direct sur toute la page
+  (`apercuTheme` : `poserThemesPerso(…, false)`, id `apercu-theme` pour un nouveau), alertes de contraste ; un nouveau
+  thème part du thème choisi et est choisi à l'enregistrement ; prédéfini modifié → « Rétablir » (retire l'entrée),
+  créé → « Supprimer » (le scénario revient au thème par défaut s'il l'utilisait). Éditeur de style (`editionStyle`,
+  `#editeurStyle`) : nom, résumé, prompt anglais, même logique. Un seul éditeur ouvert à la fois.
+- Style des portraits : `#stylesCarte` cachée sans moteur de portraits ; "" affiché comme le premier ; rappelé dans
+  la fiche (`#portraitStyle`). Tout enregistrement du scénario passe par `enregistrerScenario(changements)` = PUT
+  `{...scenarioCharge, ...changements}` : version *enregistrée* (pas la saisie en cours), un champ n'en efface pas un autre.
+- Ajouter un thème prédéfini : bloc(s) dans `style.css` + même palette dans `THEMES` (le test JS le vérifie).
 - Portraits : `adressePortrait(pnj)` (scene.js) = `/api/bank/<id>/portrait?v=<version>` ou "" ; partie :
   `img.portrait` en tête de `.pnj-card` (grand pour le premier, vignette flottante sinon) ; préparation :
   `figure#portraitBloc` à droite de l'identité (`majPortrait`, `peinture` pendant la génération, seulement pour un
@@ -53,6 +67,23 @@ paths:
 - Toute fonction testable sans DOM va dans `static/js/scene.js` (export) avec son test dans
   `tests/js/scene.test.mjs` ; index.html n'est testé que par l'e2e.
 - Interface et commentaires en français ; texte de l'interface avec typographie française (« », ’, espaces).
+
+## Page Options (index.html, `#options`)
+- Rubriques (`#optionsNav`, construites par `construireNav` d'après les `section[id][data-titre]` de
+  `.options-contenu`, intercalaires « Ce navigateur » / « Le serveur » / « État ») ; un clic fait défiler.
+- « Cette partie » : réglages du navigateur (`OPTIONS` en localStorage), en lignes `.reglage` (libellé + aide |
+  contrôle) avec interrupteurs (`input.interrupteur[role=switch]`, style.css) ; `#multiOpts` grisé et désactivé sans
+  `optMulti` (dans `setBusy`).
+- « Le serveur » : `chargerReglages()` à l'ouverture de la vue (différé par `queueMicrotask` : au premier affichage,
+  le code plus bas n'a pas encore tourné), champs générés d'après le catalogue (`controle(r)`), `modifsReglages`
+  (valeur revenue à l'origine = retirée ; secret : "" ignoré, « Effacer » = null), point `.modifie`, barre collante
+  « N réglages modifiés » (`resumeModifs`), groupes des moteurs non choisis en retrait (`groupeUtile`, recalculé si
+  `moteurs.*` change). Accès (`afficherAcces`) : déverrouillé / formulaire du mot de passe / modifiable depuis ce PC /
+  lecture seule ; mot de passe gardé en sessionStorage `mdp-mj`, envoyé en `X-Mot-De-Passe-MJ`, oublié sur 403.
+  Après enregistrement : message (fichier, réglages au redémarrage), `chargerConfig()` (la partie reprend les
+  moteurs) et `refreshSys()`. `beforeunload` si des modifications attendent.
+- « État » (`refreshSys`, toutes les 3 s seulement sur la vue Options) : moteurs (/api/config), Ollama, LM Studio, GPU.
+- Fonctions pures (scene.js, testées) : `valeurReglage(type, champ)`, `groupeUtile(groupe, valeurs)`, `resumeModifs(n)`.
 
 ## État de la page de jeu
 - `npcs` (scène, 3 au plus), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est

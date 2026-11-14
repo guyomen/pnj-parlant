@@ -45,9 +45,6 @@ class FauxMoteurs:
     def modele_local_installe(self, installes):
         return self.local_cfg["modele"]
 
-    def choisir_modele_local(self, nom):
-        raise MoteurIndisponible(f"Modèle local « {nom} » absent d'Ollama.")
-
     def fiche(self, system, demande, schema):
         self.derniere_demande = demande
         if isinstance(self.fiche_json, Exception):

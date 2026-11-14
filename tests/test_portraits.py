@@ -47,7 +47,9 @@ def test_styles_de_dessin():
     assert list(STYLES) == ["peinture", "manga", "jdr80", "photo", "crayon"]
     assert all(nom and resume and "head and shoulders" in prompt for nom, resume, prompt in STYLES.values())
     assert [style_valide(s) for s in ("manga", " Photo ", "aquarelle", None)] == ["manga", "photo", "", ""]
-    assert portraits.styles()[1] == {"id": "manga", "nom": "Manga", "resume": STYLES["manga"][1]}
+    assert portraits.styles()[1] == {"id": "manga", "nom": "Manga", "resume": STYLES["manga"][1],
+                                     "prompt": STYLES["manga"][2], "origine": "predefini"}
+    assert style_valide("aquarelle", {"aquarelle": {}}) == "aquarelle"  # style créé pour l'univers
 
 
 def test_type_image():
@@ -207,7 +209,7 @@ def test_routes_du_portrait(client, portraits, ctx):
 
 def test_portrait_au_style_du_scenario(client, portraits, cfg):
     npc_id = client.post("/api/bank", json=BROM).get_json()["id"]
-    assert [s["id"] for s in client.get("/api/config").get_json()["styles_portrait"]] == list(STYLES)
+    assert [s["id"] for s in client.get("/api/styles").get_json()["portraits"]] == list(STYLES)
     client.put("/api/scenario", json={"monde": "Valmer.", "style_portrait": "crayon"})
     client.post(f"/api/bank/{npc_id}/portrait")
     assert portraits.prompts[-1].startswith(STYLES["crayon"][2])

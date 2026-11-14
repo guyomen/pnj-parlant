@@ -141,6 +141,17 @@ await js(`location.hash = "options"`);
 verifier("options affichées, retour vers la partie", await quand(`document.body.dataset.vue === "options" && document.getElementById("optionsRetour").getAttribute("href") === "#jeu" && document.getElementById("optInterrompre").offsetParent !== null`));
 verifier("barre du haut : onglet Options actif, même place que dans la partie", await quand(`document.querySelector(".onglets [aria-current=page]")?.dataset.vue === "options" && document.querySelectorAll(".onglets a").length === 4 && ${placeBarre} === ${JSON.stringify(barreJeu)}`));
 
+// Options : sous-options grisées sans « Plusieurs PNJ » ; un réglage du serveur modifié depuis la page (depuis le
+// PC, sans mot de passe du MJ) est enregistré dans config.toml et appliqué
+await option("optMulti", false);
+verifier("options : sous-options grisées sans « Plusieurs PNJ »", await quand(`document.getElementById("multiOpts").classList.contains("inactif") && document.getElementById("optEntree").disabled`));
+await option("optMulti", true);
+await quand(`document.querySelectorAll("#reglagesServeur .groupe").length > 5 && !document.querySelector('[data-cle="dialogue.phrases_max"]').disabled`);
+await js(`(() => { const c = document.querySelector('[data-cle="dialogue.phrases_max"]'); c.value = "4"; c.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+const barreVisible = await quand(`!document.getElementById("barreReglages").hidden && document.getElementById("reglagesNb").textContent === "1 réglage modifié"`);
+await js(`document.getElementById("reglagesEnregistrer").click()`);
+verifier("options : réglage du serveur enregistré et appliqué", barreVisible && await quand(`document.getElementById("reglagesMessage").textContent.startsWith("Enregistré dans config.toml") && document.getElementById("barreReglages").hidden`) && await js(`fetch("/api/reglages").then(r => r.json()).then(d => d.groupes.flatMap(g => g.reglages).find(r => r.cle === "dialogue.phrases_max").valeur === 4)`));
+
 // Préparation : trois parties (scénario, lieux, PNJ) ; « Créer un PNJ ici » ouvre la demande avec ce lieu
 await cdp("Page.navigate", { url: "http://127.0.0.1:5917/creation.html#lieux" });
 await quand(`document.readyState === "complete"`);
@@ -152,13 +163,25 @@ await quand(`document.getElementById("mode").textContent.startsWith("Modificatio
 await js(`const h = document.getElementById("f-humeur"); h.value += " !"; h.dispatchEvent(new Event("input", { bubbles: true }))`);
 verifier("préparation : fiche modifiée signalée sur l'onglet PNJ", await quand(`!document.getElementById("demande").open && [...document.querySelectorAll(".sections a.a-enregistrer")].map(a => a.dataset.section).join() === "pnj"`));
 
+// Apparence : un thème créé avec l'éditeur est enregistré, choisi et appliqué à la page
+await js(`location.hash = "apparence"`);
+await quand(`document.body.dataset.section === "apparence" && document.querySelectorAll(".theme-carte").length === 5`);
+await js(`(() => {
+  const saisir = (el, v) => { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); };
+  document.getElementById("nouveauThemeBtn").click();
+  saisir(document.getElementById("et-nom"), "Forge noire");
+  for (const mode of ["clair", "sombre"]) saisir(document.querySelector(\`input[data-mode=\${mode}][data-couleur=glass]\`), "#a4400f");
+  document.getElementById("et-enregistrer").click();
+})()`);
+verifier("apparence : thème créé, choisi et appliqué", await quand(`document.documentElement.dataset.theme === "forge-noire" && document.querySelectorAll(".theme-carte").length === 6 && document.getElementById("editeurTheme").hidden && getComputedStyle(document.body).getPropertyValue("--glass").trim() === "#a4400f" && localStorage.getItem("theme-css")?.includes("forge-noire")`));
+
 // Accueil : « Nouvelle table » supprime l'univers et la conversation
 await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
 await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await quand(`!document.getElementById("accReprendreBtn").hidden`);
 await js(`window.confirm = () => true; document.getElementById("nouvelleTableBtn").click()`);
-verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && document.querySelectorAll("#log .line").length === 0`));
+verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && !localStorage.getItem("theme-css") && document.querySelectorAll("#log .line").length === 0`));
 
 console.log(resultats.join("\n"));
 // Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)

@@ -206,3 +206,21 @@ export function detecteurVoix({ calibrage = 500, facteur = 4, plancher = 0.01, d
     },
   };
 }
+
+// --- Page Options : réglages du serveur (catalogue de /api/reglages) -------------------------------
+// Valeur d'un champ selon le type du réglage ; null pour un nombre vide ou illisible (« 0,5 » est accepté)
+export function valeurReglage(type, champ) {
+  if (type === "booleen") return !!champ.checked;
+  const brut = String(champ.value ?? "").trim();
+  if (type === "entier" || type === "nombre") {
+    const n = Number(brut.replace(",", "."));
+    return brut === "" || Number.isNaN(n) ? null : n;
+  }
+  return brut;
+}
+
+// Un groupe ne sert que si l'un des moteurs de langage vaut groupe.si (« claude », « local », « lmstudio »)
+export const groupeUtile = (groupe, valeurs) =>
+  !groupe.si || [valeurs["moteurs.creation"], valeurs["moteurs.dialogue"]].includes(groupe.si);
+
+export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifié${n > 1 ? "s" : ""}` : "";

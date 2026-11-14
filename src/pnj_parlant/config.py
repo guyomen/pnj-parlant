@@ -19,8 +19,9 @@ class ConfigIntrouvable(Exception):
 
 @dataclass
 class Config:
-    reglages: dict  # contenu de config.toml
-    racine: Path    # dossier de config.toml : base des chemins relatifs
+    reglages: dict              # contenu de config.toml
+    racine: Path                # dossier de config.toml : base des chemins relatifs
+    fichier: Path | None = None  # config.toml lui-même, réécrit par la page Options (None : réglages en mémoire)
 
     def section(self, nom):
         return self.reglages.get(nom, {})
@@ -42,7 +43,7 @@ def trouver(chemin=None):
 def charger(chemin=None):
     chemin = trouver(chemin)
     with open(chemin, "rb") as f:
-        return Config(tomllib.load(f), chemin.parent)
+        return Config(tomllib.load(f), chemin.parent, chemin)
 
 
 def ollama_sur_ce_pc(cfg):

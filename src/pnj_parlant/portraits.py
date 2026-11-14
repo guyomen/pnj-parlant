@@ -48,15 +48,34 @@ STYLES = {
 }
 
 
-def style_valide(style):
-    """Identifiant d'un style de STYLES, ou "" (style par défaut : [portraits] style de config.toml)."""
+def style_valide(style, perso=()):
+    """Identifiant d'un style prédéfini (STYLES) ou de l'univers (`perso`), sinon "" (style par défaut :
+    [portraits] style de config.toml)."""
     style = str(style or "").strip().lower()
-    return style if style in STYLES else ""
+    return style if style in STYLES or style in perso else ""
 
 
-def styles():
-    """[{id, nom, resume}] des styles proposés, pour la page de préparation."""
-    return [{"id": i, "nom": nom, "resume": resume} for i, (nom, resume, _) in STYLES.items()]
+def styles(perso=None):
+    """[{id, nom, resume, prompt, origine}] des styles proposés : les prédéfinis (origine « predefini », ou
+    « modifie » si l'univers les a changés), puis ceux créés pour l'univers (« perso »).
+    `perso` : {id: {nom, resume, prompt}} de pnj/_styles.json."""
+    perso = perso or {}
+    liste = []
+    for i, (nom, resume, prompt) in STYLES.items():
+        p = perso.get(i)
+        liste.append({"id": i, "nom": p["nom"] if p else nom, "resume": p["resume"] if p else resume,
+                      "prompt": p["prompt"] if p else prompt, "origine": "modifie" if p else "predefini"})
+    liste += [{"id": i, **p, "origine": "perso"} for i, p in perso.items() if i not in STYLES]
+    return liste
+
+
+def prompt_du_style(choix, perso, defaut=STYLE):
+    """Suite du prompt pour le style `choix` (style de l'univers, sinon prédéfini), ou `defaut`."""
+    if choix in (perso or {}):
+        return perso[choix]["prompt"]
+    return STYLES[choix][2] if choix in STYLES else defaut
+
+
 SCHEMA = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"],
           "additionalProperties": False}
 CONSIGNES = ("Tu écris la description d'un portrait pour un générateur d'images. Réponds en JSON {\"prompt\": ...} : "

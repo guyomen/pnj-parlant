@@ -55,9 +55,13 @@ Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisi
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
 - Sous la discussion : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle.
 
-La page **Options** (mémorisées par le navigateur) règle aussi le modèle local, qu'on peut changer en cours de partie, et affiche l'état d'Ollama et de la carte graphique :
+La page **Options** a trois parties (rubriques à gauche, en haut sur téléphone) :
 
-| Option | Effet |
+- **Cette partie** : les réglages de ce navigateur (chaque joueur a les siens), dans le tableau ci-dessous.
+- **Le serveur** : les réglages de `config.toml`, modifiables à chaud sans ouvrir le fichier (voir [Configuration](#configuration)).
+- **État** : moteurs utilisés, Ollama ou LM Studio (actif ou pas, modèle chargé) et carte graphique.
+
+| Option de la partie | Effet |
 |---|---|
 | « Parler » interrompt le PNJ | Pendant qu'il parle, **Parler** lui coupe la parole et vous écoute aussitôt. Décochée : il faut attendre la fin ou cliquer sur Stop. |
 | Couper le PNJ dès que vous parlez | Désactivée par défaut. Le micro reste ouvert pendant que le PNJ parle : dès que vous parlez, il se tait et votre phrase devient la question. Prenez un casque : avec des haut-parleurs, la voix du PNJ peut le couper elle-même (surtout la voix de secours du navigateur). |
@@ -69,12 +73,11 @@ La page **Options** (mémorisées par le navigateur) règle aussi le modèle loc
 
 Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par Claude : faites-la avant de partir, avec le réseau.
 
-La page a trois onglets : **Scénario**, **Lieux** et **PNJ** (avec le nombre de lieux et de PNJ). Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
+La page a quatre onglets : **Scénario**, **Lieux**, **PNJ** (avec le nombre de lieux et de PNJ) et **Apparence**. Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
 
 1. **Scénario** :
    - **Univers** : lieux, factions, personnages connus, événements. Connu de tous les PNJ, il est aussi transmis pendant les dialogues.
    - **Notes du MJ** : l'intrigue et ses secrets. Elles servent seulement à créer des PNJ cohérents et ne sont jamais transmises pendant les dialogues, pour qu'un PNJ ne révèle pas ce qu'il n'est pas censé savoir.
-   - **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs (Vert-de-gris, Parchemin, Sylve, Givre ou Donjon), en clair ou en sombre selon le réglage de chaque appareil (Donjon reste sombre). Il est enregistré dès qu'on le choisit et voyage avec l'univers exporté.
    - **Partager l'univers** : export et import (voir plus bas).
 2. **Lieux** : voir plus bas.
 3. **PNJ** : la banque à gauche (groupée par lieu), et à droite :
@@ -97,7 +100,16 @@ En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouven
 case « Vous accompagne » est cochée ; on les retrouve là où on les a laissés. Chaque PNJ sait où il se trouve
 et connaît les lieux du scénario.
 
-Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, notes du MJ, thème), `_lieux.json` pour les lieux, puis un fichier JSON par PNJ, lisible et modifiable à la main.
+Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, notes du MJ, thème et style de portrait choisis), `_lieux.json` pour les lieux, `_styles.json` pour les thèmes et styles créés ou modifiés pour l'univers, puis un fichier JSON par PNJ (et son portrait), lisibles et modifiables à la main.
+
+### Apparence : thèmes et styles de portrait
+
+L'onglet **Apparence** de la page de préparation règle l'allure de l'univers :
+
+- **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs. Cinq thèmes prédéfinis (Vert-de-gris, Parchemin, Sylve, Givre, Donjon), en clair ou en sombre selon le réglage de chaque appareil. Un clic choisit un thème (enregistré aussitôt). **Modifier** ouvre l'éditeur : nom, résumé, « selon l'appareil » (une palette claire et une sombre) ou toujours sombre / toujours clair, et les neuf couleurs de chaque palette (fond, cartes, texte, texte secondaire, traits, couleur principale, couleur d'appoint, sceau « Parler » et son texte). L'aperçu se fait en direct sur toute la page, et une alerte signale un texte peu lisible (contraste inférieur à 4,5). **Nouveau thème** part du thème choisi.
+- **Style des portraits** (si un moteur de portraits est configuré) : voir [Portraits des PNJ](#portraits-des-pnj-facultatif). **Modifier** change le nom, le résumé et la description anglaise envoyée au générateur ; **Nouveau style** en crée un (ex. aquarelle, gravure).
+
+Un thème ou un style prédéfini modifié peut être rétabli ; un thème ou un style créé peut être supprimé. Les thèmes et styles modifiés ou créés appartiennent à l'univers : ils partent dans le zip exporté et sont effacés par « Nouvelle table ».
 
 ### Partager un univers
 
@@ -120,7 +132,11 @@ Si la voix d'un PNJ n'existe pas sur la machine qui l'ouvre, ou vient d'un autre
 
 ## Modèle local pour les dialogues (sans réseau)
 
-Les répliques des PNJ peuvent venir d'un modèle qui tourne sur le PC, servi par [Ollama](https://ollama.com) dans un conteneur Docker. Le choix se fait dans la section `[moteurs]` de `config.toml`, séparément pour la création (`creation`) et pour les dialogues (`dialogue`).
+Les répliques des PNJ peuvent venir d'un modèle qui tourne sur le PC, servi par [Ollama](https://ollama.com) (dans un conteneur Docker, ou l'application Windows) ou par [LM Studio](https://lmstudio.ai). Le choix se fait dans la section `[moteurs]` de `config.toml` (ou la page Options), séparément pour la création (`creation`) et pour les dialogues (`dialogue`) : `"claude"`, `"local"` (Ollama) ou `"lmstudio"`.
+
+**LM Studio** (sans Docker) : chargez un modèle dans LM Studio, démarrez son serveur local (onglet Developer > Start Server, ou `lms server start`), puis mettez `dialogue = "lmstudio"`. Section `[lmstudio]` : `url` (par défaut `http://localhost:1234`), `modele` (vide = le modèle chargé dans LM Studio), `reflexion = false` (bien plus rapide avec Qwen 3), `temperature`, `delai_max`, et `max_tokens` dans `[lmstudio.generation]` et `[lmstudio.dialogue]`. La taille du contexte affichée sous la discussion est celle du modèle chargé.
+
+La suite de cette section concerne Ollama.
 
 **Installation, une fois, avec le réseau** (PC avec carte NVIDIA) :
 
@@ -194,7 +210,7 @@ Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dan
 
 Chaque PNJ de la banque peut avoir un portrait, généré dans la page de préparation (onglet PNJ, bouton **Générer le portrait** à côté de son identité ; **Refaire** en tire un autre). Il s'affiche dans la fiche du PNJ pendant la partie et en vignette dans la banque. Le portrait part de la fiche telle qu'elle est à l'écran : modifiez l'apparence, puis refaites-le. Le modèle de création (Claude ou Ollama) traduit l'apparence en une courte description anglaise, que les générateurs d'images comprennent mieux.
 
-Le **style des portraits** se choisit par univers, dans l'onglet Scénario (carte visible quand un moteur de portraits est configuré) : **Peinture fantasy** (par défaut), **Manga** (animé japonais), **JDR années 80** (encre noir et blanc des premiers livres de jeu de rôle), **Photo** (réaliste) ou **Fait main** (crayon sur papier). Il est enregistré dès le choix et voyage avec l'univers ; les portraits déjà faits ne changent pas, refaites-les. Sans choix, c'est `style` de `[portraits]` qui s'applique (en anglais).
+Le **style des portraits** se choisit par univers, dans l'onglet Apparence (carte visible quand un moteur de portraits est configuré) : **Peinture fantasy** (par défaut), **Manga** (animé japonais), **JDR années 80** (encre noir et blanc des premiers livres de jeu de rôle), **Photo** (réaliste) ou **Fait main** (crayon sur papier), ou un style créé pour l'univers (voir [Apparence](#apparence--thèmes-et-styles-de-portrait)). Il est enregistré dès le choix et voyage avec l'univers ; les portraits déjà faits ne changent pas, refaites-les. Sans choix, c'est `style` de `[portraits]` qui s'applique (en anglais).
 
 Les portraits sont rangés à côté des fiches (`pnj/<id>.png`) et partent avec l'univers exporté. La partie n'en génère jamais : elle reste jouable sans réseau. Section `[portraits]` de `config.toml` :
 
@@ -214,7 +230,11 @@ Ollama ne génère pas d'images sous Windows ni sous Linux (sa génération d'im
 
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Relancez `pnj-parlant` après une modification.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Après une modification à la main, relancez `pnj-parlant`.
+
+**Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
+
+Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
 
 `config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 
@@ -229,12 +249,13 @@ Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté d
 pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev), commandes
 src/pnj_parlant/
   serveur.py                application Flask (routes) et lancement
-  config.py                 lecture de config.toml
+  config.py                 lecture de config.toml (et son chemin, pour la page Options)
   dependances.py            dépendances manquantes dans .venv (lancer.bat)
   fiches.py                 création des fiches de PNJ
   dialogue.py               consignes du PNJ, mise en scène de la conversation à un ou plusieurs PNJ
   texte.py                  nettoyage du texte, nombres en lettres, découpage en phrases
-  moteurs.py                modèles de langage : Claude ou Ollama
+  moteurs.py                modèles de langage : Claude, Ollama ou LM Studio
+  reglages.py               réglages modifiables dans la page Options (catalogue, validation, écriture de config.toml)
   voix.py                   synthèse vocale (Pocket TTS, Piper, Edge) et attribution des voix
   stt.py                    reconnaissance vocale (faster-whisper)
   portraits.py              portraits des PNJ : Stable Diffusion Turbo (local) ou Pollinations (en ligne)

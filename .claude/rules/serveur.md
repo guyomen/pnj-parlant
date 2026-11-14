@@ -7,6 +7,8 @@ paths:
   - "src/pnj_parlant/moteurs.py"
   - "src/pnj_parlant/banque.py"
   - "src/pnj_parlant/portraits.py"
+  - "src/pnj_parlant/reglages.py"
+  - "src/pnj_parlant/config.py"
   - "src/pnj_parlant/generer.py"
   - "src/pnj_parlant/exemples/**"
   - "src/pnj_parlant/static/**"
@@ -17,23 +19,28 @@ paths:
   - "tests/test_moteurs.py"
   - "tests/test_banque.py"
   - "tests/test_portraits.py"
+  - "tests/test_reglages.py"
 ---
 
 # Serveur Flask, routes et dialogue
 
-`create_app(cfg, moteurs=, tts=, reconnaissance=)` (serveur.py) : les tests injectent leurs faux moteurs.
+`create_app(cfg, moteurs=, tts=, reconnaissance=, portraits=)` (serveur.py) : les tests injectent leurs faux moteurs
+(`Contexte.injectes` : jamais remplacés quand les réglages changent).
 Serveur sans état : l'historique vit dans le navigateur.
 
 ## Moteurs de langage (moteurs.py)
-- `[moteurs] creation` et `dialogue` : `"claude"` (`[claude] modele`, `claude-haiku-5-5`) ou `"local"` (Ollama,
-  `[local] modele`). `MoteurIndisponible` : message destiné au joueur (réseau, Docker arrêté, modèle absent).
-- Réponses en streaming pour les deux moteurs ; `usage` (tokens) renvoyé en fin de réplique.
+- `[moteurs] creation` et `dialogue` : `"claude"` (`[claude] modele`, `claude-haiku-5-5`), `"local"` (Ollama,
+  `[local] modele`) ou `"lmstudio"` (`[lmstudio]` : API compatible OpenAI, `/v1/chat/completions` en SSE ; modèle vide
+  = celui chargé, trouvé par `/api/v0/models` ; `<think>…</think>` retiré ; `contexte_max` = contexte du modèle
+  chargé ; `etat_lmstudio()` pour la page Options). `MoteurIndisponible` : message destiné au joueur (réseau, Docker
+  arrêté, LM Studio arrêté, modèle absent).
+- Réponses en streaming pour les trois moteurs ; `usage` (tokens) renvoyé en fin de réplique.
 
 ## Routes
 - `GET /api/config` : moteurs, moteur de voix (`tts`, null si aucune voix), `stt_local`, `modeles_locaux`,
   `modele_local`, `intervention`, `contexte_max`.
-- `GET /api/etat` : GPU (`systeme.etat_gpu`) et Ollama si un moteur est local. `POST /api/model {modele}` :
-  change le modèle local pour tout le serveur (sans toucher à config.toml).
+- `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
+- `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir « Réglages à chaud » ci-dessous.
 - `POST /api/npc/generate {role, nom, genre, consignes, lieu}` : fiche JSON imposée par un schéma (nom, metier,
   apparence, personnalite, humeur, connaissances, secret, salutation, genre, timbre, debit, lieu). Humeur, trait et
   initiale du nom tirés au sort en Python pour varier les PNJ. Le serveur ajoute `voix` (voix du genre du PNJ +
@@ -41,7 +48,13 @@ Serveur sans état : l'historique vit dans le navigateur.
 - `GET|PUT /api/scenario` : `monde` (connu de tous les PNJ, envoyé dans les dialogues), `notes_mj` (création
   seulement, jamais envoyées pendant les dialogues), `theme` (thème graphique des pages, `banque.theme_valide` :
   id `[a-z0-9-]{1,40}` sinon `""` = défaut ; la liste des thèmes vit côté navigateur) et `style_portrait` (style de
-  dessin, clé de `portraits.STYLES` sinon `""`). PUT remplace tout : envoyer tous les champs.
+  dessin, prédéfini ou de l'univers, sinon `""`). PUT remplace tout : envoyer tous les champs.
+- `GET|PUT /api/styles` (`pnj/_styles.json`, `Banque.styles` / `enregistrer_styles`, `valider_styles` : 400 si
+  invalide) : thèmes `{id: {nom, resume, mode (auto|sombre|clair), clair, sombre}}` (les 9 couleurs `#rrggbb` de
+  `COULEURS`, seulement les palettes du mode ; aucune injection CSS possible) et styles de portrait
+  `{id: {nom, resume, prompt}}`, 30 de chaque au plus. Un id prédéfini = remplacement pour l'univers. GET renvoie
+  `{themes, portraits: portraits.styles(perso)}` (liste complète avec `origine`). Exporté, importé (écrit avant le
+  scénario, illisible → `ignores`), vidé par « Nouvelle table ».
 - `GET|PUT /api/lieux` (`pnj/_lieux.json`) : `{id, nom, description, notes_mj}`. Description connue de tous les PNJ
   et lue par le narrateur ; notes du MJ pour la création seulement.
 - `DELETE /api/univers` → `Banque.vider()` : « Nouvelle table » de l'accueil, supprime tous les PNJ, vide le scénario
@@ -59,6 +72,21 @@ Serveur sans état : l'historique vit dans le navigateur.
 - `POST /api/stt` (audio webm/opus + `indice`) : 404 si la reconnaissance locale est indisponible.
 - `POST /api/npc/talk {npc, presents, history, lieu, longueur}` : détaillé ci-dessous.
 
+## Réglages à chaud (reglages.py, page Options)
+- `CATALOGUE` : groupes (`id`, `titre`, `aide`, `si` = moteur de langage qui rend le groupe utile) de réglages
+  `{cle "section.sous.cle", libelle, type (choix, texte, url, entier, nombre, booleen, secret), defaut, aide, choix,
+  min/max/pas, suggestions, redemarrage}`. Les `defaut` doivent égaler ceux du code (sinon la page ment).
+- `lire`/`poser` (clé pointée), `pour_la_page` (secrets → `valeur: ""` + `defini`), `valider` (ValueError ; secret :
+  "" = inchangé, None = effacé), `ecrire` (tomlkit importé à l'usage, commentaires gardés, remplacement atomique),
+  `autorise(reglages, mdp, local)` (mot de passe du MJ s'il existe, exigé même en local ; sinon `localhost`
+  seulement), `a_redemarrer` (port, HTTPS).
+- `Contexte.appliquer_reglages` : nouveau dict, essaie d'abord ce qui peut échouer (moteur de voix), écrit
+  `cfg.fichier` (`Config.fichier`, None en tests = en mémoire), puis reconstruit à chaud ce qui a changé (Moteurs,
+  voix via `tts_charges`, Reconnaissance, portraits, `parametres()` : historique, intervention, phrases_max, style).
+- Routes : `GET /api/reglages` → `{groupes, protege, local, fichier}` (suggestions `local.modele` = modèles
+  d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause) / 400 / 500
+  (écriture) / 200 `{..., redemarrage: [libellés]}` ; `POST /api/reglages/verifier {mot_de_passe}`.
+
 ## Portraits (portraits.py, facultatif)
 - `[portraits] moteur` : `aucun` (défaut, `Aucun`), `local` (`Local` : SD-Turbo via diffusers, option `portraits` hors
   de `tout`, chargé à la première génération, verrou, fp16 sur CUDA / fp32 au processeur) ou `en_ligne` (`EnLigne` :
@@ -68,8 +96,9 @@ Serveur sans état : l'historique vit dans le navigateur.
   création traduit la fiche en anglais (`Moteurs.fiche`, schéma `{prompt}` ; consigne : âge en chiffres, vêtements
   d'époque couvrants, contre les biais des générateurs) ; repli sans modèle : « genre, métier, apparence ».
 - Style : `STYLES` (portraits.py : peinture, manga, jdr80, photo, crayon → nom, résumé, prompt anglais, sans nom
-  d'illustrateur), choisi par le scénario (`style_portrait`, `style_valide`) ; sinon `[portraits] style`
-  (`Contexte.style_portrait()`). `/api/config` → `styles_portrait` [{id, nom, resume}] : seule source pour la page.
+  d'illustrateur), plus ceux de l'univers (`_styles.json`) ; choisi par le scénario (`style_portrait`,
+  `style_valide(style, perso)`) ; prompt : `prompt_du_style(choix, perso, defaut)` (univers, puis prédéfini, puis
+  `[portraits] style`), via `Contexte.style_portrait()`. Liste pour la page : `/api/styles`.
 - Pollinations gratuit : une image / 45 s par IP (HTTP 402 `FREE_LIMIT`, Retry-After) → `attente_demandee`, une
   attente puis un nouvel essai si ≤ `attente_max` (60 s), sinon message « réessayez dans N s ».
 - Stockage : `pnj/<id>.png|jpg|webp` à côté de la fiche (`Banque.portrait`, `enregistrer_portrait`,

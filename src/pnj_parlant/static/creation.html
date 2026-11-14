@@ -4,15 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Préparer l’univers</title>
-<!-- thème du scénario gardé par le navigateur : posé avant l'affichage (puis relu depuis le serveur) -->
-<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") || ""; } catch {}</script>
+<!-- thème du scénario (et CSS des thèmes de l'univers) gardés par le navigateur : posés avant l'affichage,
+     puis relus depuis le serveur (js/univers.js, chargerTheme) -->
+<script>try {
+  document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  const css = localStorage.getItem("theme-css");
+  if (css) document.head.appendChild(Object.assign(document.createElement("style"), { id: "themes-perso", textContent: css }));
+} catch {}</script>
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
   /* Trois parties (« #scenario », « #lieux », « #pnj ») dans une seule page : rien n'est perdu en passant
      de l'une à l'autre ; un point signale une partie qui a des modifications non enregistrées. */
   body:not([data-section=scenario]) #section-scenario, body:not([data-section=lieux]) #section-lieux,
-  body:not([data-section=pnj]) #section-pnj { display: none; }
+  body:not([data-section=pnj]) #section-pnj, body:not([data-section=apparence]) #section-apparence { display: none; }
   .sections { display: flex; gap: .25rem; margin: -.5rem 0 1.5rem; border-bottom: 1px solid var(--line);
               overflow-x: auto; scrollbar-width: none; }
   .sections a { display: flex; align-items: center; gap: .45rem; padding: .55rem 1.1rem; white-space: nowrap;
@@ -42,11 +47,29 @@
   .sous-titre { font: 400 1.2rem var(--display); margin: 1.4rem 0 .1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   button.petit { padding: .3rem .7rem; font-size: .9rem; }
 
-  /* Scénario : le texte à gauche, le thème et le partage à droite */
+  /* Scénario : le texte à gauche, le partage à droite */
   .colonnes-scenario { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
   @media (min-width: 60rem) { .colonnes-scenario { grid-template-columns: minmax(0, 1fr) 24rem; } }
+  /* Apparence : thèmes et styles de portrait (choix, puis éditeur sous la liste) */
+  .tete-carte { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+                margin-bottom: .25rem; }
+  .tete-carte h2 { margin: 0; }
   .themes { border: 0; padding: 0; margin: 0; min-width: 0;
-            display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+            display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+  .theme-carte, .style-carte { display: flex; flex-direction: column; gap: .35rem; }
+  .theme-carte .petit, .style-carte .petit { align-self: flex-start; }
+  .editeur { margin-top: .25rem; }
+  .editeur[hidden] { display: none; }
+  .palettes { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); margin-top: .9rem; }
+  .palette { border: 1px solid var(--line); border-radius: 10px; padding: .5rem .9rem .7rem; margin: 0; min-width: 0; }
+  .palette[hidden] { display: none; }
+  .palette legend { font-weight: 500; padding: 0 .3rem; }
+  label.couleur { display: flex; align-items: center; gap: .6rem; margin: .3rem 0; font-weight: 400; }
+  .couleur input[type=color] { width: 2.4rem; height: 1.8rem; padding: 0; border: 1px solid var(--line); border-radius: 6px;
+                               background: none; cursor: pointer; flex: none; }
+  .couleur code { margin-left: auto; color: var(--muted); font-size: .85rem; }
+  .alertes { list-style: none; padding: 0; margin: .8rem 0 0; color: var(--wax); font-weight: 500; }
+  .alertes:empty { display: none; }
   /* Chaque carte de thème porte son propre data-theme, donc s'affiche dans les couleurs du thème */
   label.theme-choix { margin: 0; position: relative; display: flex; flex-direction: column; gap: .1rem;
                       padding: .6rem .75rem; border-radius: 10px; cursor: pointer; font-weight: 400;
@@ -61,7 +84,7 @@
   .theme-choix:has(input:focus-visible) { outline: 3px solid var(--verdigris); outline-offset: 2px; }
   /* Style des portraits : même principe que les thèmes, sans aperçu de couleurs */
   .styles { border: 0; padding: 0; margin: 0; min-width: 0;
-            display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+            display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
   .styles[hidden], #stylesCarte[hidden] { display: none; }
   label.style-choix { margin: 0; position: relative; display: flex; flex-direction: column; gap: .1rem; cursor: pointer;
                       padding: .55rem .75rem; border-radius: 10px; border: 1px solid var(--line); font-weight: 400; }
@@ -166,9 +189,10 @@
     <a href="#scenario" data-section="scenario">Scénario <i class="modif" title="Modifications non enregistrées"></i></a>
     <a href="#lieux" data-section="lieux">Lieux <span class="nb" id="nbLieux"></span><i class="modif" title="Modifications non enregistrées"></i></a>
     <a href="#pnj" data-section="pnj">PNJ <span class="nb" id="nbPnj"></span><i class="modif" title="Modifications non enregistrées"></i></a>
+    <a href="#apparence" data-section="apparence">Apparence <i class="modif" title="Modifications non enregistrées"></i></a>
   </nav>
 
-  <!-- Scénario : univers, notes du MJ, thème, partage -->
+  <!-- Scénario : univers, notes du MJ, partage -->
   <section id="section-scenario" aria-label="Scénario">
     <div class="colonnes-scenario">
       <section class="carte">
@@ -185,20 +209,8 @@
       </section>
       <div class="pile">
         <section class="carte">
-          <h2>Thème graphique</h2>
-          <p class="hint">Couleurs des pages pour tous les joueurs, en clair ou en sombre selon leur appareil. Enregistré dès le choix.</p>
-          <fieldset class="themes" id="themes" aria-label="Thème graphique"></fieldset>
-          <p class="status" id="themeStatus"></p>
-        </section>
-        <section class="carte" id="stylesCarte" hidden>
-          <h2>Style des portraits</h2>
-          <p class="hint">Le style de dessin des portraits des PNJ de cet univers. Enregistré dès le choix ; les portraits déjà faits ne changent pas : refaites-les.</p>
-          <fieldset class="styles" id="styles" aria-label="Style des portraits"></fieldset>
-          <p class="status" id="styleStatus"></p>
-        </section>
-        <section class="carte">
           <h2>Partager l’univers</h2>
-          <p class="hint">Scénario, thème, lieux et PNJ de la banque, dans un seul fichier zip.</p>
+          <p class="hint">Scénario, apparence (thèmes et styles), lieux, PNJ de la banque et leurs portraits, dans un seul fichier zip.</p>
           <div class="actions">
             <button id="exportUniversBtn">Exporter l’univers</button>
           </div>
@@ -213,6 +225,68 @@
         </section>
       </div>
     </div>
+  </section>
+
+  <!-- Apparence : thèmes graphiques et styles de portrait, prédéfinis, modifiés ou créés pour l'univers -->
+  <section id="section-apparence" class="pile" aria-label="Apparence">
+    <section class="carte">
+      <div class="tete-carte">
+        <h2>Thème graphique</h2>
+        <button class="ghost petit" id="nouveauThemeBtn">Nouveau thème</button>
+      </div>
+      <p class="hint">Couleurs des pages pour tous les joueurs. Cliquez sur un thème pour le choisir (enregistré aussitôt), sur « Modifier » pour changer ses couleurs. Les thèmes modifiés ou créés appartiennent à l’univers et partent avec lui.</p>
+      <fieldset class="themes" id="themes" aria-label="Thème graphique"></fieldset>
+      <p class="status" id="themeStatus"></p>
+      <div class="editeur" id="editeurTheme" hidden>
+        <h3 class="sous-titre" id="editeurThemeTitre">Nouveau thème</h3>
+        <div class="grid2">
+          <div><label for="et-nom">Nom</label><input type="text" id="et-nom" maxlength="60"></div>
+          <div><label for="et-resume">Résumé <small>(facultatif)</small></label><input type="text" id="et-resume" maxlength="120"></div>
+        </div>
+        <label for="et-mode">Clair ou sombre</label>
+        <select id="et-mode">
+          <option value="auto">Selon l’appareil de chaque joueur (deux palettes)</option>
+          <option value="sombre">Toujours sombre</option>
+          <option value="clair">Toujours clair</option>
+        </select>
+        <div class="palettes">
+          <fieldset class="palette" id="palette-clair"><legend>Palette claire</legend></fieldset>
+          <fieldset class="palette" id="palette-sombre"><legend>Palette sombre</legend></fieldset>
+        </div>
+        <ul class="alertes" id="et-alertes" aria-live="polite"></ul>
+        <p class="hint">Aperçu en direct sur toute la page (avec la palette qui correspond à votre appareil) ; rien n’est enregistré avant « Enregistrer le thème ».</p>
+        <div class="actions">
+          <button id="et-enregistrer">Enregistrer le thème</button>
+          <button class="ghost" id="et-annuler">Annuler</button>
+          <button class="ghost" id="et-supprimer" hidden>Supprimer</button>
+          <span class="status" id="et-status"></span>
+        </div>
+      </div>
+    </section>
+    <section class="carte" id="stylesCarte" hidden>
+      <div class="tete-carte">
+        <h2>Style des portraits</h2>
+        <button class="ghost petit" id="nouveauStyleBtn">Nouveau style</button>
+      </div>
+      <p class="hint">Le style de dessin des portraits des PNJ de cet univers. Enregistré dès le choix ; les portraits déjà faits ne changent pas : refaites-les.</p>
+      <fieldset class="styles" id="styles" aria-label="Style des portraits"></fieldset>
+      <p class="status" id="styleStatus"></p>
+      <div class="editeur" id="editeurStyle" hidden>
+        <h3 class="sous-titre" id="editeurStyleTitre">Nouveau style</h3>
+        <div class="grid2">
+          <div><label for="es-nom">Nom</label><input type="text" id="es-nom" maxlength="60"></div>
+          <div><label for="es-resume">Résumé <small>(facultatif)</small></label><input type="text" id="es-resume" maxlength="160"></div>
+        </div>
+        <label for="es-prompt">Description pour le générateur <small>— en anglais, placée avant la description du PNJ ; ex. « watercolor painting, soft pastel colors, head and shoulders portrait »</small></label>
+        <textarea id="es-prompt" rows="3" maxlength="600"></textarea>
+        <div class="actions">
+          <button id="es-enregistrer">Enregistrer le style</button>
+          <button class="ghost" id="es-annuler">Annuler</button>
+          <button class="ghost" id="es-supprimer" hidden>Supprimer</button>
+          <span class="status" id="es-status"></span>
+        </div>
+      </div>
+    </section>
   </section>
 
   <!-- Lieux -->
@@ -325,8 +399,8 @@
 
 <script type="module">
 import { adressePortrait, esc, parLieu } from "./js/scene.js";
-import { THEMES, THEME_DEFAUT, appliquerTheme, confirmationImport, exporter, importerFichiers,
-         resumeImport } from "./js/univers.js";
+import { COULEURS, THEMES, THEME_DEFAUT, alertesContraste, appliquerTheme, confirmationImport, exporter, identifiant,
+         importerFichiers, poserThemesPerso, resumeImport, tousLesThemes } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["nom", "metier", "genre", "humeur", "timbre", "debit", "lieu", "apparence", "personnalite",
                 "connaissances", "secret", "salutation"];
@@ -344,7 +418,7 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
 
 // --- Parties de la page : scénario (« #scenario »), lieux (« #lieux »), PNJ (« #pnj ») ---------
 function afficherSection() {
-  const section = { "#lieux": "lieux", "#pnj": "pnj" }[location.hash] ?? "scenario";
+  const section = { "#lieux": "lieux", "#pnj": "pnj", "#apparence": "apparence" }[location.hash] ?? "scenario";
   document.body.dataset.section = section;
   for (const a of document.querySelectorAll(".sections a")) {
     if (a.dataset.section === section) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -355,7 +429,7 @@ afficherSection();
 
 // Un point sur l'onglet d'une partie qui a des modifications non enregistrées
 function majModifs() {
-  const modifs = { scenario: scenarioModifie(), lieux: lieuxDirty, pnj: dirty };
+  const modifs = { scenario: scenarioModifie(), lieux: lieuxDirty, pnj: dirty, apparence: apparenceModifiee() };
   for (const a of document.querySelectorAll(".sections a")) a.classList.toggle("a-enregistrer", modifs[a.dataset.section]);
 }
 for (const type of ["input", "change", "click"]) document.addEventListener(type, () => queueMicrotask(majModifs));
@@ -483,18 +557,46 @@ const scenarioModifie = () => $("monde").value !== scenarioCharge.monde || $("no
 // Enregistre `changements` par-dessus la version enregistrée (pas la saisie en cours du texte)
 const enregistrerScenario = (changements) => api("/api/scenario", { ...scenarioCharge, ...changements }, "PUT");
 
-// Thème graphique : une carte par thème, dans ses propres couleurs ; enregistré dès le choix
-// (avec le texte enregistré du scénario : les modifications en cours du texte ne partent pas avec lui)
-$("themes").innerHTML = THEMES.map(t => `
-  <label class="theme-choix" data-theme="${t.id}">
-    <input type="radio" name="theme" value="${t.id}">
-    <span class="pastilles" aria-hidden="true"><i style="background: var(--bg)"></i><i style="background: var(--glass)"></i><i style="background: var(--verdigris)"></i><i style="background: var(--wax)"></i></span>
-    <span class="nom">${esc(t.nom)}</span><small>${esc(t.resume)}</small>
-  </label>`).join("");
+// --- Apparence : thèmes et styles de portrait (prédéfinis, modifiés ou créés pour l'univers) -------------
+// /api/styles : {themes: {id: thème de l'univers}, portraits: [{id, nom, resume, prompt, origine}]} ; PUT remplace
+// tout. Choisir un thème ou un style l'enregistre aussitôt dans le scénario ; les éditeurs n'enregistrent qu'au clic.
+let stylesUnivers = { themes: {}, portraits: [] };
+const portraitsPerso = () => Object.fromEntries(stylesUnivers.portraits.filter(st => st.origine !== "predefini")
+  .map(st => [st.id, { nom: st.nom, resume: st.resume, prompt: st.prompt }]));
+const mention = (origine) => ({ perso: " · créé pour l’univers", modifie: " · modifié pour l’univers" }[origine] ?? "");
+
+async function chargerStyles() {
+  stylesUnivers = await api("/api/styles").catch(() => ({ themes: {}, portraits: [] }));
+  poserThemesPerso(stylesUnivers.themes);
+  afficherThemes();
+  afficherStyles();
+}
+async function enregistrerStyles(themes, portraits) {
+  stylesUnivers = await api("/api/styles", { themes, portraits }, "PUT");
+  poserThemesPerso(stylesUnivers.themes);
+  afficherThemes();
+  afficherStyles();
+}
+
+// Thèmes : une carte par thème, dans ses propres couleurs (data-theme)
+function afficherThemes() {
+  $("themes").innerHTML = tousLesThemes(stylesUnivers.themes).map(t => `
+    <div class="theme-carte">
+      <label class="theme-choix" data-theme="${t.id}">
+        <input type="radio" name="theme" value="${t.id}">
+        <span class="pastilles" aria-hidden="true"><i style="background: var(--bg)"></i><i style="background: var(--glass)"></i><i style="background: var(--verdigris)"></i><i style="background: var(--wax)"></i></span>
+        <span class="nom">${esc(t.nom)}</span><small>${esc(t.resume)}${mention(t.origine)}</small>
+      </label>
+      <button class="ghost petit" data-modifier-theme="${t.id}">Modifier</button>
+    </div>`).join("");
+  const radio = document.querySelector(`input[name=theme][value="${scenarioCharge.theme}"]`);
+  if (radio) radio.checked = true;
+}
 const themeChoisi = () => document.querySelector("input[name=theme]:checked")?.value ?? THEME_DEFAUT;
 function afficherTheme(id) {
   const theme = appliquerTheme(id);
-  document.querySelector(`input[name=theme][value="${theme}"]`).checked = true;
+  const radio = document.querySelector(`input[name=theme][value="${theme}"]`);
+  if (radio) radio.checked = true;
   return theme;
 }
 $("themes").onchange = async () => {
@@ -503,43 +605,206 @@ $("themes").onchange = async () => {
   try {
     const s = await enregistrerScenario({ theme });
     scenarioCharge = { ...s, theme: afficherTheme(s.theme) };
-    $("themeStatus").textContent = `Thème « ${THEMES.find(t => t.id === scenarioCharge.theme).nom} » enregistré.`;
+    $("themeStatus").textContent = `Thème « ${tousLesThemes(stylesUnivers.themes).find(t => t.id === scenarioCharge.theme).nom} » enregistré.`;
   } catch (e) {
     $("themeStatus").textContent = e.message;
     afficherTheme(scenarioCharge.theme);
   }
 };
 
-// Style de dessin des portraits : liste donnée par le serveur (/api/config), carte visible si les portraits
-// sont activés ; "" = style par défaut (config.toml), montré comme le premier (peinture)
-let stylesPortrait = [];
+// Éditeur de thème : palettes claire et sombre (couleurs une à une), aperçu en direct sur la page
+let editionTheme = null;  // {id (null : nouveau), origine, nom, resume, mode, clair, sombre}
+let themeModifie = false;
+const APERCU = "apercu-theme";  // identifiant de l'aperçu d'un thème pas encore enregistré
+const idApercu = () => editionTheme.id ?? APERCU;
+for (const mode of ["clair", "sombre"]) {
+  $(`palette-${mode}`).insertAdjacentHTML("beforeend", COULEURS.map(([c, nom]) => `
+    <label class="couleur"><input type="color" data-mode="${mode}" data-couleur="${c}"> ${esc(nom)} <code></code></label>`).join(""));
+}
+function themeEdite() {
+  const t = { nom: $("et-nom").value.trim(), resume: $("et-resume").value.trim(), mode: $("et-mode").value };
+  for (const palette of t.mode === "auto" ? ["clair", "sombre"] : [t.mode]) t[palette] = { ...editionTheme[palette] };
+  return t;
+}
+function apercuTheme() {
+  const t = themeEdite();
+  poserThemesPerso({ ...stylesUnivers.themes, [idApercu()]: { ...t, nom: t.nom || "Aperçu" } }, false);
+  document.documentElement.dataset.theme = idApercu();
+  $("palette-clair").hidden = t.mode === "sombre";
+  $("palette-sombre").hidden = t.mode === "clair";
+  for (const input of document.querySelectorAll(".palette input[type=color]")) {
+    input.value = editionTheme[input.dataset.mode][input.dataset.couleur];
+    input.nextElementSibling.textContent = input.value;
+  }
+  const alertes = (t.mode === "auto" ? ["clair", "sombre"] : [t.mode]).flatMap(p => alertesContraste(t[p])
+    .map(a => `<li>Palette ${p === "clair" ? "claire" : "sombre"} : ${esc(a.quoi)} peu lisible (contraste ${a.ratio.toFixed(1).replace(".", ",")}, 4,5 conseillé).</li>`));
+  $("et-alertes").innerHTML = alertes.join("");
+}
+function ouvrirEditeurTheme(id) {
+  if (apparenceModifiee() && !confirm("Les modifications en cours de l’apparence seront perdues. Continuer ?")) return;
+  fermerEditeurStyle();
+  const tous = tousLesThemes(stylesUnivers.themes);
+  const base = id ? tous.find(t => t.id === id) : tous.find(t => t.id === scenarioCharge.theme) ?? THEMES[0];
+  editionTheme = { id: id ?? null, origine: id ? base.origine : "perso", mode: base.mode,
+                   clair: { ...(base.clair ?? THEMES[0].clair) }, sombre: { ...(base.sombre ?? THEMES[0].sombre) } };
+  $("et-nom").value = id ? base.nom : "";
+  $("et-resume").value = id ? base.resume : "";
+  $("et-mode").value = base.mode;
+  $("editeurThemeTitre").textContent = id ? `Modifier « ${base.nom} »` : "Nouveau thème (à partir du thème choisi)";
+  $("et-supprimer").hidden = !id || base.origine === "predefini";
+  $("et-supprimer").textContent = base.origine === "modifie" ? "Rétablir le thème d’origine" : "Supprimer";
+  $("et-status").textContent = "";
+  $("editeurTheme").hidden = false;
+  themeModifie = false;
+  apercuTheme();
+  $("editeurTheme").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  (id ? $("et-mode") : $("et-nom")).focus();
+}
+function fermerEditeurTheme() {
+  if (!editionTheme) return;
+  editionTheme = null;
+  themeModifie = false;
+  $("editeurTheme").hidden = true;
+  poserThemesPerso(stylesUnivers.themes);  // retire l'aperçu
+  afficherTheme(scenarioCharge.theme);
+  majModifs();
+}
+$("themes").addEventListener("click", (e) => {
+  const id = e.target.closest("[data-modifier-theme]")?.dataset.modifierTheme;
+  if (id) ouvrirEditeurTheme(id);
+});
+$("nouveauThemeBtn").onclick = () => ouvrirEditeurTheme(null);
+$("editeurTheme").addEventListener("input", (e) => {
+  const { mode, couleur } = e.target.dataset;
+  if (mode) editionTheme[mode][couleur] = e.target.value;
+  themeModifie = true;
+  apercuTheme();
+});
+$("et-annuler").onclick = fermerEditeurTheme;
+$("et-enregistrer").onclick = async () => {
+  const t = themeEdite();
+  if (!t.nom) { $("et-status").textContent = "Donnez un nom au thème."; $("et-nom").focus(); return; }
+  const id = editionTheme.id ?? identifiant(t.nom, tousLesThemes(stylesUnivers.themes).map(x => x.id).concat(APERCU));
+  try {
+    await enregistrerStyles({ ...stylesUnivers.themes, [id]: t }, portraitsPerso());
+    if (!editionTheme.id) scenarioCharge = await enregistrerScenario({ theme: id });  // un nouveau thème est choisi
+    fermerEditeurTheme();
+    $("themeStatus").textContent = `Thème « ${t.nom} » enregistré.`;
+  } catch (e) { $("et-status").textContent = e.message; }
+};
+$("et-supprimer").onclick = async () => {
+  const { id, origine } = editionTheme;
+  const nom = tousLesThemes(stylesUnivers.themes).find(t => t.id === id)?.nom;
+  if (!confirm(origine === "modifie" ? `Rétablir les couleurs d’origine de « ${nom} » ?` : `Supprimer le thème « ${nom} » ?`)) return;
+  const themes = { ...stylesUnivers.themes };
+  delete themes[id];
+  try {
+    await enregistrerStyles(themes, portraitsPerso());
+    if (origine === "perso" && scenarioCharge.theme === id) scenarioCharge = await enregistrerScenario({ theme: "" });
+    fermerEditeurTheme();
+    $("themeStatus").textContent = origine === "modifie" ? `« ${nom} » a retrouvé ses couleurs d’origine.` : `Thème « ${nom} » supprimé.`;
+  } catch (e) { $("et-status").textContent = e.message; }
+};
+
+// Styles de portrait : carte visible si les portraits sont activés ; "" = style par défaut (config.toml),
+// montré comme le premier (peinture)
 const styleChoisi = () => document.querySelector("input[name=style]:checked")?.value ?? "";
-function afficherStyles(liste) {
-  stylesPortrait = liste;
-  $("styles").innerHTML = liste.map(st => `
-    <label class="style-choix">
-      <input type="radio" name="style" value="${esc(st.id)}">
-      <span class="nom">${esc(st.nom)}</span><small>${esc(st.resume)}</small>
-    </label>`).join("");
+function afficherStyles() {
+  $("styles").innerHTML = stylesUnivers.portraits.map(st => `
+    <div class="style-carte">
+      <label class="style-choix">
+        <input type="radio" name="style" value="${esc(st.id)}">
+        <span class="nom">${esc(st.nom)}</span><small>${esc(st.resume)}${mention(st.origine)}</small>
+      </label>
+      <button class="ghost petit" data-modifier-style="${esc(st.id)}">Modifier</button>
+    </div>`).join("");
   afficherStyle(scenarioCharge.style_portrait);
 }
 function afficherStyle(id) {
   const radio = document.querySelector(`input[name=style][value="${id}"]`) ?? document.querySelector("input[name=style]");
   if (radio) radio.checked = true;
-  const nom = stylesPortrait.find(st => st.id === (id || stylesPortrait[0]?.id))?.nom;
-  $("portraitStyle").textContent = nom ? `Style : ${nom} (onglet Scénario)` : "";
+  const liste = stylesUnivers.portraits;
+  const nom = liste.find(st => st.id === (id || liste[0]?.id))?.nom;
+  $("portraitStyle").textContent = nom ? `Style : ${nom} (onglet Apparence)` : "";
 }
 $("styles").onchange = async () => {
   try {
     const s = await enregistrerScenario({ style_portrait: styleChoisi() });
     scenarioCharge = { ...s, theme: scenarioCharge.theme };
     afficherStyle(s.style_portrait);
-    $("styleStatus").textContent = `Style « ${stylesPortrait.find(st => st.id === styleChoisi())?.nom} » enregistré.`;
+    $("styleStatus").textContent = `Style « ${stylesUnivers.portraits.find(st => st.id === styleChoisi())?.nom} » enregistré.`;
   } catch (e) {
     $("styleStatus").textContent = e.message;
     afficherStyle(scenarioCharge.style_portrait);
   }
 };
+
+// Éditeur de style : nom, résumé, description anglaise pour le générateur
+let editionStyle = null;  // {id (null : nouveau), origine}
+let styleModifie = false;
+function ouvrirEditeurStyle(id) {
+  if (apparenceModifiee() && !confirm("Les modifications en cours de l’apparence seront perdues. Continuer ?")) return;
+  fermerEditeurTheme();
+  const st = id ? stylesUnivers.portraits.find(x => x.id === id) : null;
+  editionStyle = { id: id ?? null, origine: st?.origine ?? "perso" };
+  $("es-nom").value = st?.nom ?? "";
+  $("es-resume").value = st?.resume ?? "";
+  $("es-prompt").value = st?.prompt ?? "";
+  $("editeurStyleTitre").textContent = st ? `Modifier « ${st.nom} »` : "Nouveau style";
+  $("es-supprimer").hidden = !st || st.origine === "predefini";
+  $("es-supprimer").textContent = st?.origine === "modifie" ? "Rétablir le style d’origine" : "Supprimer";
+  $("es-status").textContent = "";
+  $("editeurStyle").hidden = false;
+  styleModifie = false;
+  $("editeurStyle").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $(st ? "es-prompt" : "es-nom").focus();
+  majModifs();
+}
+function fermerEditeurStyle() {
+  if (!editionStyle) return;
+  editionStyle = null;
+  styleModifie = false;
+  $("editeurStyle").hidden = true;
+  majModifs();
+}
+$("styles").addEventListener("click", (e) => {
+  const id = e.target.closest("[data-modifier-style]")?.dataset.modifierStyle;
+  if (id) ouvrirEditeurStyle(id);
+});
+$("nouveauStyleBtn").onclick = () => ouvrirEditeurStyle(null);
+$("editeurStyle").addEventListener("input", () => { styleModifie = true; });
+$("es-annuler").onclick = fermerEditeurStyle;
+$("es-enregistrer").onclick = async () => {
+  const st = { nom: $("es-nom").value.trim(), resume: $("es-resume").value.trim(), prompt: $("es-prompt").value.trim() };
+  if (!st.nom || !st.prompt) { $("es-status").textContent = "Donnez un nom et une description au style."; return; }
+  const id = editionStyle.id ?? identifiant(st.nom, stylesUnivers.portraits.map(x => x.id));
+  try {
+    await enregistrerStyles(stylesUnivers.themes, { ...portraitsPerso(), [id]: st });
+    if (!editionStyle.id) {  // un nouveau style est choisi
+      scenarioCharge = { ...(await enregistrerScenario({ style_portrait: id })), theme: scenarioCharge.theme };
+      afficherStyle(id);
+    }
+    fermerEditeurStyle();
+    $("styleStatus").textContent = `Style « ${st.nom} » enregistré.`;
+  } catch (e) { $("es-status").textContent = e.message; }
+};
+$("es-supprimer").onclick = async () => {
+  const { id, origine } = editionStyle;
+  const nom = stylesUnivers.portraits.find(st => st.id === id)?.nom;
+  if (!confirm(origine === "modifie" ? `Rétablir le style d’origine de « ${nom} » ?` : `Supprimer le style « ${nom} » ?`)) return;
+  const portraits = portraitsPerso();
+  delete portraits[id];
+  try {
+    await enregistrerStyles(stylesUnivers.themes, portraits);
+    if (origine === "perso" && scenarioCharge.style_portrait === id) {
+      scenarioCharge = { ...(await enregistrerScenario({ style_portrait: "" })), theme: scenarioCharge.theme };
+      afficherStyle("");
+    }
+    fermerEditeurStyle();
+    $("styleStatus").textContent = origine === "modifie" ? `« ${nom} » a retrouvé sa description d’origine.` : `Style « ${nom} » supprimé.`;
+  } catch (e) { $("es-status").textContent = e.message; }
+};
+const apparenceModifiee = () => (!!editionTheme && themeModifie) || (!!editionStyle && styleModifie);
 
 async function loadScenario() {
   const s = await api("/api/scenario").catch(() => ({}));
@@ -580,6 +845,7 @@ for (const id of ["importZip", "importDossier"]) {
     try {
       const r = await importerFichiers(fichiers, $("garderPnj").checked);
       lieuxDirty = false;
+      await chargerStyles();
       await Promise.all([loadScenario(), loadLieux(), refreshBank()]);
       if (current.id && !bank.some(n => n.id === current.id)) delete current.id;  // fiche retirée de la banque
       $("universStatus").textContent = resumeImport(r);
@@ -775,18 +1041,19 @@ $("listenBtn").onclick = listen;
 $("saveScenarioBtn").onclick = saveScenario;
 document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
 $("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
-window.addEventListener("beforeunload", (e) => { if (dirty || lieuxDirty || scenarioModifie()) e.preventDefault(); });
+window.addEventListener("beforeunload", (e) => {
+  if (dirty || lieuxDirty || scenarioModifie() || apparenceModifiee()) e.preventDefault();
+});
 
 loadEngine();
 fillForm({});
 api("/api/config").then(c => {
   portraitsActifs = !!c.portraits;
   $("stylesCarte").hidden = !portraitsActifs;
-  afficherStyles(c.styles_portrait ?? []);
   majPortrait();
   renderBank();
 }).catch(() => {});
-loadScenario();
+chargerStyles().then(loadScenario);
 loadLieux().then(refreshBank);
 </script>
 </body>
