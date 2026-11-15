@@ -12,8 +12,11 @@ seulement depuis le PC du serveur. Les secrets (clé API, mot de passe) ne sont 
 """
 import copy
 import hmac
+import math
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 MOTEURS = [["claude", "Claude (API Anthropic, réseau)"], ["local", "Ollama (local)"],
@@ -31,8 +34,8 @@ CATALOGUE = [
     {"id": "moteurs", "titre": "Moteurs de langage",
      "aide": "Qui invente les PNJ et qui les fait parler. Création avec le réseau, dialogue local pour jouer sans.",
      "reglages": [
-         R("moteurs.creation", "Création des PNJ", "choix", "claude", choix=MOTEURS),
-         R("moteurs.dialogue", "Dialogues", "choix", "claude", choix=MOTEURS),
+         R("moteurs.creation", "Création des PNJ", "choix", "local", choix=MOTEURS),
+         R("moteurs.dialogue", "Dialogues", "choix", "local", choix=MOTEURS),
      ]},
     {"id": "claude", "titre": "Claude", "si": "claude",
      "aide": "API Anthropic : la clé se crée sur console.anthropic.com.",
@@ -70,6 +73,9 @@ CATALOGUE = [
          R("dialogue.historique", "Messages gardés", "entier", 12,
            "Ce que le PNJ se rappelle de la conversation ; plus = plus lent.", min=2, max=60),
          R("dialogue.phrases_max", "Phrases par réplique", "entier", 3, "Longueur « Normale ».", min=1, max=10),
+         R("dialogue.pnj_max", "PNJ en scène au plus", "entier", 3,
+           "Le PNJ qui parle compris. Au-delà de 3, les petits modèles locaux suivent mal une scène chargée : "
+           "réponses plus lentes, PNJ qui se confondent.", min=1, max=6),
          R("dialogue.intervention", "Interventions spontanées", "nombre", 0.3,
            "À plusieurs PNJ : chance qu'un autre réagisse de lui-même (0 à 1).", min=0, max=1, pas=0.05),
      ]},
@@ -107,7 +113,8 @@ CATALOGUE = [
            "Nécessaire pour le micro depuis un téléphone (certificat auto-signé à accepter).", redemarrage=True),
          R("serveur.port", "Port", "entier", 5000, min=1024, max=65535, redemarrage=True),
          R("serveur.mot_de_passe_mj", "Mot de passe du MJ", "secret", "",
-           "Protège ces réglages ; sans lui, ils ne se modifient que depuis le PC du serveur."),
+           "Protège ces réglages, et l’univers (scénario, lieux, PNJ, import) depuis un autre appareil ; sans lui, "
+           "ils ne se modifient que depuis le PC du serveur."),
      ]},
 ]
 REGLAGES = {r["cle"]: r for g in CATALOGUE for r in g["reglages"]}
@@ -173,15 +180,21 @@ def valider(changements):
             if isinstance(valeur, bool):
                 raise ValueError(f"{nom} : un nombre est attendu.")
             try:
+                if isinstance(valeur, str) and not valeur.strip():
+                    raise ValueError("vide")
+                if not math.isfinite(float(valeur)):
+                    raise ValueError("NaN ou infini")
                 valeur = int(valeur) if t == "entier" and float(valeur) == int(float(valeur)) else float(valeur)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 raise ValueError(f"{nom} : un nombre est attendu.") from None
             if t == "entier" and not isinstance(valeur, int):
                 raise ValueError(f"{nom} : un nombre entier est attendu.")
             if valeur < r.get("min", float("-inf")) or valeur > r.get("max", float("inf")):
                 raise ValueError(f"{nom} : entre {r['min']} et {r['max']}.")
         else:  # texte, url
-            valeur = " ".join(str(valeur or "").split())[:200]
+            if valeur is not None and not isinstance(valeur, str):
+                raise ValueError(f"{nom} : un texte est attendu.")
+            valeur = " ".join((valeur or "").split())[:200]
             if t == "url" and not valeur.startswith(("http://", "https://")):
                 raise ValueError(f"{nom} : une adresse commençant par http:// ou https:// est attendue.")
         propres[cle] = valeur
@@ -205,9 +218,13 @@ def ecrire(fichier, changements):
             table = table[partie]
         table[nom] = valeur
     fd, tmp = tempfile.mkstemp(dir=fichier.parent, prefix=".config-", suffix=".toml")
-    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-        f.write(tomlkit.dumps(doc))
-    os.replace(tmp, fichier)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(tomlkit.dumps(doc))
+        os.replace(tmp, fichier)
+    finally:  # échec (config.toml ouvert dans un éditeur) : la copie, qui contient la clé API, ne reste pas
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def autorise(reglages, mot_de_passe, local):
@@ -216,6 +233,40 @@ def autorise(reglages, mot_de_passe, local):
     if attendu:
         return hmac.compare_digest(str(mot_de_passe or "").encode(), attendu.encode())
     return local
+
+
+class Frein:
+    """Frein aux essais de mot de passe, par adresse : le serveur répond à plusieurs requêtes à la fois, une pause
+    par requête ne suffit donc pas. Après SEUIL échecs, chaque nouvel échec verrouille l'adresse pendant un délai
+    qui double (5 s, 10 s, 20 s… jusqu'à 5 min) ; pendant le verrou, aucun mot de passe n'est même comparé.
+    Un succès efface le compte ; une adresse oubliée depuis une heure aussi."""
+    SEUIL, DELAI, DELAI_MAX, OUBLI = 5, 5, 300, 3600
+
+    def __init__(self, horloge=time.monotonic):
+        self.horloge = horloge
+        self.essais = {}  # adresse → {echecs, jusqua (fin du verrou), dernier (dernier échec)}
+        self.verrou = threading.Lock()
+
+    def attente(self, adresse):
+        """Secondes de verrou restantes pour cette adresse (0 si elle peut essayer)."""
+        with self.verrou:
+            e = self.essais.get(adresse)
+            return max(0.0, e["jusqua"] - self.horloge()) if e else 0.0
+
+    def echec(self, adresse):
+        with self.verrou:
+            maintenant = self.horloge()
+            self.essais = {a: e for a, e in self.essais.items() if maintenant - e["dernier"] < self.OUBLI}
+            e = self.essais.setdefault(adresse, {"echecs": 0, "jusqua": 0.0, "dernier": maintenant})
+            e["echecs"] += 1
+            e["dernier"] = maintenant
+            if e["echecs"] >= self.SEUIL:
+                rang = min(e["echecs"] - self.SEUIL, 10)
+                e["jusqua"] = maintenant + min(self.DELAI_MAX, self.DELAI * 2 ** rang)
+
+    def succes(self, adresse):
+        with self.verrou:
+            self.essais.pop(adresse, None)
 
 
 def a_redemarrer(changements, avant):

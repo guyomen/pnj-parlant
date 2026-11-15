@@ -131,7 +131,7 @@ class Aucun:
         return False
 
     def generer(self, prompt, graine):
-        raise PortraitIndisponible("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.")
+        raise PortraitIndisponible("Portraits désactivés : choisissez un moteur dans la page Options.")
 
 
 class EnLigne:
@@ -177,7 +177,8 @@ class EnLigne:
             if attente is not None:
                 raise PortraitIndisponible("Le service gratuit de portraits limite le rythme (une image toutes les "
                                            f"45 s environ) : réessayez dans {round(attente)} s.") from e
-            raise PortraitIndisponible(f"Le service de portraits en ligne a refusé la demande (erreur {e.code}).") from e
+            raise PortraitIndisponible(
+                f"Le service de portraits en ligne a refusé la demande (erreur {e.code}).") from e
         except OSError as e:
             raise PortraitIndisponible("Le service de portraits en ligne ne répond pas (réseau coupé ?).") from e
         ext = type_image(octets)
@@ -240,9 +241,15 @@ class Local:
                 raise PortraitIndisponible(f"Modèle « {self.modele} » introuvable : la première génération le "
                                            "télécharge (réseau nécessaire, environ 2,5 Go).") from e
             import torch  # pylint: disable=import-outside-toplevel
-            hasard = torch.Generator(device=self._appareil).manual_seed(graine)
-            image = pipe(prompt=prompt, num_inference_steps=self.etapes, guidance_scale=0.0,
-                         width=self.taille, height=self.taille, generator=hasard).images[0]
+            try:
+                hasard = torch.Generator(device=self._appareil).manual_seed(graine)
+                image = pipe(prompt=prompt, num_inference_steps=self.etapes, guidance_scale=0.0,
+                             width=self.taille, height=self.taille, generator=hasard).images[0]
+            except RuntimeError as e:  # mémoire vidéo insuffisante (CUDA), en général avec Ollama chargé
+                log.warning("Portrait local : %s", e)
+                raise PortraitIndisponible("Portrait impossible : mémoire de la carte graphique insuffisante ? "
+                                           "Libérez-la (modèle de dialogue déchargé) ou choisissez « cpu » "
+                                           "pour [portraits.local] appareil.") from e
         tampon = io.BytesIO()
         image.save(tampon, format="PNG")
         return tampon.getvalue(), "png"

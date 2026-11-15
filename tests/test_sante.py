@@ -62,6 +62,7 @@ def test_moteurs_de_langage(diag, ctx, moteurs, monkeypatch):
     moteurs.etat_lmstudio = lambda: {"ok": False, "message": "LM Studio injoignable."}
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     problemes = ctx.problemes()
-    assert [p["cle"] for p in problemes] == ["claude", "lmstudio"] and problemes[1]["message"] == "LM Studio injoignable."
+    assert [p["cle"] for p in problemes] == ["claude", "lmstudio"]
+    assert problemes[1]["message"] == "LM Studio injoignable."
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # clé dans l'environnement : suffit
     assert diag["cles"]() == ["lmstudio"]

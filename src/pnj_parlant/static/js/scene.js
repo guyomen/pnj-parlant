@@ -225,6 +225,75 @@ export const groupeUtile = (groupe, valeurs) =>
 
 export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifié${n > 1 ? "s" : ""}` : "";
 
+// --- Modèle de l'IA, dans la vue Partie ------------------------------------------------------------------
+// `modele_dialogue` de /api/config ({moteur, cle, valeur, modeles, modifiable}, null avec Claude) → contenu de la
+// liste : {cle, valeur, options: [{valeur, libelle}], modifiable}, ou null (liste cachée). LM Studio : "" = le
+// modèle chargé dans LM Studio ; un modèle configuré mais introuvable reste affiché, marqué « introuvable ».
+export function choixModele(info) {
+  if (!info || typeof info.cle !== "string" || !["local", "lmstudio"].includes(info.moteur)) return null;
+  const valeur = typeof info.valeur === "string" ? info.valeur : "";
+  const noms = [...new Set((Array.isArray(info.modeles) ? info.modeles : []).filter(m => typeof m === "string" && m))];
+  const options = noms.map(m => ({ valeur: m, libelle: m }));
+  if (info.moteur === "lmstudio") options.unshift({ valeur: "", libelle: "Modèle chargé dans LM Studio" });
+  if (!options.some(o => o.valeur === valeur)) options.push({ valeur, libelle: `${valeur || "aucun"} (introuvable)` });
+  return { cle: info.cle, valeur, options, modifiable: info.modifiable !== false };
+}
+
+// Changement à envoyer à PUT /api/reglages quand le joueur choisit `choisi` ; null s'il n'y a rien à changer.
+export const changementModele = (choix, choisi) =>
+  choix && typeof choisi === "string" && choisi !== choix.valeur ? { [choix.cle]: choisi } : null;
+
+// --- Réponse NDJSON (/api/npc/talk) ------------------------------------------------------------------
+// Découpe le texte reçu en objets, une ligne JSON chacun ; `reste` = début de ligne encore incomplète
+// (fin : tout est arrivé, la dernière ligne compte aussi). Ligne illisible : erreur en français.
+export function decouperNdjson(tampon, fin = false) {
+  const lignes = tampon.split("\n");
+  const reste = fin ? "" : lignes.pop();
+  const objets = lignes.filter(l => l.trim()).map(l => {
+    try { return JSON.parse(l); } catch { throw new Error("Réponse du serveur illisible : réessayez."); }
+  });
+  return { objets, reste };
+}
+
+// --- Partie gardée dans le navigateur (localStorage « pnj-partie ») --------------------------------
+export const VERSION_PARTIE = 1;
+const estObjet = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+const estChaine = (x) => typeof x === "string";
+
+// Une sauvegarde lisible : bonne version (absente = sauvegarde d'avant les versions, même forme), PNJ
+// rencontrés avec un nom, journal en paires [qui, texte], et le reste du bon type quand il est présent.
+export function partieValide(p) {
+  if (!estObjet(p) || (p.version ?? VERSION_PARTIE) !== VERSION_PARTIE) return false;
+  if (!Array.isArray(p.rencontres) || !p.rencontres.length
+      || !p.rencontres.every(r => estObjet(r) && estChaine(r.nom) && r.nom)) return false;
+  if (!Array.isArray(p.lignes) || !p.lignes.every(l => Array.isArray(l) && l.length === 2 && l.every(estChaine))) return false;
+  if (p.scene !== undefined && !(Array.isArray(p.scene) && p.scene.every(estChaine))) return false;
+  if (p.history !== undefined && !(Array.isArray(p.history)
+      && p.history.every(h => estObjet(h) && estChaine(h.content) && (h.speaker === null || estChaine(h.speaker))))) return false;
+  if (p.dernier !== undefined && p.dernier !== null && !estChaine(p.dernier)) return false;
+  if (p.lieuActuel !== undefined && !estChaine(p.lieuActuel)) return false;
+  if (p.positions !== undefined && !estObjet(p.positions)) return false;
+  if (p.tokenUsage !== undefined && !estObjet(p.tokenUsage)) return false;
+  return true;
+}
+
+// Fiches d'une partie restaurée, relues sur le serveur (modifiées entre-temps en préparation). relues[i] : fiche
+// de la banque de rencontres[i], ou null (PNJ inventé, fiche supprimée, serveur muet) : la copie gardée reste.
+// La partie garde le nom (le journal et l'historique le citent), qui accompagne le voyageur, et la voix
+// réattribuée pendant la partie : celle de la banque n'est reprise que si elle ne se confond pas avec la voix
+// d'un PNJ de la scène placé avant lui.
+export function fichesRelues(rencontres, scene, relues) {
+  const fiches = rencontres.map((r, i) => relues[i] ? { ...relues[i], nom: r.nom, suit: r.suit, voix: relues[i].voix ?? r.voix } : r);
+  const voixScene = [];
+  for (const nom of scene) {
+    const i = rencontres.findIndex(r => r.nom === nom);
+    if (i < 0) continue;
+    if (relues[i] && voixScene.some(v => memeVoix(v, fiches[i].voix))) fiches[i] = { ...fiches[i], voix: rencontres[i].voix };
+    voixScene.push(fiches[i].voix);
+  }
+  return fiches;
+}
+
 // --- Bandeau d'alertes (js/bandeau.js) -----------------------------------------------------------
 // Ajoute une alerte {cle, niveau, message} (même clé : remplacée) ; la plus récente en dernier, `max` au plus
 export const ajouterAlerte = (alertes, alerte, max = 5) =>
@@ -237,3 +306,9 @@ export function alertesSante(alertes, problemes, fermees = []) {
     .filter(a => !fermees.includes(`${a.cle}|${a.message}`));
   return [...sante, ...alertes.filter(a => !a.cle.startsWith("sante:"))];
 }
+
+// Page ouverte en HTTP depuis un autre appareil (téléphone) : le navigateur refuse le micro (getUserMedia et
+// reconnaissance vocale exigent HTTPS ou localhost). Renvoie l'avertissement à afficher, ou null si tout va bien.
+export const messageContexteMicro = (securise) => securise !== false ? null
+  : "Cette page est ouverte en HTTP : le navigateur refusera le micro. Ouvrez-la en HTTPS (voir le README) "
+    + "ou tapez vos questions.";

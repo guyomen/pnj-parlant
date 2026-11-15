@@ -66,7 +66,8 @@ def parse_json(text):
 
 def liste_des_lieux(lieux):
     """« - Forge de Brom : Une forge enfumée… », une ligne par lieu (description publique seulement)."""
-    return "\n".join(f"- {l['nom']}" + (f" : {l['description']}" if l.get("description") else "") for l in lieux)
+    return "\n".join(
+        f"- {lieu['nom']}" + (f" : {lieu['description']}" if lieu.get("description") else "") for lieu in lieux)
 
 
 def demande(scenario, role="", nom="", genre="", consignes="", rng=random, lieu=None, lieux=()):

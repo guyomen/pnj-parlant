@@ -1,9 +1,9 @@
 import random
 
 import pytest
+from faux import FauxTTS
 
 from pnj_parlant import voix
-from conftest import FauxTTS
 
 FEMMES = {"alice", "bea", "nora"}
 

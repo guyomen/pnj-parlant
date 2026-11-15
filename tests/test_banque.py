@@ -72,7 +72,7 @@ class TestLieux:
     def test_identifiants_tires_du_nom_et_uniques(self, banque):
         lieux = banque.enregistrer_lieux([{"nom": "Forge"}, {"nom": "Forge"}, {"nom": "  "}, "pas un lieu",
                                           {"nom": "Porte nord", "description": "x" * 3000}])
-        assert [l["id"] for l in lieux] == ["forge", "forge-2", "porte-nord"]
+        assert [x["id"] for x in lieux] == ["forge", "forge-2", "porte-nord"]
         assert len(lieux[2]["description"]) == 2000
 
     def test_un_lieu_renomme_garde_son_identifiant(self, banque):
@@ -115,7 +115,8 @@ def _remplir(banque):
 def test_export_puis_import_dans_une_autre_banque(banque, tmp_path):
     _remplir(banque)
     archive = banque.exporter_zip()
-    assert sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist()) == ["_lieux.json", "_scenario.json", "brom-0001.json"]
+    noms = sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist())
+    assert noms == ["_lieux.json", "_scenario.json", "brom-0001.json"]
     autre = Banque(tmp_path / "autre")
     r = autre.importer(lire_zip(archive))
     assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
@@ -127,7 +128,8 @@ def test_import_remplace_ou_garde_les_pnj(banque):
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'})
     assert [n["nom"] for n in banque.liste()] == ["Ysolde"]
-    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""} and banque.lieux() == []  # absents : vidés
+    vide = {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
+    assert banque.scenario() == vide and banque.lieux() == []  # absents : vidés
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'}, remplacer=False)
     assert [n["nom"] for n in banque.liste()] == ["Brom", "Ysolde"]
@@ -135,7 +137,7 @@ def test_import_remplace_ou_garde_les_pnj(banque):
 
 
 def test_import_fichiers_douteux(banque):
-    r = banque.importer({"Mon PNJ.json": '{"nom": "Gaspard"}'.encode(),  # renommé à la main : nouvel identifiant
+    r = banque.importer({"Mon PNJ.json": b'{"nom": "Gaspard"}',  # renommé à la main : nouvel identifiant
                          "abime.json": b"{pas du json", "sans-nom.json": b'{"metier": "x"}',
                          "_autre.json": b"{}", "_scenario.json": "\ufeff{\"monde\": \"Brumecôte\"}".encode()})
     assert r["ignores"] == ["_autre.json", "abime.json", "sans-nom.json"]
@@ -160,3 +162,94 @@ def test_lire_zip_aplatit_et_protege(monkeypatch):
 def test_nom_de_fichier_sans_chemin():
     assert nom_de_fichier("../../etc/a-1.json") == "a-1.json"
     assert nom_de_fichier(r"C:\univers\a-1.json") == "a-1.json"
+
+
+# --- Intégrité des données sur disque (lot 3) ---------------------------------------
+
+class TestEcrituresAtomiques:
+    def test_aucun_fichier_temporaire_apres_ecriture(self, banque):
+        _remplir(banque)
+        banque.enregistrer_styles({})
+        assert sorted(p.name for p in banque.dossier.iterdir()) == [
+            "_lieux.json", "_scenario.json", "_styles.json", "brom-0001.json"]
+
+    def test_echec_du_remplacement_garde_l_ancien_fichier(self, banque, monkeypatch):
+        banque.enregistrer_scenario({"monde": "Ancien."})
+
+        def echec(src, dst):
+            raise OSError("fichier ouvert")
+        monkeypatch.setattr(module_banque.os, "replace", echec)
+        with pytest.raises(OSError):
+            banque.enregistrer_scenario({"monde": "Nouveau."})
+        monkeypatch.undo()
+        assert banque.scenario()["monde"] == "Ancien."
+        assert [p.name for p in banque.dossier.iterdir()] == ["_scenario.json"]  # pas de .tmp laissé
+
+    def test_lecteur_concurrent_ne_voit_jamais_un_fichier_vide(self, banque):
+        import threading
+        banque.enregistrer_scenario({"monde": "x" * 5000})
+        fini, vus = threading.Event(), []
+
+        def lecteur():
+            while not fini.is_set():
+                vus.append(banque.scenario()["monde"])
+        t = threading.Thread(target=lecteur)
+        t.start()
+        for i in range(150):
+            banque.enregistrer_scenario({"monde": str(i % 10) * 5000})
+        fini.set()
+        t.join()
+        assert vus and all(len(m) == 5000 for m in vus)
+
+
+class TestImportSur:
+    def test_oserror_pendant_l_import_garde_les_anciens_pnj(self, banque, monkeypatch):
+        _remplir(banque)
+        banque.ecrire("ysolde-0002", {"nom": "Ysolde"})
+        reel = module_banque._ecrire
+
+        def tombe(chemin, octets):
+            if chemin.name == "nouveau-0003.json":
+                raise OSError("disque plein")
+            return reel(chemin, octets)
+        monkeypatch.setattr(module_banque, "_ecrire", tombe)
+        with pytest.raises(OSError):
+            banque.importer({"nouveau-0003.json": b'{"nom": "Nouveau"}'})
+        monkeypatch.undo()
+        assert sorted(n["nom"] for n in banque.liste()) == ["Brom", "Ysolde"]
+
+    def test_remplacer_supprime_ce_qui_n_est_plus_dans_l_import(self, banque):
+        _remplir(banque)
+        banque.importer({"brom-0001.json": b'{"nom": "Brom II"}', "nouveau-0003.json": b'{"nom": "Nouveau"}'})
+        assert sorted(n["nom"] for n in banque.liste()) == ["Brom II", "Nouveau"]
+
+    def test_fiches_importees_normalisees(self, banque):
+        banque.importer({"x-0001.json": json.dumps({
+            "nom": "X" * 500, "metier": ["pas", "un", "texte"], "connaissances": "pas une liste", "genre": "robot",
+            "secret": None}).encode()})
+        npc = banque.lire("x-0001")
+        assert len(npc["nom"]) == 80 and npc["metier"] == "" and npc["connaissances"] == []
+        assert "genre" not in npc and npc["secret"] == ""
+
+
+class TestNormaliserFiche:
+    def test_champs_surs(self):
+        npc = module_banque.normaliser_fiche({
+            "nom": " Brom ", "connaissances": ["a", None, "", 3, {"x": 1}, "b" * 1000] + ["c"] * 50,
+            "genre": "masculin", "timbre": "bizarre", "debit": 5, "voix": {"name": "v"}, "lieu": ["x"]})
+        assert npc["nom"] == "Brom" and npc["genre"] == "masculin"
+        assert "timbre" not in npc and "debit" not in npc
+        assert npc["voix"] == {"name": "v"} and npc["lieu"] == ""
+        assert npc["connaissances"][:2] == ["a", "3"] and len(npc["connaissances"][2]) == 600
+        assert len(npc["connaissances"]) == module_banque.CONNAISSANCES_MAX
+        assert all(isinstance(npc[c], str) for c in ("metier", "apparence", "personnalite", "humeur", "secret",
+                                                     "salutation"))
+
+
+class TestPortraitOrphelin:
+    def test_pas_de_portrait_sans_fiche(self, banque):
+        png = b"\x89PNG\r\n\x1a\n"
+        assert banque.enregistrer_portrait("absent-0001", png, "png") is False
+        assert list(banque.dossier.glob("*")) == [] if banque.dossier.exists() else True
+        npc_id = banque.ajouter({"nom": "Brom"})
+        assert banque.enregistrer_portrait(npc_id, png, "png") is True

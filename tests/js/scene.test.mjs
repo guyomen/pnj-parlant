@@ -178,8 +178,9 @@ test("adressePortrait : seulement pour un PNJ de la banque qui a un portrait", (
 });
 
 // --- univers.js : messages de l'import et de l'accueil ---------------------------------
-const sourceUnivers = readFileSync(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url), "utf8");
-const univers = await import(`data:text/javascript;base64,${Buffer.from(sourceUnivers).toString("base64")}`);
+// Chargé par son chemin (il importe api.js et bandeau.js) : le package.json de la racine en fait un module ES.
+const univers = await import(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url));
+const api = await import(new URL("../../src/pnj_parlant/static/js/api.js", import.meta.url));
 
 test("univers : fichiers importables, résumés et confirmation", () => {
   const noms = univers.fichiersImportables([{ name: "a.json" }, { name: "B.ZIP" }, { name: "brom-0001.png" },
@@ -192,6 +193,129 @@ test("univers : fichiers importables, résumés et confirmation", () => {
   assert.match(univers.resumeUnivers(0, 0), /^Aucun univers chargé/);
   assert.match(univers.confirmationImport(4, false), /4 PNJ de la banque seront remplacés/);
   assert.match(univers.confirmationImport(4, true), /s’ajouteront/);
+  assert.match(univers.confirmationViderPartie(["Ysolde", "Brom"]), /^Une conversation est en cours avec Ysolde et Brom\. /);
+  assert.match(univers.confirmationViderPartie([]), /^Une conversation est en cours\. .*Annuler : elle est gardée/);
+});
+
+// Faux navigateur pour les fonctions qui appellent le serveur : fetch(url) → réponses[url]
+function fauxFetch(reponses) {
+  const appels = [];
+  globalThis.fetch = async (url, opts) => {
+    appels.push([url, opts]);
+    const r = reponses[url];
+    if (r instanceof Error) throw r;
+    return { ok: r.status < 400, status: r.status, json: async () => { if (r.corps === undefined) throw new SyntaxError("vide"); return r.corps; } };
+  };
+  return appels;
+}
+
+test("api : erreurs du serveur en français, serveur injoignable", async () => {
+  const appels = fauxFetch({ "/a": { status: 200, corps: { ok: 1 } }, "/b": { status: 400, corps: { error: "Nom absent." } },
+                             "/c": { status: 502 }, "/d": new TypeError("Failed to fetch") });
+  assert.deepEqual(await api.api("/a", { x: 1 }), { ok: 1 });
+  assert.equal(appels[0][1].method, "POST");
+  assert.equal(appels[0][1].body, '{"x":1}');
+  await assert.rejects(api.api("/b"), { message: "Nom absent." });
+  await assert.rejects(api.api("/c", undefined, "GET", { panne: true }), { message: "Erreur serveur (502)" });
+  await assert.rejects(api.api("/d"), { message: /^Serveur injoignable/ });  // pas « Failed to fetch »
+  const abandon = Object.assign(new Error("abandon"), { name: "AbortError" });
+  fauxFetch({ "/e": abandon });
+  await assert.rejects(api.api("/e"), { name: "AbortError" });  // Stop / Échap : pas une panne
+});
+
+// Mot de passe du MJ : serveur simulé qui n'accepte que « dragée » (en-tête encodé), sessionStorage en mémoire
+function serveurProtege() {
+  const stock = {}, appels = [];
+  globalThis.sessionStorage = { getItem: (k) => stock[k] ?? null, setItem: (k, v) => { stock[k] = v; },
+                                removeItem: (k) => { delete stock[k]; } };
+  globalThis.fetch = async (url, opts = {}) => {
+    const mdp = opts.headers?.["X-Mot-De-Passe-MJ"];
+    appels.push([url, mdp, opts.body]);
+    const bon = mdp === encodeURIComponent("dragée");
+    const corps = url === "/api/acces" ? { mj: bon, protege: true, local: false }
+      : bon ? { ok: 1 } : { error: mdp ? "Mot de passe du MJ incorrect." : "Mot de passe du MJ demandé.", mot_de_passe: true };
+    const status = url === "/api/acces" || bon ? 200 : 403;
+    return { ok: status < 400, status, json: async () => corps };
+  };
+  return { stock, appels };
+}
+
+test("api : mot de passe du MJ demandé sur 403, gardé pour l'onglet, oublié s'il est refusé", async () => {
+  const { stock, appels } = serveurProtege();
+  const saisies = ["faux", "dragée"];
+  const questions = [];
+  api.poserDialogueMdp(async (message) => { questions.push(message); return saisies.shift() ?? null; });
+  try {
+    assert.deepEqual(await api.api("/api/bank", { nom: "Ysolde" }), { ok: 1 });
+    assert.deepEqual(appels.map(a => a[1]), [undefined, "faux", encodeURIComponent("dragée")]);
+    assert.ok(appels.every(a => a[2] === '{"nom":"Ysolde"}'));  // même corps à chaque essai
+    assert.match(questions[0], /demande le mot de passe du MJ/);
+    assert.match(questions[1], /incorrect/);
+    assert.equal(stock["mdp-mj"], "dragée");  // la même clé que la page Options
+    assert.deepEqual(await api.api("/api/univers", undefined, "DELETE"), { ok: 1 });  // gardé : pas de question
+    assert.equal(questions.length, 2);
+    stock["mdp-mj"] = "ancien";  // mot de passe changé sur le serveur : oublié, puis « Annuler »
+    await assert.rejects(api.api("/api/bank", {}), { message: "Mot de passe du MJ incorrect." });
+    assert.equal(stock["mdp-mj"], undefined);
+    assert.equal(questions.length, 3);
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
+test("api : un 403 sans demande de mot de passe est rendu tel quel", async () => {
+  const appels = fauxFetch({ "/x": { status: 403, corps: { error: "Depuis le PC seulement." } } });
+  let demande = false;
+  api.poserDialogueMdp(async () => { demande = true; return "x"; });
+  try {
+    await assert.rejects(api.api("/x", {}), { message: "Depuis le PC seulement." });
+    assert.equal(demande, false);
+    assert.equal(appels.length, 1);
+  } finally { api.poserDialogueMdp(async () => null); }
+});
+
+test("api : question du mot de passe propre à la requête (modèle de l’IA dans la partie)", async () => {
+  const { stock } = serveurProtege();
+  const questions = [];
+  api.poserDialogueMdp(async (message) => { questions.push(message); return questions.length === 1 ? "faux" : "dragée"; });
+  try {
+    const message = "Changer le modèle de l’IA demande le mot de passe du MJ.";
+    assert.deepEqual(await api.api("/api/reglages", { changements: { "local.modele": "x" } }, "PUT", { message }), { ok: 1 });
+    assert.deepEqual(questions, [message, "Mot de passe du MJ incorrect. Réessayez :"]);
+    assert.equal(stock["mdp-mj"], "dragée");
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
+test("api : verifierAcces demande le mot de passe jusqu'à Annuler", async () => {
+  const { stock } = serveurProtege();
+  const saisies = ["dragée"];
+  api.poserDialogueMdp(async () => saisies.shift() ?? null);
+  try {
+    assert.deepEqual(await api.verifierAcces(), { mj: true, protege: true, local: false });
+    assert.equal(stock["mdp-mj"], "dragée");
+    stock["mdp-mj"] = "ancien";
+    assert.equal((await api.verifierAcces({ demander: false })).mj, false);
+    assert.equal(stock["mdp-mj"], undefined);  // refusé : oublié
+    assert.equal((await api.verifierAcces()).mj, false);  // « Annuler » : lecture seule
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
+test("univers : nom du zip exporté", () => {
+  assert.equal(univers.nomTelecharge('attachment; filename=scenario-2026-11-15-10h00.zip'), "scenario-2026-11-15-10h00.zip");
+  assert.equal(univers.nomTelecharge('attachment; filename="a b.zip"'), "a b.zip");
+  assert.equal(univers.nomTelecharge(null), "scenario.zip");
+});
+
+test("univers : thème gardé quand le serveur répond en erreur", async () => {
+  const ecrits = {};
+  globalThis.localStorage = { setItem: (k, v) => { ecrits[k] = v; } };
+  globalThis.document = { documentElement: { dataset: { theme: "givre" } }, getElementById: () => null };
+  try {
+    fauxFetch({ "/api/scenario": { status: 500, corps: { error: "panne" } }, "/api/styles": { status: 500 } });
+    assert.equal(await univers.chargerTheme(), "givre");
+    assert.deepEqual(ecrits, {});  // le thème par défaut n'est ni appliqué ni mémorisé
+    fauxFetch({ "/api/scenario": { status: 200, corps: { theme: "donjon" } }, "/api/styles": new TypeError("x") });
+    assert.equal(await univers.chargerTheme(), "donjon");
+    assert.equal(ecrits.theme, "donjon");
+  } finally { delete globalThis.document; delete globalThis.localStorage; }
 });
 
 // --- univers.js : thèmes graphiques -------------------------------------------------------
@@ -228,13 +352,27 @@ test("thèmes : CSS des thèmes de l'univers", () => {
   assert.match(lignes[1], /^@media \(prefers-color-scheme: dark\) \{ html\[data-theme="forge"\].* --bg: #121a17;/);
   assert.match(lignes[2], /data-theme="nuit"\] \{ color-scheme: dark; --bg: #121a17;.*--wax-ink: #fff4f0; --ombre:/);
   assert.equal(univers.cssThemes({}), "");
+  // couleur ou mode inattendus (le serveur les refuse déjà) : thème ignoré, rien n'est injecté
+  const piege = { ...p.sombre, bg: "red; } body { display: none" };
+  assert.equal(univers.cssThemes({ a: { mode: "sombre", sombre: piege }, b: { mode: "auto", clair: p.clair },
+                                   c: { mode: "x", x: p.sombre } }), "");
 });
 
 test("thèmes : contraste, alertes, identifiants", () => {
   assert.equal(Math.round(univers.contraste("#000000", "#ffffff")), 21);
   assert.equal(univers.contraste("#777777", "#777777"), 1);
   const illisible = { ...univers.THEMES[0].clair, ink: "#cfd6ce" };
-  assert.deepEqual(univers.alertesContraste(illisible).map(a => a.quoi), ["Texte sur le fond"]);
+  const quoi = univers.alertesContraste(illisible).map(a => a.quoi);
+  assert.ok(quoi.includes("Texte sur le fond"));
+  // anneau de focus : seuil de 3 (repère graphique), pas 4,5
+  const focus = { ...univers.THEMES[0].clair, verdigris: "#6fa392" };
+  assert.deepEqual(univers.alertesContraste(focus).map(a => [a.quoi, a.seuil]),
+    [["Anneau de focus sur le fond", 3], ["Anneau de focus sur les cartes", 3]]);
+  // cire des textes : mélange avec l'encre (comme color-mix en CSS)
+  assert.equal(univers.melange("#000000", "#ffffff", 60), "#666666");
+  assert.equal(univers.melange("#ff0000", "#0000ff", 100), "#ff0000");
+  const cire = { ...univers.THEMES[0].sombre, wax: "#2a1010", ink: "#2b1111" };
+  assert.ok(univers.alertesContraste(cire).some(a => a.quoi.startsWith("Texte en cire")));
   assert.equal(univers.identifiant("Forge noire !", []), "forge-noire");
   assert.equal(univers.identifiant("Parchemin", ["parchemin", "parchemin-2"]), "parchemin-3");
   assert.equal(univers.identifiant("Été brûlant", []), "ete-brulant");
@@ -258,6 +396,82 @@ test("options : valeur d'un champ, groupes utiles, résumé", () => {
   assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
 });
 
+test("choixModele : liste « Modèle de l’IA » de la vue Partie", () => {
+  assert.equal(scene.choixModele(null), null);
+  assert.equal(scene.choixModele(undefined), null);
+  assert.equal(scene.choixModele({ moteur: "claude", cle: "claude.modele", valeur: "x", modeles: [] }), null);
+  // Ollama : modèles installés, doublons et entrées vides retirés ; le modèle en cours choisi
+  assert.deepEqual(scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "qwen3:4b",
+                                       modeles: ["qwen3:4b", "gemma3:12b", "qwen3:4b", "", 3], modifiable: true }),
+    { cle: "local.modele", valeur: "qwen3:4b", modifiable: true,
+      options: [{ valeur: "qwen3:4b", libelle: "qwen3:4b" }, { valeur: "gemma3:12b", libelle: "gemma3:12b" }] });
+  // modèle configuré absent d'Ollama (ou Ollama arrêté) : toujours affiché, marqué
+  const absent = scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "mistral", modeles: [] });
+  assert.deepEqual(absent.options, [{ valeur: "mistral", libelle: "mistral (introuvable)" }]);
+  assert.equal(absent.modifiable, true);
+  // LM Studio : "" = le modèle chargé, proposé en premier
+  const lm = scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "", modeles: ["qwen"], modifiable: false });
+  assert.deepEqual(lm.options.map(o => o.valeur), ["", "qwen"]);
+  assert.equal(lm.options[0].libelle, "Modèle chargé dans LM Studio");
+  assert.equal(lm.modifiable, false);
+  assert.deepEqual(scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "gemma", modeles: null })
+    .options.map(o => o.libelle), ["Modèle chargé dans LM Studio", "gemma (introuvable)"]);
+});
+
+test("changementModele : réglage à envoyer, rien si le modèle ne change pas", () => {
+  const choix = scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "qwen3:4b", modeles: ["qwen3:4b", "gemma3:12b"] });
+  assert.deepEqual(scene.changementModele(choix, "gemma3:12b"), { "local.modele": "gemma3:12b" });
+  assert.equal(scene.changementModele(choix, "qwen3:4b"), null);
+  assert.equal(scene.changementModele(null, "gemma3:12b"), null);
+  const lm = scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "qwen", modeles: ["qwen"] });
+  assert.deepEqual(scene.changementModele(lm, ""), { "lmstudio.modele": "" });  // revenir au modèle chargé
+});
+
+test("NDJSON : lignes complètes, reste, ligne illisible", () => {
+  assert.deepEqual(scene.decouperNdjson('{"phrase":"Un."}\n{"phrase":"De'), { objets: [{ phrase: "Un." }], reste: '{"phrase":"De' });
+  assert.deepEqual(scene.decouperNdjson('\n{"usage":{}}\n\n'), { objets: [{ usage: {} }], reste: "" });
+  assert.deepEqual(scene.decouperNdjson('{"phrase":"Fin."}', true), { objets: [{ phrase: "Fin." }], reste: "" });
+  assert.deepEqual(scene.decouperNdjson("", true), { objets: [], reste: "" });
+  assert.throws(() => scene.decouperNdjson("<html>\n"), { message: /^Réponse du serveur illisible/ });
+});
+
+test("partie gardée : sauvegarde valide ou rejetée", () => {
+  const ok = { version: 1, rencontres: [YSOLDE], scene: ["Ysolde la Rousse"], dernier: null, lieuActuel: "",
+               history: [{ speaker: null, content: "Bonjour" }, { speaker: "Ysolde la Rousse", content: "Salut" }],
+               positions: {}, lignes: [["Vous", "Bonjour"], ["", "(Elle sourit.)"]], tokenUsage: { input: 3 } };
+  assert.equal(scene.partieValide(ok), true);
+  const { version, ...ancienne } = ok;
+  assert.equal(scene.partieValide(ancienne), true);  // sauvegarde d'avant les versions : même forme
+  for (const abimee of [null, 42, "texte", [], { ...ok, version: 2 }, { ...ok, rencontres: [] },
+                        { ...ok, rencontres: [{ metier: "x" }] }, { ...ok, lignes: "x" }, { ...ok, lignes: [["Vous"]] },
+                        { ...ok, scene: "Ysolde" }, { ...ok, history: [{ speaker: 3, content: "x" }] },
+                        { ...ok, history: {} }, { ...ok, positions: [] }, { ...ok, lieuActuel: 5 },
+                        { ...ok, dernier: {} }, { ...ok, tokenUsage: "x" }]) {
+    assert.equal(scene.partieValide(abimee), false, JSON.stringify(abimee));
+  }
+});
+
+test("partie restaurée : fiches relues sur le serveur", () => {
+  const v = (name) => ({ name });
+  const ysolde = { ...YSOLDE, id: "y", suit: true, voix: v("b"), humeur: "gaie" };  // voix réattribuée en partie
+  const brom = { ...BROM, id: "b", voix: v("a") };
+  const gaspard = { nom: "Gaspard", metier: "colporteur", voix: v("c") };          // inventé : pas dans la banque
+  const relues = [{ ...YSOLDE, nom: "Ysolde (renommée)", id: "y", voix: v("a"), humeur: "furieuse" },
+                  { ...BROM, id: "b", voix: v("d"), apparence: "Gigantesque." }, null];
+  const [y, b, g] = scene.fichesRelues([ysolde, brom, gaspard], ["Brom Œil-de-Fer", "Ysolde la Rousse"], relues);
+  assert.equal(y.humeur, "furieuse");                 // modifiée en préparation
+  assert.equal(y.nom, "Ysolde la Rousse");            // le journal la cite sous ce nom
+  assert.equal(y.suit, true);                         // accompagne toujours le voyageur
+  assert.equal(b.apparence, "Gigantesque.");
+  assert.equal(b.voix.name, "d");                     // nouvelle voix de la banque : reprise
+  assert.equal(y.voix.name, "a");                     // la voix de la banque ne gêne plus personne (Brom a « d »)
+  assert.equal(g, gaspard);                           // inventé, ou fiche supprimée : copie gardée
+  // la voix de la banque se confond avec celle d'un PNJ de la scène placé avant : la voix réattribuée reste
+  const [y2] = scene.fichesRelues([ysolde, brom], ["Brom Œil-de-Fer", "Ysolde la Rousse"],
+                                  [relues[0], { ...relues[1], voix: v("a") }]);
+  assert.equal(y2.voix.name, "b");
+});
+
 test("bandeau : ajout sans doublon, limite, problèmes du serveur", () => {
   let a = scene.ajouterAlerte([], { cle: "serveur", niveau: "erreur", message: "Injoignable" });
   a = scene.ajouterAlerte(a, { cle: "tts", niveau: "avertissement", message: "Voix" });
@@ -271,4 +485,27 @@ test("bandeau : ajout sans doublon, limite, problèmes du serveur", () => {
   assert.deepEqual(scene.alertesSante(sante, []).map(x => x.cle), ["tts", "serveur"]);  // problème réglé : retiré
   assert.deepEqual(scene.alertesSante([], [{ cle: "voix", niveau: "avertissement", message: "Autre" }],
                                       ["sante:voix|Pas de voix"]).length, 1);  // message changé : revient
+});
+
+test("page ouverte en HTTP : avertissement sur le micro, rien en HTTPS ou si l'information manque", () => {
+  assert.match(scene.messageContexteMicro(false), /HTTP.*micro.*HTTPS/);
+  assert.equal(scene.messageContexteMicro(true), null);
+  assert.equal(scene.messageContexteMicro(undefined), null);
+});
+
+test("styles : aucune couleur en dur hors des palettes, cibles tactiles, viewport dynamique", () => {
+  const dossier = new URL("../../src/pnj_parlant/static/", import.meta.url);
+  const css = readFileSync(new URL("style.css", dossier), "utf8");
+  const sansPalettes = css.slice(0, css.indexOf("/* Vert-de-gris")) + css.slice(css.indexOf("@media (max-width: 40rem)"));
+  const sansCommentaires = sansPalettes.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--(blanc|noir):[^;]*;/g, "");
+  assert.doesNotMatch(sansCommentaires, /(?<![-\w])(white|black)(?![-\w])|rgba?\(|#[0-9a-f]{3,8}\b/i);
+  assert.match(css, /@media \(pointer: coarse\)[\s\S]*min-height: 2\.75rem/);
+  for (const f of ["index.html", "creation.html"]) {
+    const html = readFileSync(new URL(f, dossier), "utf8");
+    const style = html.slice(html.indexOf("<style>"), html.indexOf("</style>")).replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(style, /(?<![-\w])(white|black)(?![-\w])|rgba?\(/i, f);
+    for (const m of style.matchAll(/[^;{}]*\b(?:100|70)vh[^;]*;/g))  // chaque 100vh a sa ligne 100dvh juste après
+      assert.ok(style.includes(m[0].replace(/vh\b/g, "dvh").trim()), `${f} : ${m[0]}`);
+    assert.doesNotMatch(html, /onsubmit=/, f);
+  }
 });

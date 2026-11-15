@@ -3,8 +3,8 @@ commentaires), application à chaud, mot de passe du MJ."""
 import tomllib
 
 import pytest
+from faux import FausseReconnaissance
 
-from conftest import FausseReconnaissance
 from pnj_parlant import reglages
 from pnj_parlant.config import Config
 from pnj_parlant.portraits import Aucun, EnLigne
@@ -23,6 +23,12 @@ modele = "claude-haiku-5-5"
 historique = 12       # messages gardés
 """
 DISTANT = {"REMOTE_ADDR": "192.168.1.30"}  # le téléphone d'un joueur
+
+
+@pytest.fixture(autouse=True)
+def sans_pause(monkeypatch):
+    """Un mauvais mot de passe fait attendre 1 s (serveur.time.sleep) : pas dans les tests."""
+    monkeypatch.setattr("pnj_parlant.serveur.time.sleep", lambda s: None)
 
 
 @pytest.fixture
@@ -139,15 +145,15 @@ def test_refus_ne_change_rien(web, fichier):
     assert fichier.read_text(encoding="utf-8") == avant
 
 
-def test_mot_de_passe_du_mj(web, monkeypatch):
-    monkeypatch.setattr("pnj_parlant.serveur.time.sleep", lambda s: None)
+def test_mot_de_passe_du_mj(web):
     assert web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}}).status_code == 200
     d = web.get("/api/reglages", environ_base=DISTANT).get_json()
     assert d["protege"] is True and d["local"] is False
     modif = {"changements": {"dialogue.historique": 30}}
     assert web.put("/api/reglages", json=modif).status_code == 403  # même depuis le PC
-    assert web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "faux"}, environ_base=DISTANT).status_code == 403
-    assert web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "dragon"}, environ_base=DISTANT).status_code == 200
+    faux, bon = {"X-Mot-De-Passe-MJ": "faux"}, {"X-Mot-De-Passe-MJ": "dragon"}
+    assert web.put("/api/reglages", json=modif, headers=faux, environ_base=DISTANT).status_code == 403
+    assert web.put("/api/reglages", json=modif, headers=bon, environ_base=DISTANT).status_code == 200
     assert web.post("/api/reglages/verifier", json={"mot_de_passe": "dragon"}).get_json() == {"ok": True}
     assert web.post("/api/reglages/verifier", json={"mot_de_passe": "x"}).status_code == 403
     # le mot de passe s'efface avec le mot de passe actuel ; ensuite, depuis le PC seulement
@@ -156,6 +162,73 @@ def test_mot_de_passe_du_mj(web, monkeypatch):
     assert web.get("/api/reglages").get_json()["protege"] is False
 
 
+def test_mot_de_passe_demande_par_la_partie_pas_par_les_options(web):
+    """PUT /api/reglages (vue Partie, js/api.js) dit à la page de demander le mot de passe ; la vérification du
+    formulaire de la page Options, non (elle a son propre champ)."""
+    web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}})
+    modif = {"changements": {"local.modele": "qwen3:4b"}}
+    r = web.put("/api/reglages", json=modif, environ_base=DISTANT)
+    assert r.status_code == 403 and r.get_json()["mot_de_passe"] is True
+    assert "demandé" in r.get_json()["error"]
+    r = web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "x"}, environ_base=DISTANT)
+    assert r.get_json() == {"error": "Mot de passe du MJ incorrect.", "mot_de_passe": True}
+    assert "mot_de_passe" not in web.post("/api/reglages/verifier", json={"mot_de_passe": "x"}).get_json()
+
+
+def test_sans_mot_de_passe_defini_le_refus_ne_le_demande_pas(web):
+    r = web.put("/api/reglages", json={"changements": {"local.modele": "qwen3:4b"}}, environ_base=DISTANT)
+    assert r.status_code == 403 and "mot_de_passe" not in r.get_json()
+
+
+def test_modele_de_dialogue_pour_la_partie(web, moteurs):
+    """/api/config : modèle de dialogue en cours et modèles installés (Ollama ou LM Studio), pour la liste de la
+    vue Partie ; `modifiable` suit les droits sur les réglages."""
+    moteurs.modeles_locaux = lambda: [{"nom": "faux", "taille": 1}, {"nom": "qwen3:4b", "taille": 2}]
+    assert web.get("/api/config").get_json()["modele_dialogue"] == {
+        "moteur": "local", "cle": "local.modele", "valeur": "faux", "modeles": ["faux", "qwen3:4b"],
+        "modifiable": True}
+    assert web.get("/api/config", environ_base=DISTANT).get_json()["modele_dialogue"]["modifiable"] is False
+    web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}})
+    # mot de passe défini : la liste est utilisable partout (il sera demandé au changement)
+    assert web.get("/api/config", environ_base=DISTANT).get_json()["modele_dialogue"]["modifiable"] is True
+    moteurs.choix["dialogue"] = "lmstudio"
+    d = web.get("/api/config").get_json()["modele_dialogue"]
+    assert (d["cle"], d["valeur"], d["modeles"]) == ("lmstudio.modele", "", ["qwen", "gemma"])
+    moteurs.lmstudio_cfg["modele"] = "gemma"
+    assert web.get("/api/config").get_json()["modele_dialogue"]["valeur"] == "gemma"
+    moteurs.choix["dialogue"] = "claude"
+    assert web.get("/api/config").get_json()["modele_dialogue"] is None
+
+
 def test_sans_fichier_en_memoire(client, ctx):
     assert client.put("/api/reglages", json={"changements": {"dialogue.intervention": 0.5}}).status_code == 200
     assert ctx.intervention == 0.5 and client.get("/api/reglages").get_json()["fichier"] is None
+
+
+def test_ecrire_ne_laisse_pas_de_copie_en_cas_d_echec(fichier, monkeypatch):
+    avant = fichier.read_text(encoding="utf-8")
+
+    def echec(src, dst):
+        raise PermissionError("ouvert dans un éditeur")
+    monkeypatch.setattr(reglages.os, "replace", echec)
+    with pytest.raises(PermissionError):
+        reglages.ecrire(fichier, {"dialogue.historique": 20})
+    assert [p.name for p in fichier.parent.iterdir()] == ["config.toml"]  # pas de .config-xxxx.toml (clé API)
+    assert fichier.read_text(encoding="utf-8") == avant
+
+
+def test_reglages_simultanes_s_appliquent_l_un_apres_l_autre(appli, fichier):
+    import threading
+    erreurs = []
+
+    def changer(valeur):
+        try:
+            with appli.test_client() as c:
+                c.put("/api/reglages", json={"dialogue.historique": valeur})
+        except Exception as e:  # pylint: disable=broad-except
+            erreurs.append(e)
+    fils = [threading.Thread(target=changer, args=(v,)) for v in (10, 11, 12, 13)]
+    [f.start() for f in fils]
+    [f.join() for f in fils]
+    assert not erreurs
+    assert tomllib.loads(fichier.read_text(encoding="utf-8"))["dialogue"]["historique"] in (10, 11, 12, 13)

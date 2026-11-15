@@ -1,6 +1,5 @@
 """Thèmes et styles de portrait créés ou modifiés pour l'univers (pnj/_styles.json, /api/styles)."""
 import io
-import json
 import zipfile
 
 import pytest

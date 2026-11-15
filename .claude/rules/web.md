@@ -27,32 +27,59 @@ paths:
   `retirer(cle)`, `requete(url, opts)` (fetch qui signale « serveur injoignable » et retire l'alerte dès qu'une
   requête aboutit ; AbortError ignorée), `verifierSante()` (/api/sante : alertes `sante:<cle>` remplacées à chaque
   appel ; fermées = « clé|message » en sessionStorage `alertes-fermees`). Logique pure dans scene.js
-  (`ajouterAlerte`, `alertesSante`, testées). index.html : `api`/`apiStream` passent par `requete` ; `alerte(message,
+  (`ajouterAlerte`, `alertesSante`, testées). `js/api.js` (commun aux deux pages et à univers.js) : `api(path, body,
+  method, {panne, signal, headers})` et `lireReponse(r, {panne})` (erreur du serveur en français ; `panne` : 5xx
+  aussi au bandeau) ; toute requête passe par `requete` (jamais « Failed to fetch »). Mot de passe du MJ (api.js) :
+  `mdpMJ`/`garderMdp` (sessionStorage `mdp-mj`, partagé avec la page Options), `enTeteMdp` (en-tête encodé),
+  `envoyer(path, opts)` (utilisé par `api`, l'import, les exemples et l'export de univers.js) : sur un 403 avec
+  `mot_de_passe`, oublie le mot de passe refusé, ouvre `demanderMotDePasse` (`<dialog class="dialogue-mdp">`, une
+  seule à la fois, remplaçable par `poserDialogueMdp` dans les tests) et renvoie la requête, jusqu'à « Annuler »
+  (question de la première demande : option `message` de `envoyer` et de `api`) ;
+  `verifierAcces({demander, message})` (/api/acces). Export : `fetch` + blob (`nomTelecharge`), plus de lien direct. bandeau.js n'utilise
+  `document` que par `globalThis.document` (chargé sous Node par les tests). index.html : `apiStream` (lecteur
+  relâché en `finally`, lignes découpées par `decouperNdjson` de scene.js, ligne illisible = erreur en français) ; `alerte(message,
   niveau, cle)` pour les erreurs des actions (création, banque, réplique, transcription, import, micro, `tts` en
   échec) ; `status()` reste pour les messages d'information. Diagnostic au chargement, toutes les minutes, à
-  l'ouverture des options et après un changement de réglages. creation.html : `api` via `requete`, et les erreurs
-  5xx vont aussi au bandeau (en plus du message près de l'action) ; diagnostic au chargement.
+  l'ouverture des options et après un changement de réglages. creation.html : `api` = celui de js/api.js avec
+  `panne` (erreurs 5xx aussi au bandeau, en plus du message près de l'action) ; diagnostic au chargement ; données
+  du serveur dans `innerHTML` toujours par `esc()`, identifiants dans les sélecteurs par `CSS.escape()`.
+  Accès (décision D1) : au chargement, `verifierAcces` (mot de passe demandé s'il existe) avant de lire scénario,
+  lieux et banque ; refus ou « Annuler » = alerte `acces` « Lecture seule » (retirée après une écriture acceptée).
+  Champs réservés au MJ absents de la réponse (`notes` du scénario, notes d'un lieu, `f-secret` d'une fiche de la
+  banque) : grisés par `masquerChamp` et jamais renvoyés (le serveur garde la valeur) ; révélés par la réponse d'un
+  enregistrement fait avec le mot de passe.
 - Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :
   `aria-current="page"` (posé par `afficherVue` dans index.html, en dur dans creation.html).
 - `style.css` : jetons (couleurs, `--rayon`, `--ombre`, `--page`, `--gouttiere`), `.page` + `.titre-page` (accueil,
   options, préparation), `.carte`, champs et boutons ; chaque page n'ajoute que sa mise en page. N'utiliser que les
-  variables de couleur (jamais de couleur en dur) : elles changent avec le thème.
+  variables de couleur (jamais de couleur en dur : `--blanc` et `--noir` pour les reflets et ombres, `color-mix`
+  avec `--ink` pour les teintes) : elles changent avec le thème. Un test JS le vérifie.
+- Accessibilité et téléphone : un texte en cire s'écrit `color-mix(in srgb, var(--wax) 60%, var(--ink))` (la cire
+  seule est trop claire en sombre) ; les noms des 2e et 3e PNJ ont un repère (`●`, `◆`) en plus de la couleur.
+  `@media (pointer: coarse)` : cibles d'au moins 2,75 rem. `100dvh` après chaque `100vh`. `.controls` (Parler)
+  est collé en bas de la partie (`.line` a un `scroll-margin-bottom`). Dégradés aux bords des onglets qui
+  défilent. Les champs `number`, `url` et `password` suivent le thème comme `text`. Changement de vue : titre de
+  l'onglet du navigateur et focus sur le titre. `messageContexteMicro` (scene.js) : avertissement en HTTP.
 
 ## Thèmes graphiques
 - Choisi par le scénario (`theme` de `_scenario.json`), posé sur `<html data-theme>` ; vide ou inconnu = défaut.
 - Couleurs dans `style.css` : un bloc `[data-theme=<id>]` (clair) + son `@media (prefers-color-scheme: dark)` par
   thème ; `:root, [data-theme=vert-de-gris]` = défaut ; `donjon` toujours sombre. Variables : `--bg --surface --ink
   --muted --line --glass` (principale, texte des boutons = `--surface`) `--verdigris` (appoint) `--wax --wax-ink`
-  (sceau « Parler »). Contraste visé ≥ 4,5 pour ink/bg, muted/surface, surface/glass, wax-ink/wax.
+  (sceau « Parler »). Contrastes visés (`PAIRES` dans js/univers.js, contrôlés pour chaque thème) : ≥ 4,5 pour les textes (ink, muted,
+  glass sur bg et surface ; surface/glass ; wax-ink/wax ; cire mêlée d'encre) et ≥ 3 pour `--verdigris`
+  (anneau de focus) sur bg et surface.
 - `js/univers.js` : `THEMES` = prédéfinis avec leurs palettes (`mode`, `clair`, `sombre`), **identiques à style.css**
   (test JS qui les compare, et qui vérifie leurs contrastes) ; `COULEURS` (variables + libellés de l'éditeur),
   `tousLesThemes(perso)` (origine predefini / modifie / perso), `cssThemes(perso)` (sélecteurs `html[data-theme="id"],
   body [data-theme="id"]` : plus précis que style.css, donc gagnants même placés avant ; `body […]` pour les
-  aperçus), `contraste`, `alertesContraste`, `identifiant(nom, pris)`, `poserThemesPerso(perso, garder)` (`<style
+  aperçus), `contraste`, `melange`, `alertesContraste`, `identifiant(nom, pris)`, `poserThemesPerso(perso, garder)` (`<style
   id="themes-perso">` ; garder = aussi dans localStorage `theme-css`, sinon simple aperçu), `appliquerTheme(id)`
-  (prédéfini ou de l'univers, sinon défaut ; localStorage `theme`), `chargerTheme()` (/api/scenario + /api/styles).
+  (prédéfini ou de l'univers, sinon défaut ; localStorage `theme`), `chargerTheme()` (/api/scenario + /api/styles ;
+  réponse en erreur = rien n'est appliqué ni mémorisé). `cssThemes` ignore un thème au mode inconnu ou à une couleur
+  qui n'est pas `#rrggbb` (le serveur les refuse déjà).
   Le script du `<head>` des deux pages pose `theme` et `theme-css` gardés avant l'affichage (pas de flash).
 - Thèmes et styles de l'univers : `/api/styles` (`stylesUnivers` = {themes: {id: thème}, portraits: liste complète}),
   PUT de tout (`enregistrerStyles(themes, portraitsPerso())`). Chargés avant le scénario (`chargerStyles().then(
@@ -89,22 +116,40 @@ paths:
   (valeur revenue à l'origine = retirée ; secret : "" ignoré, « Effacer » = null), point `.modifie`, barre collante
   « N réglages modifiés » (`resumeModifs`), groupes des moteurs non choisis en retrait (`groupeUtile`, recalculé si
   `moteurs.*` change). Accès (`afficherAcces`) : déverrouillé / formulaire du mot de passe / modifiable depuis ce PC /
-  lecture seule ; mot de passe gardé en sessionStorage `mdp-mj`, envoyé en `X-Mot-De-Passe-MJ`, oublié sur 403.
+  lecture seule ; mot de passe gardé en sessionStorage `mdp-mj`, envoyé en `X-Mot-De-Passe-MJ`, oublié sur 403
+  (champs réaffichés verrouillés, modifications gardées). `controle(r)` affiche la valeur en attente s'il y en a
+  une ; « Verrouiller » abandonne les modifications ; un nombre vidé reprend sa valeur en quittant le champ.
   Après enregistrement : message (fichier, réglages au redémarrage), `chargerConfig()` (la partie reprend les
   moteurs) et `refreshSys()`. `beforeunload` si des modifications attendent.
 - « État » (`refreshSys`, toutes les 3 s seulement sur la vue Options) : moteurs (/api/config), Ollama, LM Studio, GPU.
 - Fonctions pures (scene.js, testées) : `valeurReglage(type, champ)`, `groupeUtile(groupe, valeurs)`, `resumeModifs(n)`.
 
 ## État de la page de jeu
-- `npcs` (scène, 3 au plus), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est
+- `npcs` (scène, `maxPnj` au plus : `pnj_max` de /api/config, 3 par défaut ; message d'information au-delà de 3), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est
   nommé), `rencontres` (pour l'export), `lieuActuel`, `positions` (nom → lieu pendant la partie), `ici`.
 - `busy` + `setBusy(b)` : active/désactive tous les contrôles ; `libre()` attend la fin de l'action en cours.
+- Modèle de l'IA (`#modeleBloc.modele-ia`, dernier bloc de la colonne de droite, styles dans style.css) : liste
+  `#modeleSel` construite par `afficherModele()` (dans `chargerConfig`) d'après `modele_dialogue` de /api/config,
+  via `choixModele` (scene.js : null avec Claude = bloc caché ; LM Studio : "" = « Modèle chargé dans LM Studio » ;
+  modèle configuré absent = « (introuvable) ») ; désactivée par `setBusy` pendant une action et si `modifiable` est
+  faux (titre explicatif). Au changement : `changementModele` → `api("/api/reglages", {changements}, "PUT",
+  {message})` sous `setBusy(true)` (mot de passe du MJ demandé par `envoyer`, gardé en `mdp-mj`), puis
+  `chargerConfig()` et `verifierSante()` ; échec ou « Annuler » = liste remise, alerte `modele`.
 - `parole` (`debutParole` / `finParole` / `stopNpc`) : prise de parole en cours, `{ctrl: AbortController, stop}`.
   Stop/Échap annule requêtes et son ; une réplique interrompue est raccourcie dans `history` à ce qui a été dit.
 - Options mémorisées dans localStorage (`OPTIONS`, `DESACTIVEES` = désactivées par défaut).
-- Conversation gardée dans localStorage (`CLE_PARTIE` : rencontres, scène, history, lieu, positions, journal
-  affiché, tokens) : `sauverPartie` à chaque `setBusy(false)`, `retirer` et `pagehide` ; `restaurerPartie` au
-  chargement (après les lieux et la banque ; aucune sauvegarde avant, `partieRestauree`).
+- Conversation gardée dans localStorage (`CLE_PARTIE` : `version` (`VERSION_PARTIE`), rencontres, scène, history,
+  lieu, positions, journal affiché, tokens) : `sauverPartie` à chaque `setBusy(false)`, `retirer` et `pagehide`
+  (stockage refusé : une alerte `sauvegarde`, une fois) ; `restaurerPartie` au chargement, seulement si les lieux et
+  la banque ont été lus (`chargerLieux`/`refreshBank` renvoient faux sinon ; aucune sauvegarde avant,
+  `partieRestauree`). Sauvegarde vérifiée par `partieValide` (scene.js) ; illisible ou en échec → clé effacée,
+  `viderPartie()`, alerte. Décision D5 : les fiches de la banque sont relues (`/api/bank/<id>`, 404 ou PNJ inventé
+  = copie gardée) et fusionnées par `fichesRelues` (scene.js : garde nom, `suit` et voix réattribuée).
+- `viderPartie()` : remise à zéro de la partie (« Nouvelle table », nouvel univers chargé depuis l'accueil si le
+  joueur accepte `confirmationViderPartie` ; « Annuler » garde la partie).
+- Gardes : `generate`/`loadFromBank` ne font rien si `busy` ; `debutParole` fait taire une parole en cours ;
+  `jouerTours`, `saluer`, `changerLieu` en `try/finally` (contrôles toujours réactivés) ; `send`/`discuter` appelés
+  avec `.catch` ; question dictée refusée (`envoyerDictee`) laissée dans le champ.
 
 ## Dialogue côté navigateur
 - Répond le PNJ cité (`interpelles` : nom ou métier), sinon `dernier` ; un PNJ questionné par un autre répond juste
@@ -122,7 +167,10 @@ paths:
 
 ## Micro
 - Le micro exige `localhost` ou HTTPS. `listenLocal(ouvert)` : MediaRecorder + seuil adaptatif, arrêt après
-  1,2 s de silence, puis /api/stt ; sinon Web Speech API (`recognition`).
+  1,2 s de silence, puis /api/stt (via `requete`, annulée par Échap : `transcription`) ; sinon Web Speech API
+  (`recognition`, démarrée par `ecouterNavigateur` : `start()` sous `try`). `ecouteLocale` est posé avant
+  `getUserMedia` (pas de double écoute) ; la minuterie arrête son propre enregistrement (`arreter`), pas la globale
+  `stopListening`. Barre d'espace = « Parler » seulement dans la vue `jeu`.
 - Couper la parole au PNJ : option « Parler interrompt le PNJ » (`optInterrompre` : bouton actif pendant la
   `parole`, barre d'espace) ; option « Couper le PNJ dès que vous parlez » (`optCoupure`, désactivée par défaut :
   `veiller` ouvre le micro pendant la `parole`, `detecteurVoix` décide, puis `listenLocal({stream, bruit})`

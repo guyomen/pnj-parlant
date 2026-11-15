@@ -1,4 +1,4 @@
-"""État de la machine affiché sur la page de jeu : carte graphique NVIDIA et modèles chargés par Ollama."""
+"""État de la machine affiché sur la page Options : carte graphique NVIDIA et modèles chargés par Ollama."""
 import json
 import subprocess
 import urllib.request

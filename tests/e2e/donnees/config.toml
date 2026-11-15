@@ -1,0 +1,33 @@
+[moteurs]
+creation = "local"
+dialogue = "local"
+[claude]
+cle_api = "sk-ant-factice"
+modele = "claude-haiku-5-5"
+[claude.generation]
+max_tokens = 100
+effort = "low"
+[claude.dialogue]
+max_tokens = 100
+effort = "low"
+[local]
+url = "http://127.0.0.1:5918"
+modele = "faux"
+[local.generation]
+max_tokens = 100
+[local.dialogue]
+max_tokens = 100
+[dialogue]
+historique = 12
+[voix]
+moteur = "piper"
+[voix.piper]
+dossier = "voix-absentes"
+[reconnaissance]
+moteur = "navigateur"
+[banque]
+dossier = "pnj"
+[serveur]
+hote = "127.0.0.1"
+port = 5917
+https = false

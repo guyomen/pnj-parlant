@@ -32,12 +32,14 @@ src/pnj_parlant/
   generer.py         # pnj-banque 20 [--metier ...]
   static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes),
                      # js/scene.js (testé) + js/univers.js (univers, thèmes) + js/bandeau.js (alertes)
+                     # + js/api.js (requêtes communes aux deux pages)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
 lancer.bat, docker-compose.yml  # lancement Windows, Ollama dans Docker
 scripts/ecran.sh     # libère la VRAM sous Linux (écran graphique coupé)
 docs/                # installation-windows.md : guide pas à pas Windows
+LICENSE              # GPL-3.0 ; static/fonts/OFL.txt pour les polices (SIL OFL 1.1)
 ```
 Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` / `dialogue` = `"claude"`, `"local"`
 (Ollama) ou `"lmstudio"` ;
@@ -47,7 +49,8 @@ Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` /
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
 - `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage,
-  réglages à chaud (`/api/reglages`, mot de passe du MJ).
+  réglages à chaud (`/api/reglages`, mot de passe du MJ), accès à l'univers hors du PC (`@mj`, secrets masqués,
+  frein aux essais) et tailles maximales des requêtes.
 - `web.md` : vues (accueil, partie, options : réglages du navigateur et du serveur), barre du haut, thèmes graphiques et onglet Apparence (thèmes et
   styles de portrait éditables par univers), conversation gardée, dialogue,
   lieux, univers, micro.

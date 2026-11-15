@@ -33,10 +33,10 @@ def test_taille_de_fenetre_de_contexte_connue_ou_non():
 class FausseReponseOllama:
     """Réponse HTTP en streaming d'Ollama : une ligne JSON par morceau de texte."""
 
-    def __init__(self, morceaux, usage=None):
+    def __init__(self, morceaux, usage=None, termine=True):
         self.lignes = [json.dumps({"message": {"content": m}}).encode() + b"\n" for m in morceaux]
-        if usage:
-            self.lignes.append(json.dumps({"done": True, **usage}).encode() + b"\n")
+        if termine:  # Ollama finit toujours par "done": true ; son absence = flux coupé net
+            self.lignes.append(json.dumps({"done": True, **(usage or {})}).encode() + b"\n")
         self.fermee = False
 
     def __iter__(self):

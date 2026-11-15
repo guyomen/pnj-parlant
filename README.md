@@ -28,6 +28,10 @@ Ouvrez ensuite http://localhost:5000 dans Chrome ou Edge.
 
 Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `pnj-parlant`, puis ouvrez `https://<ip-du-pc>:5000` et acceptez l'avertissement de certificat.
 
+Par défaut le serveur écoute sur toutes les interfaces (`hote = "0.0.0.0"`), pour les téléphones du Wi-Fi. Pour jouer seul sur le PC, `hote = "127.0.0.1"` suffit : aucun autre appareil ne peut alors l'atteindre.
+
+**Ce que peut faire un autre appareil que le PC du serveur** : jouer (parler aux PNJ, en créer pendant la partie, changer de lieu), mais pas modifier l'univers. Toute écriture (scénario, lieux, thèmes et styles, PNJ de la banque, portraits, import, export, univers d'exemple, « Nouvelle table », moteur de voix) demande le **mot de passe du MJ** (voir [Configuration](#configuration)) : la page le demande dans une petite fenêtre et le garde le temps de l'onglet. Sans mot de passe défini, l'univers ne se modifie que depuis le PC. Les secrets des PNJ et les notes du MJ (scénario et lieux) ne sont envoyés qu'avec le mot de passe : le téléphone d'un joueur ne les voit pas, et le serveur relit le secret du PNJ dans la banque au moment du dialogue. Après cinq mauvais mots de passe, l'appareil doit attendre (5 s, puis 10 s, 20 s… jusqu'à 5 minutes). Sur le PC lui-même, rien n'est demandé.
+
 ## Comment ça marche
 
 - `POST /api/npc/generate` : Haiku renvoie une fiche JSON (nom, métier, humeur, rumeurs, secret, salutation, timbre, débit). Humeur, trait et initiale du nom sont tirés au sort côté Python pour éviter les PNJ qui se ressemblent.
@@ -48,14 +52,15 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 
 **Bandeau d'alertes** : sous la barre du haut, sur toutes les pages, un bandeau signale ce qui ne marche pas alors que le serveur tourne, avec la marche à suivre : paquet absent (tomlkit, moteur de voix, faster-whisper, option portraits), voix ou modèle Whisper manquants, Ollama ou LM Studio arrêtés, modèle local absent, clé API Claude manquante. Il affiche aussi les erreurs en cours de route : serveur injoignable, moteur indisponible pendant une réplique ou une création, micro refusé, synthèse vocale du serveur en échec (la voix du navigateur prend le relais). Les mêmes problèmes s'affichent dans la console au démarrage. Chaque message se ferme d'un clic (×) ; un problème fermé ne revient pas avant la fermeture de l'onglet, sauf si son message change.
 
-La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
+La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur. Au rechargement, les fiches des PNJ sont relues sur le serveur : une fiche modifiée entre-temps en préparation est reprise (la conversation, les compagnons et les voix changées en partie sont gardés ; un PNJ supprimé de la banque reste tel qu'il était). Une sauvegarde illisible est effacée, avec un message.
 
-Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
+Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace, dans la partie), ou tapez votre question.
 
 - **Stop** (ou Échap) fait taire le PNJ ; il ne se souvient que de ce qu'il a eu le temps de dire.
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
 - Sous la discussion : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle.
+- **Modèle de l’IA** (en bas de la colonne de droite, seulement si les dialogues passent par Ollama ou LM Studio) : la liste des modèles installés, sur le modèle en cours. Un autre choix s'applique aussitôt, sans relancer, et s'enregistre dans `config.toml` (`modele` de `[local]` ou de `[lmstudio]`, comme dans les options ; avec Ollama, il sert aussi à la création des PNJ si elle passe par Ollama). Avec LM Studio, « Modèle chargé dans LM Studio » reprend celui qui y est chargé. La liste est grisée pendant qu'un PNJ parle. Hors du PC du serveur, elle demande le mot de passe du MJ (gardé jusqu'à la fermeture de l'onglet) ; sans mot de passe défini, elle ne se change que depuis le PC.
 
 La page **Options** a trois parties (rubriques à gauche, en haut sur téléphone) :
 
@@ -67,13 +72,13 @@ La page **Options** a trois parties (rubriques à gauche, en haut sur téléphon
 |---|---|
 | « Parler » interrompt le PNJ | Pendant qu'il parle, **Parler** lui coupe la parole et vous écoute aussitôt. Décochée : il faut attendre la fin ou cliquer sur Stop. |
 | Couper le PNJ dès que vous parlez | Désactivée par défaut. Le micro reste ouvert pendant que le PNJ parle : dès que vous parlez, il se tait et votre phrase devient la question. Prenez un casque : avec des haut-parleurs, la voix du PNJ peut le couper elle-même (surtout la voix de secours du navigateur). |
-| Plusieurs PNJ dans la scène | Jusqu'à 3 PNJ (**Ajouter à la scène**). Répond le PNJ que vous nommez (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un autre pose une question lui répond. **Laissez-les discuter** fait répondre un autre PNJ. |
+| Plusieurs PNJ dans la scène | Jusqu'à 3 PNJ par défaut (**Ajouter à la scène**) ; `pnj_max` dans `[dialogue]` (ou la page Options) change cette limite, de 1 à 6. Au-delà de 3, les petits modèles locaux suivent mal une scène chargée (réponses plus lentes, PNJ qui se confondent) : un message le rappelle. Répond le PNJ que vous nommez (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un autre pose une question lui répond. **Laissez-les discuter** fait répondre un autre PNJ. |
 | Interventions spontanées | À plusieurs : un autre PNJ réagit parfois de lui-même (probabilité `intervention` dans `[dialogue]`). |
 | Faire entrer un PNJ | À plusieurs : le modèle invente un nouveau venu d'après la conversation (« la fille de l'aubergiste »), ou au hasard si le champ est vide. |
 
 ## Préparer le scénario et les PNJ (pour jouer sans réseau)
 
-Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par Claude : faites-la avant de partir, avec le réseau.
+Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par le moteur choisi dans `[moteurs] creation` (`"local"` par défaut, sur ce PC ; `"claude"` demande le réseau et une clé API) : si c'est Claude, faites-la avant de partir.
 
 La page a quatre onglets : **Scénario**, **Lieux**, **PNJ** (avec le nombre de lieux et de PNJ) et **Apparence**. Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
 
@@ -108,14 +113,14 @@ Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, note
 
 L'onglet **Apparence** de la page de préparation règle l'allure de l'univers :
 
-- **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs. Cinq thèmes prédéfinis (Vert-de-gris, Parchemin, Sylve, Givre, Donjon), en clair ou en sombre selon le réglage de chaque appareil. Un clic choisit un thème (enregistré aussitôt). **Modifier** ouvre l'éditeur : nom, résumé, « selon l'appareil » (une palette claire et une sombre) ou toujours sombre / toujours clair, et les neuf couleurs de chaque palette (fond, cartes, texte, texte secondaire, traits, couleur principale, couleur d'appoint, sceau « Parler » et son texte). L'aperçu se fait en direct sur toute la page, et une alerte signale un texte peu lisible (contraste inférieur à 4,5). **Nouveau thème** part du thème choisi.
+- **Thème graphique** : les couleurs de toutes les pages pour tous les joueurs. Cinq thèmes prédéfinis (Vert-de-gris, Parchemin, Sylve, Givre, Donjon), en clair ou en sombre selon le réglage de chaque appareil. Un clic choisit un thème (enregistré aussitôt). **Modifier** ouvre l'éditeur : nom, résumé, « selon l'appareil » (une palette claire et une sombre) ou toujours sombre / toujours clair, et les neuf couleurs de chaque palette (fond, cartes, texte, texte secondaire, traits, couleur principale, couleur d'appoint, sceau « Parler » et son texte). L'aperçu se fait en direct sur toute la page, et une alerte signale un texte peu lisible (contraste inférieur à 4,5, ou à 3 pour l'anneau de focus). **Nouveau thème** part du thème choisi.
 - **Style des portraits** (si un moteur de portraits est configuré) : voir [Portraits des PNJ](#portraits-des-pnj-facultatif). **Modifier** change le nom, le résumé et la description anglaise envoyée au générateur ; **Nouveau style** en crée un (ex. aquarelle, gravure).
 
 Un thème ou un style prédéfini modifié peut être rétabli ; un thème ou un style créé peut être supprimé. Les thèmes et styles modifiés ou créés appartiennent à l'univers : ils partent dans le zip exporté et sont effacés par « Nouvelle table ».
 
 ### Partager un univers
 
-Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque.
+Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers » (si une conversation est en cours, il demande s'il faut l'effacer ; « Annuler » la garde). L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
 
 ### Univers d'exemple : Pré-Novice
 
@@ -175,7 +180,7 @@ Le conteneur redémarre ensuite avec le PC. `docker compose down` l'arrête ; `d
 
   Sans cela, une partie du modèle reste sur le processeur et les répliques sont plus lentes (14 tokens/s mesurés avec l'écran allumé, 21 sans).
 
-**Changer de modèle** : téléchargez-le (`ollama pull`), puis changez `modele` dans la section `[local]`. Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
+**Changer de modèle** : téléchargez-le (`ollama pull`), puis choisissez-le dans la liste **Modèle de l’IA** de la partie (ou changez `modele` dans la section `[local]`). Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
 
 **Avant de partir sans réseau**, vérifiez que tout est sur le PC : l'image Docker et le modèle (`docker compose exec ollama ollama list`), les voix (lancez l'application une fois avec le réseau pour Pocket TTS ; `voices/` pour Piper), et la banque de PNJ dans `pnj/`.
 
@@ -206,7 +211,7 @@ Le modèle se télécharge une fois, avec le réseau, dans `modeles-stt/` :
 python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
 ```
 
-Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
+Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9 (paquets pip `nvidia-cublas-cu12` et `nvidia-cudnn-cu12`) ; le préchargement de `stt.py` ne couvre que les `.so` de Linux : sous Windows, gardez `appareil = "cpu"` sauf si `cuda` fonctionne chez vous.
 
 ## Portraits des PNJ (facultatif)
 
@@ -228,17 +233,23 @@ Le moteur local demande l'option `portraits` (diffusers ; PyTorch vient déjà a
 uv sync --extra tout --extra portraits
 ```
 
+**Windows et carte NVIDIA** : PyPI ne fournit sous Windows que PyTorch pour processeur (`torch ... +cpu`) : avec `appareil = "auto"`, les portraits se font alors au processeur, même avec une carte NVIDIA. Pour utiliser la carte, remplacez PyTorch par une roue CUDA, après l'installation : `uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu128` (sans uv : `.venv\Scripts\python.exe -m pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128`), puis vérifiez avec `.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available())"` (`True` attendu). Un `uv sync` ultérieur remet la version processeur : refaites alors la commande. Le projet ne change pas la source des paquets (`uv.lock` reste celui de PyPI). Sous Linux, la roue de PyPI contient déjà CUDA.
+
 Ollama ne génère pas d'images sous Windows ni sous Linux (sa génération d'images expérimentale était réservée à macOS, puis a été retirée). Avec un modèle de dialogue local sur une petite carte (4 Go), générez les portraits pendant la préparation, quand Ollama n'occupe pas la mémoire vidéo, ou mettez `appareil = "cpu"` dans `[portraits.local]`.
 
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Après une modification à la main, relancez `pnj-parlant`.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Un réglage absent du fichier prend sa valeur par défaut (celle de `config.toml.example`) ; `delai_max` dans `[claude]` borne l'attente d'une réponse de Claude (60 s). Après une modification à la main, relancez `pnj-parlant`. Par défaut, le serveur lit `config.toml` dans le dossier courant ; la variable d'environnement `PNJ_CONFIG` (ou `--config chemin`) désigne un autre fichier, les dossiers (`pnj/`, `certs/`…) étant alors relatifs à celui-ci.
 
-**Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
+Réglages que la page Options ne montre pas : `garder_en_memoire` (`[local]`, durée pendant laquelle Ollama garde le modèle chargé, `"2h"`), `delai_max` (`[local]`, `[lmstudio]` et `[claude]` : secondes d'attente d'une réponse), `precision` et `beam_size` (`[reconnaissance]` : calcul de Whisper, `int8` ou `float16`, et largeur de recherche, 5 par défaut ; 1 va plus vite) et `url` dans `[portraits.en_ligne]` (adresse du service d'images, Pollinations par défaut).
 
-Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
+**Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, PNJ en scène, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
 
-`config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
+Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le même mot de passe protège l'univers depuis les autres appareils (voir [Accès depuis une autre machine](#accès-depuis-une-autre-machine-ex-le-téléphone-dun-joueur)). Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
+
+Le serveur refuse les requêtes trop volumineuses (413) : 60 Mo pour un import d'univers (500 fichiers au plus, zip décompressés compris), 5 Mo pour un enregistrement du micro, 2 Mo pour le reste.
+
+`config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`) seulement si vous choisissez Claude pour la création ou le dialogue. Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 
 ## Organisation du code et tests
 
@@ -248,7 +259,8 @@ cherchent `config.toml` dans le dossier courant ; `--config chemin/vers/config.t
 Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté de `config.toml`.
 
 ```
-pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev), commandes
+pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev) bornées par version majeure, commandes
+LICENSE                     GNU GPL 3.0 ou ultérieure
 src/pnj_parlant/
   serveur.py                application Flask (routes) et lancement
   config.py                 lecture de config.toml (et son chemin, pour la page Options)
@@ -264,7 +276,8 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js
+  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js, js/api.js ;
+                            fonts/ : Alegreya Sans et IM Fell English (SIL OFL 1.1, texte dans fonts/OFL.txt)
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows
@@ -273,14 +286,21 @@ lancer.bat                  lanceur Windows (double-clic)
 ```
 
 Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de faux moteurs remplacent
-le modèle de langage, la synthèse et la reconnaissance vocales et le générateur de portraits (voir `tests/conftest.py`).
+le modèle de langage, la synthèse et la reconnaissance vocales et le générateur de portraits (voir `tests/faux.py`, importé par les tests avec `from faux import ...`).
+La couverture des modules Python est d'environ 97 %.
 
 ```bash
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
-pytest                      # tests Python
-node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
+pytest --cov                # tests Python, avec couverture
+ruff check .                # style et erreurs courantes (config dans pyproject.toml)
+node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent, comme la CI)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
+                            # ports : PNJ_E2E_PORT_SERVEUR (5917), PNJ_E2E_PORT_OLLAMA (5918), PNJ_E2E_PORT_DEVTOOLS (9333)
 ```
+
+## Licence
+
+PNJ parlants est distribué sous licence **GNU GPL 3.0 ou ultérieure** (fichier [`LICENSE`](LICENSE)), en cohérence avec Piper, moteur de voix facultatif sous GPL. Les polices de `static/fonts/` restent sous SIL Open Font License 1.1 ([`OFL.txt`](src/pnj_parlant/static/fonts/OFL.txt)). Le modèle de portraits Stable Diffusion Turbo, les voix et les modèles de langage gardent chacun leur propre licence.
 
 ## Pistes pour la suite
 

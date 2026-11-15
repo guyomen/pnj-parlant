@@ -29,17 +29,64 @@ paths:
 (`Contexte.injectes` : jamais remplacés quand les réglages changent).
 Serveur sans état : l'historique vit dans le navigateur.
 
+## Accès à l'univers (décision D1) et tailles
+- Depuis le PC du serveur (`depuis_le_serveur()` : 127.0.0.1, ::1), rien n'est demandé. Ailleurs, toute écriture de
+  l'univers (décorateur `@mj` : PUT scénario, styles, lieux ; POST/PUT/DELETE banque ; POST/DELETE portrait ; import ;
+  export (il contient les secrets) ; exemples ; DELETE /api/univers ; PUT /api/voice-engine) demande le mot de passe
+  du MJ dans l'en-tête `X-Mot-De-Passe-MJ` (encodé par `encodeURIComponent`, décodé par `mot_de_passe_recu`).
+  Refus : 403 avec `mot_de_passe: true` si un mot de passe existe (la page peut le demander), sinon message « depuis
+  le PC du serveur ». Lectures et partie restent ouvertes (generate, talk, voice, tts, stt, config).
+- `droits(mdp, univers)` → ok / verrou / refus ; `univers` faux pour les réglages (mot de passe exigé même sur le PC
+  s'il existe : `reglages.autorise`). `est_mj()` : `GET /api/scenario`, `/api/lieux` et `/api/bank/<id>` retirent
+  `notes_mj` et `secret` (`masquer` : champ absent, pas vide). `GET /api/acces` → `{mj, protege, local}`.
+- Champ masqué absent d'un PUT = gardé : `secret` (PUT /api/bank/<id>), `notes_mj` (PUT /api/scenario, et par lieu
+  existant dans PUT /api/lieux). Une fiche lue sans mot de passe puis renvoyée n'efface rien.
+- `/api/npc/talk` relit le `secret` dans la banque par l'`id` du PNJ (la partie reçoit les fiches sans secret) ; un
+  PNJ inventé (sans fiche en banque) garde celui du navigateur. `/api/npc/generate` renvoie la fiche entière (PNJ
+  pas encore en banque, son secret ne vit que dans le navigateur).
+- Frein (`reglages.Frein`, `ctx.frein`, par adresse) : après 5 mauvais mots de passe, verrou de 5 s qui double à
+  chaque échec (5 min au plus ; 429, rien n'est comparé pendant le verrou) ; succès = compte effacé ; un mot de passe
+  absent ne compte pas ; un mauvais mot de passe attend aussi 1 s.
+- Écriture venue d'une autre page web (`Origin` d'un autre hôte, ou `null`) : 403 (`plafond`), car l'import
+  multipart et un POST sans corps ne passent pas par la pré-vérification CORS.
+- Tailles (`plafond`, 413 en JSON) : `MAX_CONTENT_LENGTH` = `IMPORT_MAX_OCTETS` (60 Mo) + marge multipart pour
+  l'import, qui vérifie aussi le nombre (`IMPORT_MAX_FICHIERS`, 500) et le cumul de tous les fichiers, zip
+  décompressés compris ; `STT_MAX_OCTETS` (5 Mo) pour /api/stt ; `CORPS_MAX` (2 Mo) pour le reste.
+- `[serveur] hote` : `0.0.0.0` par défaut (téléphones) ; `127.0.0.1` pour jouer seul (documenté).
+
 ## Moteurs de langage (moteurs.py)
 - `[moteurs] creation` et `dialogue` : `"claude"` (`[claude] modele`, `claude-haiku-5-5`), `"local"` (Ollama,
   `[local] modele`) ou `"lmstudio"` (`[lmstudio]` : API compatible OpenAI, `/v1/chat/completions` en SSE ; modèle vide
   = celui chargé, trouvé par `/api/v0/models` ; `<think>…</think>` retiré ; `contexte_max` = contexte du modèle
   chargé ; `etat_lmstudio()` pour la page Options). `MoteurIndisponible` : message destiné au joueur (réseau, Docker
   arrêté, LM Studio arrêté, modèle absent).
+- Valeurs par défaut : une seule table `moteurs.DEFAUTS` (égale à `config.toml.example` et au `CATALOGUE` : création et
+  dialogue `local`), fusionnée dans `Moteurs.__init__` (`avec_defauts`) : `Moteurs({})` fonctionne, un `config.toml`
+  ancien aussi. Claude : délai `[claude] delai_max` (60 s, connexion 5 s), clé absente → `MoteurIndisponible`.
+  Ollama / LM Studio : une ligne `{"error"}` ou un flux Ollama sans `done: true` = `MoteurIndisponible` ; délai dépassé
+  = message distinct d'« injoignable ».
 - Réponses en streaming pour les trois moteurs ; `usage` (tokens) renvoyé en fin de réplique.
+
+## Caches de latence (lot 6)
+- Chaque cache a son invalidation ; tests dans `tests/test_cache.py`.
+- `Moteurs._en_cache` (`DUREE_CACHE` = 15 s) : liste des modèles d'Ollama (`modeles_locaux`, aussi quand Ollama est
+  injoignable : c'est le délai de connexion qu'on évite) et de LM Studio (`/api/v0/models`, une erreur n'est pas
+  gardée). Un modèle LM Studio fixé dans `config.toml` ne coûte aucun aller-retour avant la réplique. Vidé en
+  reconstruisant `Moteurs` (`appliquer_reglages`) ou par `Moteurs.oublier()`.
+- `Contexte.problemes_recents()` (`SANTE_DUREE` = 15 s) sert `/api/sante` ; vidé par `appliquer_reglages` (même en
+  cas d'échec) et `changer_tts`. `problemes()` reste sans cache (console au démarrage, tests).
+- `Banque` : scénario, lieux et styles gardés (`_en_cache`), invalidés par la signature du fichier (date, taille,
+  inode : une modification à la main compte) et par chaque écriture de la banque (`Banque._ecrire` → `_invalider`) ;
+  `scenario()` dépend aussi de `_styles.json`. Chaque appelant reçoit une copie.
 
 ## Routes
 - `GET /api/config` : moteurs, moteur de voix (`tts`, null si aucune voix), `stt_local`, `modeles_locaux`,
-  `modele_local`, `intervention`, `contexte_max`.
+  `modele_local`, `intervention`, `pnj_max`, `contexte_max`, `modele_dialogue` (liste « Modèle de l'IA » de la vue
+  Partie : null avec Claude, sinon `{moteur, cle: "local.modele"|"lmstudio.modele", valeur, modeles, modifiable}` ;
+  modèles d'Ollama, ou `Moteurs.modeles_lmstudio()` = identifiants llm/vlm de LM Studio, liste gardée, vide s'il
+  est injoignable ; `modifiable` = mot de passe du MJ défini ou PC du serveur).
+- Entrées : `corps(dict|list)` (400 si le JSON n'a pas le bon type), `chaine`, `fiche_recue` : aucune route ne répond 500
+  sur un corps mal formé (tests : `TestEntreesInvalides`).
 - `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
 - `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir « Réglages à chaud » ci-dessous.
 - `GET /api/sante` → `{problemes: [{cle, niveau, message}]}` (`Contexte.problemes`, aussi affiché dans la console au
@@ -91,8 +138,11 @@ Serveur sans état : l'historique vit dans le navigateur.
   `cfg.fichier` (`Config.fichier`, None en tests = en mémoire), puis reconstruit à chaud ce qui a changé (Moteurs,
   voix via `tts_charges`, Reconnaissance, portraits, `parametres()` : historique, intervention, phrases_max, style).
 - Routes : `GET /api/reglages` → `{groupes, protege, local, fichier}` (suggestions `local.modele` = modèles
-  d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause) / 400 / 500
-  (écriture) / 200 `{..., redemarrage: [libellés]}` ; `POST /api/reglages/verifier {mot_de_passe}`.
+  d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause si un mauvais
+  mot de passe a été envoyé ; avec `mot_de_passe: true` si un mot de passe existe, `garde(…, demander=True)`, pour
+  que `envoyer` de js/api.js le demande depuis la vue Partie) / 429 (frein) / 400 / 500 (écriture) / 200
+  `{..., redemarrage: [libellés]}` ; `POST /api/reglages/verifier {mot_de_passe}` (même frein, sans
+  `mot_de_passe` dans le refus : la page Options a son propre formulaire).
 
 ## Portraits (portraits.py, facultatif)
 - `[portraits] moteur` : `aucun` (défaut, `Aucun`), `local` (`Local` : SD-Turbo via diffusers, option `portraits` hors
@@ -112,6 +162,12 @@ Serveur sans état : l'historique vit dans le navigateur.
   `supprimer_portrait`) ; supprimé avec le PNJ, par `vider` et quand une fiche importée remplace l'ancienne.
   Export : images incluses ; import (`lire_zip`, `importer`) : un portrait suit sa fiche (même nom, fiche renommée
   comprise), sans fiche ou illisible → `ignores`. `IMPORT_MAX_OCTETS` = 60 Mo.
+- Intégrité (`banque.py`) : toutes les écritures passent par `_ecrire` (fichier temporaire du dossier puis `os.replace`,
+  réessayé sous Windows ; lecture par `_lire`) ; un `RLock` couvre `importer`, `vider`, `supprimer` et les portraits.
+  `importer` écrit d'abord (fiches passées par `normaliser_fiche`, aussi utilisée par `enregistrer_pnj` pour
+  POST/PUT /api/bank) et ne supprime qu'ensuite les PNJ absents de l'import. `enregistrer_portrait` renvoie faux si
+  la fiche a disparu (la route répond 404, pas de portrait orphelin). `Contexte.verrou_reglages` sérialise
+  `appliquer_reglages` et `changer_tts` ; `reglages.ecrire` supprime son fichier temporaire en cas d'échec.
 - Routes : `GET /api/bank/<id>/portrait` (lu en mémoire : sous Windows un fichier ouvert ne se remplace pas ;
   `?v=` → cache 1 jour), `POST` (corps facultatif = fiche à l'écran ; 400 moteur absent, 503
   `PortraitIndisponible` ; renvoie `{portrait: version, prompt}`), `DELETE`. `/api/config` : `portraits` = nom du
@@ -122,7 +178,7 @@ Serveur sans état : l'historique vit dans le navigateur.
   hors de son lieu habituel.
 - `history` : toute la scène, `[{speaker: nom du PNJ ou null pour le joueur, content}]`, salutations comprises,
   tronquée à `[dialogue] historique` (12) messages.
-- Scène à plusieurs (`presents`, 3 PNJ en tout au plus) : chaque PNJ voit ses répliques en `assistant` et celles des
+- Scène à plusieurs (`presents`, `[dialogue] pnj_max` PNJ en tout au plus, 3 par défaut) : chaque PNJ voit ses répliques en `assistant` et celles des
   autres en `user` préfixées par le nom de l'auteur, plus un rappel en fin de dernier message.
 - Les petits modèles écrivent quand même la suite de la scène : séquences d'arrêt (`dialogue.arrets` :
   « Léonard : », « Voyageur: »… → `stop` d'Ollama, `stop_sequences` de Claude), puis en filet de sécurité

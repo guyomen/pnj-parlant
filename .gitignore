@@ -1,5 +1,5 @@
 # Configuration locale (contient la clé API) : partir de config.toml.example
-config.toml
+/config.toml
 
 .venv/
 __pycache__/
@@ -17,3 +17,19 @@ modeles-stt/
 *.egg-info/
 build/
 .pytest_cache/
+
+# Banque du MJ (fiches, notes, portraits) : ne jamais la versionner
+/pnj/
+
+# Couverture, builds et caches d'outils
+.coverage
+htmlcov/
+dist/
+.ruff_cache/
+.mypy_cache/
+
+# Fichier temporaire de reglages.ecrire (contient la cle API)
+.config-*.toml
+
+# Reglages locaux de Claude Code
+.claude/settings.local.json

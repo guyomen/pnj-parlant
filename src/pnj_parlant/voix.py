@@ -49,8 +49,19 @@ def charger(config, base_dir, moteur=None):
 
 
 def cle(voix):
-    """Identité d'une voix : nom + locuteur (Piper)."""
-    return (voix.get("name"), voix.get("speaker"))
+    """Identité d'une voix : nom + locuteur (Piper). Toujours hachable, même pour une voix reçue du navigateur."""
+    valeurs = (voix.get("name"), voix.get("speaker"))
+    return tuple(v if isinstance(v, (str, int, type(None))) else repr(v) for v in valeurs)
+
+
+def echelle_debit(voix):
+    """`length_scale` d'une voix (1 = débit normal, plus grand = plus lent), borné de 0,5 à 2 ; 1 s'il est absent
+    ou illisible. Une valeur absurde ne doit pas faire échouer la synthèse (503 → repli sur la voix du navigateur)."""
+    try:
+        valeur = float(voix.get("length_scale", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return min(2.0, max(0.5, valeur)) if valeur == valeur else 1.0  # NaN : valeur != valeur
 
 
 def attribuer(moteur, npc, rng=random, eviter=()):
@@ -91,7 +102,10 @@ def voix_narrateur(moteur, eviter=()):
     catalogue = [(v, g) for v, g in moteur.catalogue() if cle(v) not in pris]
     if not catalogue:
         return None
-    voulue = lambda v: v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))
+
+    def voulue(v):
+        return v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))
+
     genre = next((g for v, g in moteur.catalogue() if voulue(v)), None)
     choisie = (next((v for v, _ in catalogue if voulue(v)), None)
                or next((v for v, g in catalogue if genre and g == genre), None)
@@ -117,6 +131,8 @@ class Piper:
         self.dossier = base_dir / cfg.get("dossier", "voices")  # un chemin absolu reste absolu
         self.genres = cfg.get("genres", {})
         self._cache = {}
+        self._verrou = threading.Lock()  # chargement des voix (deux fils ne chargent pas la même deux fois)
+        self._catalogue_vu = None  # (date de modification du dossier, {voix: locuteurs}) : voir _voix_installees
         try:
             from piper import PiperVoice, SynthesisConfig
             self._piper = (PiperVoice, SynthesisConfig)
@@ -124,17 +140,28 @@ class Piper:
             self._piper = None
 
     def _voix_installees(self):
-        """{nom de la voix: nombre de locuteurs} pour chaque .onnx du dossier."""
-        if not self._piper or not self.dossier.exists():
+        """{nom de la voix: nombre de locuteurs} pour chaque .onnx du dossier. Relu seulement quand la date de
+        modification du dossier change (voix ajoutée ou retirée), pas à chaque phrase synthétisée."""
+        if not self._piper:
             return {}
+        try:
+            version = self.dossier.stat().st_mtime_ns
+        except OSError:
+            return {}
+        vu = self._catalogue_vu
+        if vu and vu[0] == version:
+            return dict(vu[1])
         voix = {}
         for onnx in sorted(self.dossier.glob("*.onnx")):
-            cfg = onnx.with_suffix(".onnx.json")
             speakers = 1
-            if cfg.exists():
-                speakers = json.loads(cfg.read_text(encoding="utf-8")).get("num_speakers", 1)
+            try:  # un .onnx.json absent ou illisible : voix à un seul locuteur, pas une erreur 500
+                data = json.loads(onnx.with_suffix(".onnx.json").read_text(encoding="utf-8"))
+                speakers = int(data.get("num_speakers", 1))
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
             voix[onnx.stem] = max(1, speakers)
-        return voix
+        self._catalogue_vu = (version, voix)
+        return dict(voix)
 
     def _genre(self, name, speaker):
         """Genre d'un locuteur d'après la section [voix.piper.genres] de config.toml."""
@@ -146,7 +173,9 @@ class Piper:
         return None  # genre inconnu
 
     def catalogue(self):
-        court = lambda n: n.removeprefix("fr_FR-").removesuffix("-medium")
+        def court(n):
+            return n.removeprefix("fr_FR-").removesuffix("-medium")
+
         return [({"name": name, "speaker": i, "label": f"{court(name)} · locuteur {i}"}, self._genre(name, i))
                 for name, speakers in self._voix_installees().items() for i in range(speakers)]
 
@@ -156,16 +185,18 @@ class Piper:
     def synthese(self, texte, voix):
         installees = self._voix_installees()
         name = voix.get("name")
-        if name not in installees:  # protège aussi contre les chemins arbitraires
+        if not isinstance(name, str) or name not in installees:  # protège aussi contre les chemins arbitraires
             raise VoixIndisponible(f"Voix Piper « {name} » absente.")
         PiperVoice, SynthesisConfig = self._piper
-        if name not in self._cache:
-            self._cache[name] = PiperVoice.load(self.dossier / f"{name}.onnx")
+        with self._verrou:
+            if name not in self._cache:
+                self._cache[name] = PiperVoice.load(self.dossier / f"{name}.onnx")
+            voice = self._cache[name]
         cfg = SynthesisConfig(speaker_id=voix.get("speaker") if installees[name] > 1 else None,
-                              length_scale=float(voix.get("length_scale", 1.0)))
+                              length_scale=echelle_debit(voix))
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav_file:
-            self._cache[name].synthesize_wav(texte, wav_file, syn_config=cfg)
+            voice.synthesize_wav(texte, wav_file, syn_config=cfg)
         return buf.getvalue(), "audio/wav"
 
 
@@ -226,7 +257,7 @@ class Pocket:
 
     def synthese(self, texte, voix):
         name = voix.get("name")
-        if not self._ok or name not in self.genres:
+        if not self._ok or not isinstance(name, str) or name not in self.genres:
             raise VoixIndisponible(f"Voix Pocket TTS « {name} » absente.")
         try:
             with self._verrou:
@@ -263,7 +294,9 @@ class Edge:
     def catalogue(self):
         if not self._edge:
             return []
-        court = lambda n: n.split("-")[2].removesuffix("Neural").removesuffix("Multilingual")
+        def court(n):
+            return n.split("-")[2].removesuffix("Neural").removesuffix("Multilingual")
+
         return [({"name": name, "label": f"{court(name)} ({name[3:5]})"}, genre)
                 for name, genre in self.genres.items()]
 
@@ -272,10 +305,10 @@ class Edge:
 
     def synthese(self, texte, voix):
         name = voix.get("name")
-        if not self._edge or name not in self.genres:
+        if not self._edge or not isinstance(name, str) or name not in self.genres:
             raise VoixIndisponible(f"Voix Edge « {name} » absente.")
         # Débit et hauteur d'après la fiche du PNJ (Piper règle le débit avec length_scale)
-        rate = round((1 / float(voix.get("length_scale", 1.0)) - 1) * 100)
+        rate = round((1 / echelle_debit(voix) - 1) * 100)
         pitch = {"grave": -8, "aigu": 8}.get(voix.get("timbre"), 0)
         try:
             com = self._edge.Communicate(texte, name, rate=f"{rate:+d}%", pitch=f"{pitch:+d}Hz")

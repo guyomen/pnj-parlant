@@ -15,6 +15,7 @@ VOYAGEUR = "Voyageur"
 
 
 PHRASES_MAX = 3  # par réplique, réglable dans [dialogue] phrases_max de config.toml
+PNJ_MAX = 3      # PNJ en scène (celui qui parle compris), réglable dans [dialogue] pnj_max de config.toml
 
 
 def situation(npc, lieu=None, lieux=()):
@@ -24,7 +25,7 @@ def situation(npc, lieu=None, lieux=()):
     texte_lieu = f"\nTu te trouves en ce moment ici : {lieu['nom']}."
     if lieu.get("description"):
         texte_lieu += f" {lieu['description']}"
-    habituel = next((l for l in lieux if l["id"] == npc.get("lieu")), None)
+    habituel = next((lieu for lieu in lieux if lieu["id"] == npc.get("lieu")), None)
     if habituel and habituel["id"] != lieu["id"]:
         texte_lieu += f"\nCe n'est pas ton lieu habituel ({habituel['nom']}) : tu accompagnes le voyageur."
     return texte_lieu + "\n"
@@ -72,7 +73,9 @@ Règles :
 
 def nettoyer_historique(history, maximum):
     """Les `maximum` derniers messages valides de la scène."""
-    return [m for m in history or [] if isinstance(m, dict) and str(m.get("content") or "").strip()][-maximum:]
+    if not isinstance(history, list):
+        return []
+    return [m for m in history if isinstance(m, dict) and str(m.get("content") or "").strip()][-max(1, maximum):]
 
 
 def messages(nom, history, presents=()):

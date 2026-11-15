@@ -1,4 +1,9 @@
+* text=auto
 # Scripts Windows : fins de ligne CRLF
 *.bat text eol=crlf
-# Export de conversation tel que Windows l'enregistre (BOM, CRLF) : à garder tel quel pour le test
+# Scripts shell : toujours LF (sinon ils cassent sous Linux depuis un clone Windows)
+*.sh text eol=lf
+*.woff2 binary
+*.png binary
+# Export de conversation tel que Windows l'enregistre (BOM, CRLF) : a garder tel quel pour le test
 tests/e2e/donnees/conversation-import.txt -text

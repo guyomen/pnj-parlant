@@ -6,12 +6,20 @@ import urllib.request
 import zipfile
 
 import pytest
+from faux import PNG
 
-from conftest import PNG
 from pnj_parlant import portraits
 from pnj_parlant.banque import Banque
 from pnj_parlant.moteurs import MoteurIndisponible
-from pnj_parlant.portraits import STYLE, STYLES, EnLigne, PortraitIndisponible, prompt_portrait, style_valide, type_image
+from pnj_parlant.portraits import (
+    STYLE,
+    STYLES,
+    EnLigne,
+    PortraitIndisponible,
+    prompt_portrait,
+    style_valide,
+    type_image,
+)
 
 BROM = {"nom": "Brom", "metier": "forgeron", "genre": "masculin", "apparence": "Un colosse au tablier brûlé.",
         "salutation": "Salut."}
@@ -168,7 +176,8 @@ def test_export_et_import_avec_portraits(banque, tmp_path):
 
     autre = Banque(tmp_path / "autre")
     fichiers = {n: archive.read(n) for n in archive.namelist()}
-    fichiers.update({"inconnu-0001.png": PNG, "faux-0002.jpg": b"<html>", "Brom (copie).json": json.dumps(BROM).encode(),
+    fichiers.update({"inconnu-0001.png": PNG, "faux-0002.jpg": b"<html>",
+                     "Brom (copie).json": json.dumps(BROM).encode(),
                      "Brom (copie).jpeg": b"\xff\xd8\xff jpeg"})
     r = autre.importer(fichiers)
     assert sorted(r["ignores"]) == ["faux-0002.jpg", "inconnu-0001.png"]  # sans fiche, ou pas une image
@@ -196,7 +205,8 @@ def test_routes_du_portrait(client, portraits, ctx):
     assert r.status_code == 200 and "Un nain chauve." in r.get_json()["prompt"]  # fiche en cours d'édition
     assert portraits.prompts[0] == r.get_json()["prompt"] and portraits.prompts[0].startswith(STYLE)
     version = r.get_json()["portrait"]
-    assert version == client.get("/api/bank").get_json()[0]["portrait"] == client.get(f"/api/bank/{npc_id}").get_json()["portrait"]
+    assert version == client.get("/api/bank").get_json()[0]["portrait"]
+    assert version == client.get(f"/api/bank/{npc_id}").get_json()["portrait"]
     image = client.get(f"/api/bank/{npc_id}/portrait?v={version}")
     assert image.status_code == 200 and image.data == PNG and image.mimetype == "image/png"
     assert image.cache_control.max_age == 86400  # adresse versionnée : gardée en cache
@@ -219,7 +229,8 @@ def test_portrait_au_style_du_scenario(client, portraits, cfg):
 
 
 def test_style_par_defaut_de_config(tmp_path, moteurs, tts, portraits):
-    from conftest import FausseReconnaissance
+    from faux import FausseReconnaissance
+
     from pnj_parlant.config import Config
     from pnj_parlant.serveur import create_app
     app = create_app(Config({"portraits": {"style": "watercolor"}, "banque": {"dossier": "pnj"}}, tmp_path),
@@ -238,3 +249,16 @@ def test_portrait_erreurs(client, portraits):
     portraits.actif = False
     assert client.post(f"/api/bank/{npc_id}/portrait").status_code == 400
     assert client.get("/api/config").get_json()["portraits"] is None
+
+
+def test_portrait_d_un_pnj_supprime_pendant_la_generation(client, portraits, ctx):
+    npc_id = client.post("/api/bank", json=BROM).get_json()["id"]
+    generer = portraits.generer
+
+    def generer_puis_supprimer(prompt, graine):
+        resultat = generer(prompt, graine)
+        client.delete(f"/api/bank/{npc_id}")  # le MJ supprime le PNJ pendant les 60 s de génération
+        return resultat
+    portraits.generer = generer_puis_supprimer
+    assert client.post(f"/api/bank/{npc_id}/portrait").status_code == 404
+    assert ctx.banque.portrait(npc_id) is None

@@ -37,7 +37,7 @@ class TestMessages:
         msgs = dialogue.messages("Ysolde", history, presents=[BROM])
         roles = [m["role"] for m in msgs]
         assert roles[0] == "user"
-        assert all(a != b for a, b in zip(roles, roles[1:]))
+        assert all(a != b for a, b in zip(roles, roles[1:], strict=False))
 
     def test_le_pnj_qui_reprend_la_parole_apres_lui_meme(self):
         msgs = dialogue.messages("Ysolde", [entree("Ysolde", "Bienvenue !")])
@@ -62,7 +62,8 @@ class TestArrets:
         assert "Jean le Forgeron :" in arrets and "Jean :" not in arrets
 
     def test_seul_avec_le_voyageur(self):
-        assert dialogue.arrets("Ysolde") == ["Le voyageur :", "Le voyageur:", "Voyageur :", "Voyageur:", "Nom :", "Nom:"]
+        assert dialogue.arrets("Ysolde") == [
+            "Le voyageur :", "Le voyageur:", "Voyageur :", "Voyageur:", "Nom :", "Nom:"]
 
 
 def test_nettoyer_historique_garde_les_derniers_messages_valides():

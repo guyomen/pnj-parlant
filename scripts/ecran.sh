@@ -23,10 +23,14 @@ etat() {
   fi
   if command -v nvidia-smi >/dev/null; then
     echo
-    nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader \
-      | awk -F', ' '{print "Carte graphique      : " $1 ", " $2 " utilisés sur " $3}'
-    nvidia-smi --query-compute-apps=process_name,used_memory --format=csv,noheader \
-      | sed 's/^/  calcul : /'
+    if nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
+      nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader \
+        | awk -F', ' '{print "Carte graphique      : " $1 ", " $2 " utilisés sur " $3}'
+      { nvidia-smi --query-compute-apps=process_name,used_memory --format=csv,noheader || true; } \
+        | sed 's/^/  calcul : /'
+    else
+      echo "Carte graphique      : nvidia-smi ne répond pas (pilote absent ou carte indisponible)"
+    fi
   fi
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTENEUR"; then
     echo
@@ -46,7 +50,14 @@ decharger_modele() {
 
 action="${1:-}"
 permanent=false
-[[ "${2:-}" == "--permanent" ]] && permanent=true
+if [[ -n "${2:-}" ]]; then
+  if [[ "$2" == "--permanent" ]]; then
+    permanent=true
+  else
+    echo "Argument inconnu : $2 (seul --permanent est accepté)." >&2
+    exit 2
+  fi
+fi
 
 case "$action" in
   couper)

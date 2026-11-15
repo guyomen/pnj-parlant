@@ -80,13 +80,13 @@ Sans uv, installez Python 3.13 (`winget install Python.Python.3.13`, ou [python.
    notepad config.toml
    ```
 2. Dans le Bloc-notes :
-   - `cle_api` (section `[claude]`) : votre clé API Anthropic, entre guillemets. Elle sert à créer les PNJ quand vous avez le réseau.
-   - `dialogue = "local"` (section `[moteurs]`) : les PNJ parleront avec le modèle local, sans réseau.
+   - `cle_api` (section `[claude]`) : votre clé API Anthropic, entre guillemets. Elle ne sert que si vous choisissez Claude (`creation` ou `dialogue` = `"claude"` dans `[moteurs]`) ; vous pouvez la laisser vide avec le modèle local.
+   - `creation` et `dialogue` (section `[moteurs]`) : `"local"` par défaut, les PNJ sont créés et parlent avec le modèle local, sans réseau ; `"claude"` passe par l'API Anthropic (réseau et clé API).
    - `moteur` (section `[voix]`) : `"pocket"` (le plus naturel sans réseau, conseillé), `"piper"` (plus léger) ou `"edge"` (le plus naturel, mais seulement avec le réseau). Le comparatif est dans le [README](../README.md#synthèse-vocale).
    - Facultatif, `moteur` (section `[portraits]`) : `"en_ligne"` pour donner un portrait aux PNJ pendant la préparation (avec le réseau, rien à installer), ou `"local"` pour les générer sur le PC (installez d'abord l'option : `uv sync --extra tout --extra portraits`). Voir le [README](../README.md#portraits-des-pnj-facultatif).
 3. Enregistrez et fermez.
 
-Ensuite, la plupart des réglages se changent aussi dans l'application : page **Options**, partie « Le serveur » (moteurs, modèle, voix, reconnaissance, portraits…), sans rouvrir le fichier ni relancer. Pour les modifier depuis un autre appareil que le PC, définissez-y un **mot de passe du MJ**. Si vous préférez LM Studio à Ollama (sans Docker), voir le [README](../README.md#modèle-local-pour-les-dialogues-sans-réseau).
+Ensuite, la plupart des réglages se changent aussi dans l'application : page **Options**, partie « Le serveur » (moteurs, modèle, voix, reconnaissance, portraits…), sans rouvrir le fichier ni relancer. Pour les modifier depuis un autre appareil que le PC, définissez-y un **mot de passe du MJ** : il sert aussi à préparer l'univers depuis un autre appareil. Pour utiliser un autre `config.toml` que celui du dossier courant, définissez la variable d'environnement `PNJ_CONFIG` (chemin du fichier). Si vous préférez LM Studio à Ollama (sans Docker), voir le [README](../README.md#modèle-local-pour-les-dialogues-sans-réseau).
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
 
@@ -126,7 +126,7 @@ Suivez **4A** pour une carte NVIDIA, **4B** pour une carte AMD.
    docker compose logs ollama
    ```
 
-   Une ligne doit mentionner **CUDA** et le nom de votre carte. Si elle parle seulement de CPU, voir [Dépannage](#dépannage).
+   Une ligne doit mentionner **CUDA** et le nom de votre carte. (Cela concerne Ollama : PyTorch, utilisé par les portraits locaux, est installé en version processeur sous Windows, voir le [README](../README.md#portraits-des-pnj-facultatif), « Windows et carte NVIDIA ».) Si elle parle seulement de CPU, voir [Dépannage](#dépannage).
 
 ### 4B. Carte AMD : Ollama installé sur le PC
 
@@ -159,7 +159,7 @@ Dans la suite de ce guide, remplacez `docker compose exec ollama ollama` par `ol
 
 ## 5. Lancer une partie
 
-Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il prépare le modèle local seulement si `config.toml` en utilise un (`"local"` dans `[moteurs]`) : il prend Ollama installé sous Windows s'il existe (carte AMD), et le démarre s'il ne répond pas ; sinon, avec une carte NVIDIA, il démarre Ollama dans Docker. Il lance ensuite l'application. En tout-Claude, Docker et Ollama sont inutiles.
+Double-cliquez sur **`lancer.bat`** dans le dossier du projet. Il prépare le modèle local seulement si `config.toml` en utilise un (`"local"` dans `[moteurs]`) : il prend Ollama installé sous Windows s'il existe (carte AMD), et le démarre s'il ne répond pas ; sinon, avec une carte NVIDIA, il démarre Ollama dans Docker. Il lance ensuite l'application. En tout-Claude, Docker et Ollama sont inutiles. Si l'installation de l'environnement échoue (réseau coupé, par exemple), `lancer.bat` supprime le dossier `.venv` incomplet : relancez-le simplement une fois le problème réglé.
 
 Ouvrez ensuite **http://localhost:5000** dans Chrome ou Edge, sur ce PC. Si vous avez changé le `port` dans `config.toml`, remplacez 5000 par votre port.
 
@@ -180,11 +180,15 @@ Le navigateur n'autorise le micro qu'en HTTPS (ou sur `localhost`). Pour les aut
 
 Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un routeur ou une box suffit, même sans connexion.
 
+Les téléphones peuvent jouer, mais pas modifier l'univers (scénario, lieux, PNJ, import, « Nouvelle table ») ni lire les secrets des PNJ et les notes du MJ. Pour préparer l'univers depuis un autre appareil (une tablette, par exemple), définissez un **mot de passe du MJ** dans la page Options du PC : l'appareil le demandera dans une petite fenêtre. Sur le PC lui-même, rien n'est demandé.
+
+Pour jouer seul sur le PC, sans téléphones, vous pouvez mettre `hote = "127.0.0.1"` dans la section `[serveur]` de `config.toml` : le serveur n'est alors plus joignable depuis le réseau (et Windows ne demande pas d'autorisation).
+
 ## 6. Avant de partir sans réseau
 
 Avec le réseau, vérifiez que tout est sur le PC :
 
-- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `pnj-banque 20`. La création passe par Claude, donc demande le réseau. Pour un premier essai, chargez plutôt l'univers d'exemple depuis l'accueil (voir [Lancer une partie](#5-lancer-une-partie)).
+- [ ] Les PNJ sont créés et enregistrés : page **http://localhost:5000/creation.html**, ou en lot avec `pnj-banque 20`. La création passe par le moteur `[moteurs] creation` : avec `"claude"`, elle demande le réseau ; avec `"local"` (défaut), seulement le modèle local. Pour un premier essai, chargez plutôt l'univers d'exemple depuis l'accueil (voir [Lancer une partie](#5-lancer-une-partie)).
 - [ ] Le modèle local est téléchargé : `docker compose exec ollama ollama list` (carte AMD : `ollama list`) affiche `qwen3:8b`.
 - [ ] Les voix sont téléchargées : avec `moteur = "pocket"`, l'application a été lancée une fois avec le réseau et la fenêtre n'affiche aucune « voix indisponible » ; avec `moteur = "piper"`, les voix sont dans `voices\`. Le moteur `edge` ne marche pas sans réseau.
 - [ ] Le modèle de reconnaissance vocale est dans `modeles-stt\small\` (étape 2.4), et `config.toml` contient la section `[reconnaissance]` avec `moteur = "local"`.
@@ -206,10 +210,10 @@ Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaiss
 | « Modèle local injoignable » dans l'application | Le conteneur est arrêté : `docker compose up -d`. Carte AMD : Ollama n'est pas lancé, démarrez-le depuis le menu Démarrer. |
 | « Modèle local absent » | Le modèle n'est pas téléchargé : `docker compose exec ollama ollama pull qwen3:8b` (carte AMD : `ollama pull qwen3:8b`), avec le réseau. |
 | « Modèle Whisper absent » au lancement | Le modèle de reconnaissance vocale n'est pas téléchargé (étape 2.4), ou `modele` dans la section `[reconnaissance]` de `config.toml` ne correspond pas au dossier de `modeles-stt\`. |
-| `POST /api/stt` échoue avec `metadata_errors` | Environnement `.venv` créé avant que `pyproject.toml` n'écarte PyAV 19, incompatible avec faster-whisper (`lancer.bat` ne modifie jamais un `.venv` existant). Depuis le dossier du projet, exécutez `uv pip install "av<19"` (sans uv : `.venv\Scripts\python.exe -m pip install "av<19"`), puis relancez l'application. |
+| `POST /api/stt` échoue avec `metadata_errors` | Environnement `.venv` créé avant que `pyproject.toml` n'écarte PyAV 19, incompatible avec faster-whisper (`lancer.bat` ne modifie jamais un `.venv` complet). Depuis le dossier du projet, exécutez `uv pip install "av<19"` (sans uv : `.venv\Scripts\python.exe -m pip install "av<19"`), puis relancez l'application. |
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
 | Voix robotique du navigateur à la place de celle du PNJ | Pocket TTS : lancez l'application une fois avec le réseau pour télécharger le modèle et les voix. Piper : les voix ne sont pas dans `voices\` (étape 2.3). Edge : le réseau est coupé. |
 | « Pocket TTS : voix … indisponible » au lancement | Cette voix n'a pas encore été téléchargée : relancez l'application avec le réseau. |
-| Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
+| Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis choisissez-le dans la liste **Modèle de l’IA** de la partie (colonne de droite) ou dans les options, sans relancer ; ou `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
 
 **Désinstaller le modèle local** : `docker compose down -v` arrête Ollama et supprime les modèles téléchargés. Docker Desktop se désinstalle ensuite comme n'importe quel programme. Carte AMD : `ollama rm qwen3:8b` supprime le modèle, puis Ollama se désinstalle comme n'importe quel programme.

@@ -2,13 +2,16 @@
 import { spawn } from "node:child_process";
 
 const [edge, profil, conversation] = process.argv.slice(2);
-const navigateur = spawn(edge, ["--headless=new", "--disable-gpu", "--no-first-run", "--remote-debugging-port=9333",
+// Ports : variables d'environnement posées par lancer.py (valeurs par défaut identiques)
+const PORT_SERVEUR = process.env.PNJ_E2E_PORT_SERVEUR || "5917";
+const PORT_DEVTOOLS = process.env.PNJ_E2E_PORT_DEVTOOLS || "9333";
+const navigateur = spawn(edge, ["--headless=new", "--disable-gpu", "--no-first-run", `--remote-debugging-port=${PORT_DEVTOOLS}`,
                                 `--user-data-dir=${profil}`, "about:blank"], { stdio: "ignore" });
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
 let cible;
 for (let i = 0; i < 50 && !cible; i++) {
   await pause(200);
-  try { cible = (await (await fetch("http://127.0.0.1:9333/json/list")).json()).find(t => t.type === "page"); } catch {}
+  try { cible = (await (await fetch(`http://127.0.0.1:${PORT_DEVTOOLS}/json/list`)).json()).find(t => t.type === "page"); } catch {}
 }
 const ws = new WebSocket(cible.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
@@ -38,7 +41,7 @@ const simulations = `
       this.onend && this.onend();
     }, 20);
   };`;
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/#jeu" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/#jeu` });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await js(simulations);  // après le chargement : le script d'initialisation de page ne prend pas en Edge sans écran
 verifier("menu des lieux rempli (aucun + 2 lieux)", await quand(`document.querySelectorAll("#lieuSel option").length === 3`));
@@ -88,6 +91,7 @@ verifier("Ysolde retrouvée à la forge, avec Brom", await quand(`(() => { const
 
 // Import d'une conversation exportée : Ysolde vient de la banque, Gaspard est recréé par le modèle
 await js(`window.confirm = () => true`);
+await quand(`!document.getElementById("importBtn").disabled`);  // fin de la narration de l'arrivée
 const racine = (await cdp("DOM.getDocument")).result.root.nodeId;
 const champ = (await cdp("DOM.querySelector", { nodeId: racine, selector: "#importFichier" })).result.nodeId;
 await cdp("DOM.setFileInputFiles", { nodeId: champ, files: [conversation] });
@@ -104,6 +108,10 @@ const parle = `!document.getElementById("stopBtn").hidden && [...document.queryS
 await option("optInterrompre", false);
 await js(`(() => { window.__lent = true; document.getElementById("ask").value = "Ysolde, et toi ?"; document.getElementById("sendBtn").click(); })()`);
 verifier("sans l'option, « Parler » désactivé pendant que le PNJ parle", await quand(parle) && await js(`document.getElementById("micBtn").disabled`));
+// Entrée dans « Métier » pendant que le PNJ parle : aucune création (la scène et sa parole restent)
+await js(`document.getElementById("role").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))`);
+await pause(400);
+verifier("création ignorée pendant que le PNJ parle", await js(`document.querySelector(".pnj-card h1")?.textContent === "Ysolde" && !document.getElementById("stopBtn").hidden && document.getElementById("status").textContent !== "Le PNJ prend forme…"`));
 await js(`document.getElementById("stopBtn").click()`);
 await quand(`!document.getElementById("ask").disabled`);
 
@@ -122,9 +130,20 @@ verifier("« Parler » coupe le PNJ et transmet la question", await quand(`(() =
 await quand(`!document.getElementById("ask").disabled`);
 await js(`location.hash = ""`);
 verifier("accueil affiché, conversation à reprendre", await quand(`document.body.dataset.vue === "accueil" && !document.getElementById("accReprendreBtn").hidden && document.querySelector("[data-exemple='pre-novice']")`));
+// Barre d'espace hors de la partie : elle n'ouvre pas le micro
+const ecoutes = await js(`window.__ecoute`);
+await js(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }))`);
+await pause(200);
+verifier("accueil : la barre d'espace n'ouvre pas le micro", await js(`window.__ecoute === ${ecoutes}`));
 const fondAvant = await js(`getComputedStyle(document.body).backgroundColor`);  // thème par défaut
+// Nouvel univers pendant une partie : refuser de la vider la garde ; accepter la vide
+await js(`window.confirm = (m) => !m.startsWith("Une conversation est en cours")`);
+await js(`document.querySelector("[data-exemple='pre-novice']").click()`);
+verifier("nouvel univers, partie gardée (vidage refusé)", await quand(`document.getElementById("accStatus").textContent === "Univers chargé : 3 lieux et 5 PNJ."`) && await js(`!document.getElementById("accReprendreBtn").hidden && !!localStorage.getItem("pnj-partie")`));
+await js(`window.confirm = () => true; document.getElementById("accStatus").textContent = ""`);
 await js(`document.querySelector("[data-exemple='pre-novice']").click()`);
 verifier("exemple Pré-Novice chargé", await quand(`document.getElementById("accStatus").textContent === "Univers chargé : 3 lieux et 5 PNJ." && document.getElementById("universActuel").textContent.includes("3 lieux et 5 PNJ")`));
+verifier("nouvel univers, partie vidée (vidage accepté)", await js(`document.getElementById("accReprendreBtn").hidden && localStorage.getItem("pnj-partie") === null && document.querySelectorAll("#log .line").length === 0`));
 verifier("thème de l'univers appliqué et gardé (Parchemin)", await quand(`document.documentElement.dataset.theme === "parchemin" && localStorage.getItem("theme") === "parchemin" && getComputedStyle(document.body).backgroundColor !== ${JSON.stringify(fondAvant)}`));
 await js(`document.getElementById("accHasardBtn").click()`);
 const pnjPreNovice = `["Rosalie Tampon", "Bertrand le Prudent", "Lyse", "Baron Grimmoire", "Oscar"]`;
@@ -132,11 +151,18 @@ verifier("PNJ au hasard : partie lancée", await quand(`document.body.dataset.vu
 await quand(`!document.getElementById("ask").disabled`);  // salutation entièrement affichée (elle arrive morceau par morceau)
 const salutation = await js(`document.querySelector("#log .line .text").textContent`);
 
-// Rechargement de la page : la conversation est toujours là
+// Rechargement de la page : la conversation est toujours là, avec la fiche modifiée entre-temps en préparation
+await js(`(async () => {
+  const id = JSON.parse(localStorage.getItem("pnj-partie")).rencontres[0].id;
+  const fiche = await (await fetch("/api/bank/" + id)).json();
+  await fetch("/api/bank/" + id, { method: "PUT", headers: { "Content-Type": "application/json" },
+                                   body: JSON.stringify({ ...fiche, humeur: "Changée en préparation" }) });
+})()`);
 await cdp("Page.reload");
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await js(simulations);
 verifier("conversation reprise après rechargement", await quand(`${pnjPreNovice}.includes(document.querySelector(".pnj-card h1")?.textContent) && document.querySelector("#log .line .text")?.textContent === ${JSON.stringify(salutation)}`));
+verifier("partie reprise : fiche relue sur le serveur", await quand(`document.querySelector(".pnj-card").textContent.includes("Humeur : Changée en préparation") && JSON.parse(localStorage.getItem("pnj-partie")).version === 1`));
 
 // Options : accessibles depuis la partie, retour à la partie ; la barre du haut ne bouge pas d'une vue à l'autre
 const placeBarre = `[...document.querySelectorAll(".marque, .onglets a")].map(a => Math.round(a.getBoundingClientRect().left)).join()`;
@@ -156,8 +182,19 @@ const barreVisible = await quand(`!document.getElementById("barreReglages").hidd
 await js(`document.getElementById("reglagesEnregistrer").click()`);
 verifier("options : réglage du serveur enregistré et appliqué", barreVisible && await quand(`document.getElementById("reglagesMessage").textContent.startsWith("Enregistré dans config.toml") && document.getElementById("barreReglages").hidden`) && await js(`fetch("/api/reglages").then(r => r.json()).then(d => d.groupes.flatMap(g => g.reglages).find(r => r.cle === "dialogue.phrases_max").valeur === 4)`));
 
+// Partie : modèle de l'IA dans la colonne de droite (modèles installés dans le faux Ollama), changé à chaud par
+// /api/reglages (depuis le PC, sans mot de passe du MJ), puis remis
+await js(`location.hash = "jeu"`);
+const choisirModele = (nom) => js(`(() => { const s = document.getElementById("modeleSel"); s.value = ${JSON.stringify(nom)}; s.dispatchEvent(new Event("change")); })()`);
+const modeleServeur = (nom) => `fetch("/api/config").then(r => r.json()).then(c => c.modele_dialogue?.valeur === ${JSON.stringify(nom)})`;
+verifier("partie : modèle de l'IA affiché avec les modèles installés", await quand(`document.body.dataset.vue === "jeu" && document.getElementById("modeleBloc").offsetParent !== null && document.getElementById("modeleSel").value === "faux" && document.querySelectorAll("#modeleSel option").length === 2 && !document.getElementById("modeleSel").disabled`));
+await choisirModele("autre");
+const modeleChange = await quand(modeleServeur("autre")) && await quand(`document.getElementById("modeleSel").value === "autre" && !document.getElementById("modeleSel").disabled`);
+await choisirModele("faux");
+verifier("partie : modèle de l'IA changé à chaud, puis remis", modeleChange && await quand(modeleServeur("faux")) && await quand(`!document.getElementById("modeleSel").disabled`));
+
 // Préparation : trois parties (scénario, lieux, PNJ) ; « Créer un PNJ ici » ouvre la demande avec ce lieu
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/creation.html#lieux" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/creation.html#lieux` });
 await quand(`document.readyState === "complete"`);
 verifier("préparation : partie Lieux seule affichée, comptes sur les onglets", await quand(`document.body.dataset.section === "lieux" && document.querySelectorAll(".lieu-fiche").length === 3 && document.getElementById("section-scenario").offsetParent === null && document.getElementById("nbLieux").textContent === "3" && document.getElementById("nbPnj").textContent === "5"`));
 await js(`document.querySelector("[data-creer]").click()`);
@@ -181,11 +218,18 @@ verifier("apparence : thème créé, choisi et appliqué", await quand(`document
 
 // Accueil : « Nouvelle table » supprime l'univers et la conversation
 await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/` });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await quand(`!document.getElementById("accReprendreBtn").hidden`);
 await js(`window.confirm = () => true; document.getElementById("nouvelleTableBtn").click()`);
 verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && !localStorage.getItem("theme-css") && document.querySelectorAll("#log .line").length === 0`));
+
+// Sauvegarde abîmée (JSON valide, forme inattendue) : effacée au chargement, la page démarre sans partie
+// (écrite au pagehide, après la sauvegarde de la page qui, sans partie, efface la clé)
+await js(`window.addEventListener("pagehide", () => localStorage.setItem("pnj-partie", JSON.stringify({ rencontres: "Ysolde", lignes: 3 })))`);
+await cdp("Page.reload");
+await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
+verifier("sauvegarde abîmée : effacée et signalée", await quand(`localStorage.getItem("pnj-partie") === null && [...document.querySelectorAll("#bandeau .alerte")].some(a => a.textContent.includes("illisible")) && document.getElementById("accReprendreBtn").hidden`));
 
 console.log(resultats.join("\n"));
 // Browser.close ferme tous les processus d'Edge (sous Windows, kill() laisse vivre ses enfants, port 9333 compris)

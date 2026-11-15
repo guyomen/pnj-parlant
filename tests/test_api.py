@@ -50,7 +50,8 @@ class TestBanque:
         assert client.post("/api/bank", json={"nom": "Brom"}).status_code == 400  # pas de salutation
         npc_id = client.post("/api/bank", json={"nom": "Brom", "salutation": "*Grogne.* Salut.",
                                                 "genre": "masculin"}).get_json()["id"]
-        assert client.get("/api/bank").get_json() == [{"id": npc_id, "nom": "Brom", "metier": "", "lieu": "", "portrait": 0}]
+        attendu = [{"id": npc_id, "nom": "Brom", "metier": "", "lieu": "", "portrait": 0}]
+        assert client.get("/api/bank").get_json() == attendu
         npc = client.get(f"/api/bank/{npc_id}").get_json()
         assert npc["salutation"] == "Salut." and npc["voix"]["name"] in {"bob", "carl"}
         npc["metier"] = "forgeron"
@@ -83,7 +84,8 @@ class TestUnivers:
         self._remplir(client)
         assert client.delete("/api/univers").get_json() == {"pnj": 1}
         assert client.get("/api/bank").get_json() == [] and client.get("/api/lieux").get_json() == []
-        assert client.get("/api/scenario").get_json() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
+        vide = {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
+        assert client.get("/api/scenario").get_json() == vide
 
     def test_export_puis_import_du_zip(self, client):
         ysolde = self._remplir(client)
@@ -130,7 +132,7 @@ class TestUnivers:
 class TestLieux:
     def test_enregistrer_et_relire(self, client):
         lieux = client.put("/api/lieux", json=LIEUX).get_json()
-        assert [l["id"] for l in lieux] == ["auberge-du-sanglier", "forge-de-brom"]
+        assert [x["id"] for x in lieux] == ["auberge-du-sanglier", "forge-de-brom"]
         assert client.get("/api/lieux").get_json() == lieux
 
     def test_creation_d_un_pnj_dans_un_lieu(self, client, moteurs):

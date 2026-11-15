@@ -9,6 +9,7 @@ dialogue = "local"         # répliques des PNJ : "claude", "local" (Ollama) ou 
 [claude]
 cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
 modele = "claude-haiku-5-5"
+delai_max = 60             # secondes d'attente d'une réponse de Claude (connexion : 5 s) ; au-delà, message d'erreur
 # contexte = 200000        # optionnel : taille de fenêtre du modèle choisi, à vérifier selon le modèle
 
 [claude.generation]        # création de la fiche du PNJ (JSON)
@@ -49,6 +50,8 @@ max_tokens = 200
 
 [dialogue]
 historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
+pnj_max = 3                # PNJ en scène au plus (celui qui parle compris), de 1 à 6. Au-delà de 3, les petits
+                           # modèles locaux suivent mal une scène chargée (réponses plus lentes, PNJ qui se confondent)
 phrases_max = 3            # phrases dites au plus par réplique : au-delà, la réponse est coupée
                            # (les descriptions entre parenthèses ne comptent pas)
 intervention = 0.3         # à plusieurs PNJ : chance qu'un autre PNJ réagisse de lui-même après une réplique
@@ -123,8 +126,10 @@ appareil = "auto"          # "auto" (carte NVIDIA si disponible), "cuda" ou "cpu
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)
 
 [serveur]
-hote = "0.0.0.0"
+hote = "0.0.0.0"           # toutes les interfaces : les téléphones du Wi-Fi peuvent jouer ; "127.0.0.1" pour jouer seul sur ce PC
 port = 5000
 https = false              # true : HTTPS auto-signé, nécessaire pour le micro depuis une autre machine
-mot_de_passe_mj = ""       # protège les réglages modifiables dans la page Options ; vide = depuis ce PC seulement
+mot_de_passe_mj = ""       # protège les réglages de la page Options et, depuis un autre appareil que ce PC, toute
+                           # modification de l'univers (scénario, lieux, PNJ, import) et la lecture des secrets des PNJ
+                           # et des notes du MJ ; vide = tout cela depuis ce PC seulement
 # La page Options réécrit ce fichier (commentaires et mise en forme gardés) quand on y change un réglage.
