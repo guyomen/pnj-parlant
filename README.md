@@ -115,7 +115,7 @@ Un thème ou un style prédéfini modifié peut être rétabli ; un thème ou un
 
 ### Partager un univers
 
-Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque.
+Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
 
 ### Univers d'exemple : Pré-Novice
 

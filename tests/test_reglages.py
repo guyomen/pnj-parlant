@@ -160,3 +160,32 @@ def test_mot_de_passe_du_mj(web, monkeypatch):
 def test_sans_fichier_en_memoire(client, ctx):
     assert client.put("/api/reglages", json={"changements": {"dialogue.intervention": 0.5}}).status_code == 200
     assert ctx.intervention == 0.5 and client.get("/api/reglages").get_json()["fichier"] is None
+
+
+def test_ecrire_ne_laisse_pas_de_copie_en_cas_d_echec(fichier, monkeypatch):
+    avant = fichier.read_text(encoding="utf-8")
+
+    def echec(src, dst):
+        raise PermissionError("ouvert dans un éditeur")
+    monkeypatch.setattr(reglages.os, "replace", echec)
+    with pytest.raises(PermissionError):
+        reglages.ecrire(fichier, {"dialogue.historique": 20})
+    assert [p.name for p in fichier.parent.iterdir()] == ["config.toml"]  # pas de .config-xxxx.toml (clé API)
+    assert fichier.read_text(encoding="utf-8") == avant
+
+
+def test_reglages_simultanes_s_appliquent_l_un_apres_l_autre(appli, fichier):
+    import threading
+    erreurs = []
+
+    def changer(valeur):
+        try:
+            with appli.test_client() as c:
+                c.put("/api/reglages", json={"dialogue.historique": valeur})
+        except Exception as e:  # pylint: disable=broad-except
+            erreurs.append(e)
+    fils = [threading.Thread(target=changer, args=(v,)) for v in (10, 11, 12, 13)]
+    [f.start() for f in fils]
+    [f.join() for f in fils]
+    assert not erreurs
+    assert tomllib.loads(fichier.read_text(encoding="utf-8"))["dialogue"]["historique"] in (10, 11, 12, 13)

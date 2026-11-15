@@ -215,9 +215,13 @@ def ecrire(fichier, changements):
             table = table[partie]
         table[nom] = valeur
     fd, tmp = tempfile.mkstemp(dir=fichier.parent, prefix=".config-", suffix=".toml")
-    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-        f.write(tomlkit.dumps(doc))
-    os.replace(tmp, fichier)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(tomlkit.dumps(doc))
+        os.replace(tmp, fichier)
+    finally:  # échec (config.toml ouvert dans un éditeur) : la copie, qui contient la clé API, ne reste pas
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def autorise(reglages, mot_de_passe, local):

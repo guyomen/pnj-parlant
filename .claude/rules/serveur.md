@@ -119,6 +119,12 @@ Serveur sans état : l'historique vit dans le navigateur.
   `supprimer_portrait`) ; supprimé avec le PNJ, par `vider` et quand une fiche importée remplace l'ancienne.
   Export : images incluses ; import (`lire_zip`, `importer`) : un portrait suit sa fiche (même nom, fiche renommée
   comprise), sans fiche ou illisible → `ignores`. `IMPORT_MAX_OCTETS` = 60 Mo.
+- Intégrité (`banque.py`) : toutes les écritures passent par `_ecrire` (fichier temporaire du dossier puis `os.replace`,
+  réessayé sous Windows ; lecture par `_lire`) ; un `RLock` couvre `importer`, `vider`, `supprimer` et les portraits.
+  `importer` écrit d'abord (fiches passées par `normaliser_fiche`, aussi utilisée par `enregistrer_pnj` pour
+  POST/PUT /api/bank) et ne supprime qu'ensuite les PNJ absents de l'import. `enregistrer_portrait` renvoie faux si
+  la fiche a disparu (la route répond 404, pas de portrait orphelin). `Contexte.verrou_reglages` sérialise
+  `appliquer_reglages` et `changer_tts` ; `reglages.ecrire` supprime son fichier temporaire en cas d'échec.
 - Routes : `GET /api/bank/<id>/portrait` (lu en mémoire : sous Windows un fichier ouvert ne se remplace pas ;
   `?v=` → cache 1 jour), `POST` (corps facultatif = fiche à l'écran ; 400 moteur absent, 503
   `PortraitIndisponible` ; renvoie `{portrait: version, prompt}`), `DELETE`. `/api/config` : `portraits` = nom du

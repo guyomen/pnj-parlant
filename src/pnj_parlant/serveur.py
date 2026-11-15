@@ -44,7 +44,7 @@ from flask import Flask, Response, jsonify, request, send_file
 
 from . import config as configuration
 from . import dialogue, fiches, reglages, systeme, texte, voix
-from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier
+from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier, normaliser_fiche
 from .moteurs import MoteurIndisponible, Moteurs
 from .portraits import STYLE, PortraitIndisponible, prompt_du_style, prompt_portrait, styles
 from .portraits import charger as charger_portraits
@@ -137,6 +137,7 @@ class Contexte:
         self.reconnaissance = reconnaissance or Reconnaissance(cfg.section("reconnaissance"), cfg.racine)
         self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
+        self.verrou_reglages = threading.RLock()  # un seul changement de réglages ou de moteur de voix à la fois
         self.parametres()
 
     def parametres(self):
@@ -153,6 +154,10 @@ class Contexte:
         """Applique des réglages déjà vérifiés (reglages.valider) : écrits dans config.toml, puis pris en compte sans
         redémarrer. Ce qui peut échouer (moteur de voix inutilisable…) est essayé avant d'écrire : en cas d'erreur
         (ValueError), rien ne change. Renvoie les libellés des réglages qui attendent un redémarrage."""
+        with self.verrou_reglages:  # deux PUT simultanés : fichier et mémoire reçoivent les deux, l'un après l'autre
+            return self._appliquer_reglages(changements)
+
+    def _appliquer_reglages(self, changements):
         avant, nouveaux = self.cfg.reglages, copy.deepcopy(self.cfg.reglages)
         for cle, valeur in changements.items():
             reglages.poser(nouveaux, cle, valeur)
@@ -251,13 +256,14 @@ class Contexte:
 
     def changer_tts(self, nom):
         """Change de moteur de synthèse pour tout le serveur. Lève ValueError s'il est inutilisable."""
-        moteur = self.tts_charges.get(nom) or voix.charger(self.cfg.reglages, self.cfg.racine, nom)
-        if not moteur.catalogue():
-            raise ValueError(f"Le moteur « {nom} » n'est pas utilisable ici (paquet ou voix manquants).")
-        if nom not in self.tts_charges:
-            self.tts_charges[nom] = moteur
-            threading.Thread(target=moteur.prechauffer, daemon=True).start()
-        self.tts = moteur
+        with self.verrou_reglages:
+            moteur = self.tts_charges.get(nom) or voix.charger(self.cfg.reglages, self.cfg.racine, nom)
+            if not moteur.catalogue():
+                raise ValueError(f"Le moteur « {nom} » n'est pas utilisable ici (paquet ou voix manquants).")
+            if nom not in self.tts_charges:
+                self.tts_charges[nom] = moteur
+                threading.Thread(target=moteur.prechauffer, daemon=True).start()
+            self.tts = moteur
 
     def creer_pnj(self, role="", nom="", genre="", consignes="", lieu=""):
         """Fiche d'un nouveau PNJ, avec sa voix, rattaché au lieu `lieu` (identifiant) s'il existe.
@@ -269,7 +275,7 @@ class Contexte:
 
     def enregistrer_pnj(self, npc, npc_id=None):
         """Ajoute le PNJ à la banque (ou le met à jour si `npc_id`) et renvoie son identifiant."""
-        npc = voix.verifier(self.tts, dict(npc))
+        npc = voix.verifier(self.tts, normaliser_fiche(npc))
         npc["salutation"] = texte.nettoyer(npc.get("salutation", ""))
         if npc_id:
             self.banque.ecrire(npc_id, npc)
@@ -517,7 +523,8 @@ def create_app(cfg, **moteurs):
             octets, ext = ctx.portraits.generer(prompt, secrets.randbelow(2**31))
         except PortraitIndisponible as e:
             return erreur(str(e), 503)
-        ctx.banque.enregistrer_portrait(npc_id, octets, ext)
+        if not ctx.banque.enregistrer_portrait(npc_id, octets, ext):  # supprimé pendant la génération
+            return erreur("PNJ introuvable.", 404)
         return jsonify({"portrait": ctx.banque.version_portrait(npc_id), "prompt": prompt})
 
     @app.delete("/api/bank/<npc_id>/portrait")

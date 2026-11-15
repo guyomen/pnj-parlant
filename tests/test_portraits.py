@@ -249,3 +249,16 @@ def test_portrait_erreurs(client, portraits):
     portraits.actif = False
     assert client.post(f"/api/bank/{npc_id}/portrait").status_code == 400
     assert client.get("/api/config").get_json()["portraits"] is None
+
+
+def test_portrait_d_un_pnj_supprime_pendant_la_generation(client, portraits, ctx):
+    npc_id = client.post("/api/bank", json=BROM).get_json()["id"]
+    generer = portraits.generer
+
+    def generer_puis_supprimer(prompt, graine):
+        resultat = generer(prompt, graine)
+        client.delete(f"/api/bank/{npc_id}")  # le MJ supprime le PNJ pendant les 60 s de génération
+        return resultat
+    portraits.generer = generer_puis_supprimer
+    assert client.post(f"/api/bank/{npc_id}/portrait").status_code == 404
+    assert ctx.banque.portrait(npc_id) is None

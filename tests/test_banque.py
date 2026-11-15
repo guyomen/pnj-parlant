@@ -162,3 +162,94 @@ def test_lire_zip_aplatit_et_protege(monkeypatch):
 def test_nom_de_fichier_sans_chemin():
     assert nom_de_fichier("../../etc/a-1.json") == "a-1.json"
     assert nom_de_fichier(r"C:\univers\a-1.json") == "a-1.json"
+
+
+# --- Intégrité des données sur disque (lot 3) ---------------------------------------
+
+class TestEcrituresAtomiques:
+    def test_aucun_fichier_temporaire_apres_ecriture(self, banque):
+        _remplir(banque)
+        banque.enregistrer_styles({})
+        assert sorted(p.name for p in banque.dossier.iterdir()) == [
+            "_lieux.json", "_scenario.json", "_styles.json", "brom-0001.json"]
+
+    def test_echec_du_remplacement_garde_l_ancien_fichier(self, banque, monkeypatch):
+        banque.enregistrer_scenario({"monde": "Ancien."})
+
+        def echec(src, dst):
+            raise OSError("fichier ouvert")
+        monkeypatch.setattr(module_banque.os, "replace", echec)
+        with pytest.raises(OSError):
+            banque.enregistrer_scenario({"monde": "Nouveau."})
+        monkeypatch.undo()
+        assert banque.scenario()["monde"] == "Ancien."
+        assert [p.name for p in banque.dossier.iterdir()] == ["_scenario.json"]  # pas de .tmp laissé
+
+    def test_lecteur_concurrent_ne_voit_jamais_un_fichier_vide(self, banque):
+        import threading
+        banque.enregistrer_scenario({"monde": "x" * 5000})
+        fini, vus = threading.Event(), []
+
+        def lecteur():
+            while not fini.is_set():
+                vus.append(banque.scenario()["monde"])
+        t = threading.Thread(target=lecteur)
+        t.start()
+        for i in range(150):
+            banque.enregistrer_scenario({"monde": str(i % 10) * 5000})
+        fini.set()
+        t.join()
+        assert vus and all(len(m) == 5000 for m in vus)
+
+
+class TestImportSur:
+    def test_oserror_pendant_l_import_garde_les_anciens_pnj(self, banque, monkeypatch):
+        _remplir(banque)
+        banque.ecrire("ysolde-0002", {"nom": "Ysolde"})
+        reel = module_banque._ecrire
+
+        def tombe(chemin, octets):
+            if chemin.name == "nouveau-0003.json":
+                raise OSError("disque plein")
+            return reel(chemin, octets)
+        monkeypatch.setattr(module_banque, "_ecrire", tombe)
+        with pytest.raises(OSError):
+            banque.importer({"nouveau-0003.json": b'{"nom": "Nouveau"}'})
+        monkeypatch.undo()
+        assert sorted(n["nom"] for n in banque.liste()) == ["Brom", "Ysolde"]
+
+    def test_remplacer_supprime_ce_qui_n_est_plus_dans_l_import(self, banque):
+        _remplir(banque)
+        banque.importer({"brom-0001.json": b'{"nom": "Brom II"}', "nouveau-0003.json": b'{"nom": "Nouveau"}'})
+        assert sorted(n["nom"] for n in banque.liste()) == ["Brom II", "Nouveau"]
+
+    def test_fiches_importees_normalisees(self, banque):
+        banque.importer({"x-0001.json": json.dumps({
+            "nom": "X" * 500, "metier": ["pas", "un", "texte"], "connaissances": "pas une liste", "genre": "robot",
+            "secret": None}).encode()})
+        npc = banque.lire("x-0001")
+        assert len(npc["nom"]) == 80 and npc["metier"] == "" and npc["connaissances"] == []
+        assert "genre" not in npc and npc["secret"] == ""
+
+
+class TestNormaliserFiche:
+    def test_champs_surs(self):
+        npc = module_banque.normaliser_fiche({
+            "nom": " Brom ", "connaissances": ["a", None, "", 3, {"x": 1}, "b" * 1000] + ["c"] * 50,
+            "genre": "masculin", "timbre": "bizarre", "debit": 5, "voix": {"name": "v"}, "lieu": ["x"]})
+        assert npc["nom"] == "Brom" and npc["genre"] == "masculin"
+        assert "timbre" not in npc and "debit" not in npc
+        assert npc["voix"] == {"name": "v"} and npc["lieu"] == ""
+        assert npc["connaissances"][:2] == ["a", "3"] and len(npc["connaissances"][2]) == 600
+        assert len(npc["connaissances"]) == module_banque.CONNAISSANCES_MAX
+        assert all(isinstance(npc[c], str) for c in ("metier", "apparence", "personnalite", "humeur", "secret",
+                                                     "salutation"))
+
+
+class TestPortraitOrphelin:
+    def test_pas_de_portrait_sans_fiche(self, banque):
+        png = b"\x89PNG\r\n\x1a\n"
+        assert banque.enregistrer_portrait("absent-0001", png, "png") is False
+        assert list(banque.dossier.glob("*")) == [] if banque.dossier.exists() else True
+        npc_id = banque.ajouter({"nom": "Brom"})
+        assert banque.enregistrer_portrait(npc_id, png, "png") is True
