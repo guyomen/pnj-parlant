@@ -9,6 +9,7 @@ dialogue = "local"         # répliques des PNJ : "claude", "local" (Ollama) ou 
 [claude]
 cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
 modele = "claude-haiku-5-5"
+delai_max = 60             # secondes d'attente d'une réponse de Claude (connexion : 5 s) ; au-delà, message d'erreur
 # contexte = 200000        # optionnel : taille de fenêtre du modèle choisi, à vérifier selon le modèle
 
 [claude.generation]        # création de la fiche du PNJ (JSON)
@@ -49,6 +50,8 @@ max_tokens = 200
 
 [dialogue]
 historique = 12            # nombre de messages gardés pour le contexte (quel que soit le moteur)
+pnj_max = 3                # PNJ en scène au plus (celui qui parle compris), de 1 à 6. Au-delà de 3, les petits
+                           # modèles locaux suivent mal une scène chargée (réponses plus lentes, PNJ qui se confondent)
 phrases_max = 3            # phrases dites au plus par réplique : au-delà, la réponse est coupée
                            # (les descriptions entre parenthèses ne comptent pas)
 intervention = 0.3         # à plusieurs PNJ : chance qu'un autre PNJ réagisse de lui-même après une réplique

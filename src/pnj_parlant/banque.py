@@ -54,7 +54,7 @@ def valider_styles(data):
         raise ValueError("Styles illisibles.")
     themes, portraits = {}, {}
     for tid, t in (data.get("themes") or {}).items():
-        if not THEME.match(str(tid)) or not isinstance(t, dict):
+        if not THEME.fullmatch(str(tid)) or not isinstance(t, dict):
             raise ValueError(f"Identifiant de thème invalide : {tid}.")
         nom, mode = _texte(t.get("nom"), 60), t.get("mode", "auto")
         if not nom:
@@ -69,7 +69,7 @@ def valider_styles(data):
             theme[palette] = {c: couleurs[c].lower() for c in COULEURS}
         themes[tid] = theme
     for sid, st in (data.get("portraits") or {}).items():
-        if not THEME.match(str(sid)) or not isinstance(st, dict):
+        if not THEME.fullmatch(str(sid)) or not isinstance(st, dict):
             raise ValueError(f"Identifiant de style invalide : {sid}.")
         nom, prompt = _texte(st.get("nom"), 60), _texte(st.get("prompt"), 600)
         if not nom or not prompt:
@@ -83,7 +83,7 @@ def valider_styles(data):
 def theme_valide(theme):
     """Identifiant de thème graphique, ou "" (thème par défaut) s'il est absent ou mal formé."""
     theme = str(theme or "").strip().lower()
-    return theme if THEME.match(theme) else ""
+    return theme if THEME.fullmatch(theme) else ""
 
 
 LIEUX_MAX = 60
@@ -139,7 +139,7 @@ class Banque:
                 continue
             nom = str(item["nom"]).strip()[:80]
             lieu_id = str(item.get("id") or "")
-            if not NPC_ID.match(lieu_id) or lieu_id in pris:
+            if not NPC_ID.fullmatch(lieu_id) or lieu_id in pris:
                 base = lieu_id = slug(nom, "lieu")
                 n = 2
                 while lieu_id in pris:
@@ -170,7 +170,7 @@ class Banque:
     # --- PNJ --------------------------------------------------------------------
     def chemin(self, npc_id):
         """Fichier du PNJ, ou None si l'identifiant est invalide."""
-        if not NPC_ID.match(npc_id or ""):
+        if not isinstance(npc_id, str) or not NPC_ID.fullmatch(npc_id):
             return None
         return self.dossier / f"{npc_id}.json"
 
@@ -186,8 +186,10 @@ class Banque:
                 continue  # _scenario.json
             try:
                 npc = json.loads(f.read_text(encoding="utf-8"))
-            except ValueError:
+            except (OSError, ValueError):
                 continue  # fichier abîmé ou en cours d'édition : on l'ignore
+            if not isinstance(npc, dict):
+                continue  # JSON valide mais pas une fiche
             items.append({"id": f.stem, "nom": npc.get("nom", f.stem), "metier": npc.get("metier", ""),
                           "lieu": npc.get("lieu", ""),  # lieu habituel
                           "portrait": self.version_portrait(f.stem)})
@@ -197,7 +199,12 @@ class Banque:
         """Fiche du PNJ (avec son "id" et "portrait" : voir version_portrait), ou None s'il n'existe pas."""
         if not self.existe(npc_id):
             return None
-        npc = json.loads(self.chemin(npc_id).read_text(encoding="utf-8"))
+        try:
+            npc = json.loads(self.chemin(npc_id).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None  # fichier abîmé : comme un PNJ introuvable, pas une erreur 500
+        if not isinstance(npc, dict):
+            return None
         npc["id"] = npc_id
         npc["portrait"] = self.version_portrait(npc_id)
         return npc
@@ -224,7 +231,7 @@ class Banque:
     # --- Portraits ----------------------------------------------------------------
     def portrait(self, npc_id):
         """Fichier du portrait du PNJ, ou None s'il n'en a pas."""
-        if not NPC_ID.match(npc_id or ""):
+        if not NPC_ID.fullmatch(npc_id or ""):
             return None
         return next((p for ext in IMAGES if (p := self.dossier / f"{npc_id}.{ext}").exists()), None)
 
@@ -236,7 +243,7 @@ class Banque:
 
     def enregistrer_portrait(self, npc_id, octets, ext):
         """Remplace le portrait du PNJ (`ext` : png, jpg ou webp)."""
-        if not NPC_ID.match(npc_id or "") or ext not in IMAGES:
+        if not NPC_ID.fullmatch(npc_id or "") or ext not in IMAGES:
             raise ValueError("Portrait invalide.")
         self.supprimer_portrait(npc_id)
         self.dossier.mkdir(parents=True, exist_ok=True)
@@ -267,7 +274,7 @@ class Banque:
         with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
             for f in sorted(self.dossier.iterdir()) if self.dossier.exists() else []:
                 if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (
-                        NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
+                        NPC_ID.fullmatch(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
                     archive.write(f, f.name)
         return tampon.getvalue()
 
@@ -306,7 +313,7 @@ class Banque:
                     ignores.append(nom)
             elif not stem.startswith("_") and isinstance(data, dict) and str(data.get("nom") or "").strip():
                 # fichier renommé à la main : il reçoit un identifiant valide, tiré du nom du PNJ
-                npc_id = stem if NPC_ID.match(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
+                npc_id = stem if NPC_ID.fullmatch(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
                 pnjs[npc_id] = data
                 ids[stem] = npc_id
             else:

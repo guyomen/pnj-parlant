@@ -35,11 +35,18 @@ Serveur sans état : l'historique vit dans le navigateur.
   = celui chargé, trouvé par `/api/v0/models` ; `<think>…</think>` retiré ; `contexte_max` = contexte du modèle
   chargé ; `etat_lmstudio()` pour la page Options). `MoteurIndisponible` : message destiné au joueur (réseau, Docker
   arrêté, LM Studio arrêté, modèle absent).
+- Valeurs par défaut : une seule table `moteurs.DEFAUTS` (égale à `config.toml.example` et au `CATALOGUE` : création et
+  dialogue `local`), fusionnée dans `Moteurs.__init__` (`avec_defauts`) : `Moteurs({})` fonctionne, un `config.toml`
+  ancien aussi. Claude : délai `[claude] delai_max` (60 s, connexion 5 s), clé absente → `MoteurIndisponible`.
+  Ollama / LM Studio : une ligne `{"error"}` ou un flux Ollama sans `done: true` = `MoteurIndisponible` ; délai dépassé
+  = message distinct d'« injoignable ».
 - Réponses en streaming pour les trois moteurs ; `usage` (tokens) renvoyé en fin de réplique.
 
 ## Routes
 - `GET /api/config` : moteurs, moteur de voix (`tts`, null si aucune voix), `stt_local`, `modeles_locaux`,
-  `modele_local`, `intervention`, `contexte_max`.
+  `modele_local`, `intervention`, `pnj_max`, `contexte_max`.
+- Entrées : `corps(dict|list)` (400 si le JSON n'a pas le bon type), `chaine`, `fiche_recue` : aucune route ne répond 500
+  sur un corps mal formé (tests : `TestEntreesInvalides`).
 - `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
 - `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir « Réglages à chaud » ci-dessous.
 - `GET /api/sante` → `{problemes: [{cle, niveau, message}]}` (`Contexte.problemes`, aussi affiché dans la console au
@@ -122,7 +129,7 @@ Serveur sans état : l'historique vit dans le navigateur.
   hors de son lieu habituel.
 - `history` : toute la scène, `[{speaker: nom du PNJ ou null pour le joueur, content}]`, salutations comprises,
   tronquée à `[dialogue] historique` (12) messages.
-- Scène à plusieurs (`presents`, 3 PNJ en tout au plus) : chaque PNJ voit ses répliques en `assistant` et celles des
+- Scène à plusieurs (`presents`, `[dialogue] pnj_max` PNJ en tout au plus, 3 par défaut) : chaque PNJ voit ses répliques en `assistant` et celles des
   autres en `user` préfixées par le nom de l'auteur, plus un rappel en fin de dernier message.
 - Les petits modèles écrivent quand même la suite de la scène : séquences d'arrêt (`dialogue.arrets` :
   « Léonard : », « Voyageur: »… → `stop` d'Ollama, `stop_sequences` de Claude), puis en filet de sécurité

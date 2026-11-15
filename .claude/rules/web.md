@@ -96,7 +96,7 @@ paths:
 - Fonctions pures (scene.js, testées) : `valeurReglage(type, champ)`, `groupeUtile(groupe, valeurs)`, `resumeModifs(n)`.
 
 ## État de la page de jeu
-- `npcs` (scène, 3 au plus), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est
+- `npcs` (scène, `maxPnj` au plus : `pnj_max` de /api/config, 3 par défaut ; message d'information au-delà de 3), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est
   nommé), `rencontres` (pour l'export), `lieuActuel`, `positions` (nom → lieu pendant la partie), `ici`.
 - `busy` + `setBusy(b)` : active/désactive tous les contrôles ; `libre()` attend la fin de l'action en cours.
 - `parole` (`debutParole` / `finParole` / `stopNpc`) : prise de parole en cours, `{ctrl: AbortController, stop}`.

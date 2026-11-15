@@ -11,8 +11,10 @@ def nettoyer(text):
     """Retire didascalies *...*, markdown et emojis avant la synthèse vocale.
     Le texte entre parenthèses est gardé : le navigateur le fait lire par la voix du narrateur."""
     text = re.sub(r"\*[^*]*\*", "", text)
-    text = re.sub(r"[#_`>]", "", text)
-    text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", text)
+    text = re.sub(r"[*#_`>]", "", text)  # astérisques isolés compris
+    # Emojis : pictogrammes, symboles divers, horloges et flèches (U+2300-23FF), étoiles (U+2B00-2BFF),
+    # sélecteur de variante, jonction de séquence (drapeaux, familles) et teintes de peau
+    text = re.sub(r"[\U0001F000-\U0001FAFF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

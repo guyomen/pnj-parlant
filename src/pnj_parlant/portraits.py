@@ -241,9 +241,15 @@ class Local:
                 raise PortraitIndisponible(f"Modèle « {self.modele} » introuvable : la première génération le "
                                            "télécharge (réseau nécessaire, environ 2,5 Go).") from e
             import torch  # pylint: disable=import-outside-toplevel
-            hasard = torch.Generator(device=self._appareil).manual_seed(graine)
-            image = pipe(prompt=prompt, num_inference_steps=self.etapes, guidance_scale=0.0,
-                         width=self.taille, height=self.taille, generator=hasard).images[0]
+            try:
+                hasard = torch.Generator(device=self._appareil).manual_seed(graine)
+                image = pipe(prompt=prompt, num_inference_steps=self.etapes, guidance_scale=0.0,
+                             width=self.taille, height=self.taille, generator=hasard).images[0]
+            except RuntimeError as e:  # mémoire vidéo insuffisante (CUDA), en général avec Ollama chargé
+                log.warning("Portrait local : %s", e)
+                raise PortraitIndisponible("Portrait impossible : mémoire de la carte graphique insuffisante ? "
+                                           "Libérez-la (modèle de dialogue déchargé) ou choisissez « cpu » "
+                                           "pour [portraits.local] appareil.") from e
         tampon = io.BytesIO()
         image.save(tampon, format="PNG")
         return tampon.getvalue(), "png"

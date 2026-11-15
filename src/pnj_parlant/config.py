@@ -49,7 +49,7 @@ def charger(chemin=None):
 def ollama_sur_ce_pc(cfg):
     """True si un moteur de langage est « local » et qu'Ollama est attendu sur ce PC (localhost) : les lanceurs
     Windows ne démarrent Docker ou ne vérifient Ollama que dans ce cas. En tout-Claude, rien à démarrer."""
-    moteurs = cfg.section("moteurs") or {"creation": "claude", "dialogue": "claude"}
+    moteurs = {"creation": "local", "dialogue": "local", **cfg.section("moteurs")}  # défauts de moteurs.DEFAUTS
     if "local" not in (moteurs.get("creation"), moteurs.get("dialogue")):
         return False
     hote = urlsplit(cfg.section("local").get("url", "http://localhost:11434")).hostname

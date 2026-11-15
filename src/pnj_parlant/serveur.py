@@ -79,6 +79,51 @@ def paquet_installe(module):
         return False
 
 
+class EntreeInvalide(Exception):
+    """Le corps de la requête n'a pas la forme attendue : réponse 400 (voir `corps`)."""
+
+
+def corps(type_attendu=dict):
+    """Corps JSON de la requête, du type attendu (objet ou liste) ; un corps absent ou illisible donne un objet
+    ou une liste vide. Lève EntreeInvalide (réponse 400) si le JSON est d'un autre type : texte, nombre, liste…"""
+    data = request.get_json(silent=True)
+    if data is None:
+        return type_attendu()
+    if not isinstance(data, type_attendu):
+        raise EntreeInvalide("Requête invalide : " + ("un objet JSON" if type_attendu is dict else "une liste JSON")
+                             + " est attendu.")
+    return data
+
+
+def chaine(valeur):
+    """Texte d'un champ reçu du navigateur : une chaîne, un nombre converti, sinon vide (null, liste, objet)."""
+    if isinstance(valeur, str):
+        return valeur
+    if isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+        return str(valeur)
+    return ""
+
+
+def fiche_recue(npc):
+    """Fiche d'un PNJ reçue pour le dialogue, aux champs de texte garantis (une liste de chaînes pour les
+    connaissances) : le navigateur est la source, pas un fichier sûr."""
+    propre = dict(npc)
+    for cle in ("nom", "metier", "apparence", "personnalite", "humeur", "secret"):
+        propre[cle] = chaine(npc.get(cle))
+    connaissances = npc.get("connaissances")
+    propre["connaissances"] = [chaine(c) for c in connaissances if chaine(c)] if isinstance(connaissances, list) else []
+    return propre
+
+
+def entier_borne(valeur, defaut, minimum, maximum=None):
+    """`valeur` convertie en entier et bornée ; `defaut` si elle n'est pas un nombre (config.toml édité à la main)."""
+    try:
+        n = int(valeur)
+    except (TypeError, ValueError, OverflowError):
+        n = defaut
+    return max(minimum, n if maximum is None else min(maximum, n))
+
+
 class Contexte:
     """Tout ce dont les routes ont besoin. Les moteurs peuvent être remplacés (tests)."""
 
@@ -98,9 +143,11 @@ class Contexte:
         """Réglages simples lus à chaque usage (dialogue, style des portraits par défaut)."""
         cfg = self.cfg
         self.style_defaut = cfg.section("portraits").get("style", STYLE)  # si le scénario n'a pas choisi de style
-        self.historique = cfg.section("dialogue").get("historique", 12)  # messages gardés pour le contexte
-        self.intervention = cfg.section("dialogue").get("intervention", 0.3)
-        self.phrases_max = max(1, int(cfg.section("dialogue").get("phrases_max", dialogue.PHRASES_MAX)))
+        section = cfg.section("dialogue")
+        self.historique = entier_borne(section.get("historique", 12), 12, 2)  # messages gardés pour le contexte
+        self.intervention = section.get("intervention", 0.3)
+        self.phrases_max = entier_borne(section.get("phrases_max", dialogue.PHRASES_MAX), dialogue.PHRASES_MAX, 1)
+        self.pnj_max = entier_borne(section.get("pnj_max", dialogue.PNJ_MAX), dialogue.PNJ_MAX, 1, 6)  # PNJ en scène
 
     def appliquer_reglages(self, changements):
         """Applique des réglages déjà vérifiés (reglages.valider) : écrits dans config.toml, puis pris en compte sans
@@ -240,6 +287,10 @@ def create_app(cfg, **moteurs):
     def erreur(message, code):
         return jsonify({"error": message}), code
 
+    @app.errorhandler(EntreeInvalide)
+    def entree_invalide(e):
+        return erreur(str(e), 400)
+
     @app.get("/")
     def index():
         return app.send_static_file("index.html")
@@ -251,7 +302,8 @@ def create_app(cfg, **moteurs):
         installes = m.modeles_locaux() if "local" in m.choix.values() else []
         return jsonify({"moteurs": m.description(), "tts": ctx.tts.nom if ctx.tts.catalogue() else None,
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
-                        "intervention": ctx.intervention, "modele_local": m.modele_local_installe(installes),
+                        "intervention": ctx.intervention, "pnj_max": ctx.pnj_max,
+                        "modele_local": m.modele_local_installe(installes),
                         "contexte_max": m.contexte_max(),
                         "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None})
 
@@ -297,7 +349,7 @@ def create_app(cfg, **moteurs):
 
     @app.post("/api/reglages/verifier")
     def reglages_verifier():
-        mdp = (request.get_json(silent=True) or {}).get("mot_de_passe")
+        mdp = corps().get("mot_de_passe")
         if not reglages.autorise(ctx.cfg.reglages, mdp, depuis_le_serveur()):
             return refus()
         return jsonify({"ok": True})
@@ -309,7 +361,7 @@ def create_app(cfg, **moteurs):
         if not reglages.autorise(ctx.cfg.reglages, request.headers.get("X-Mot-De-Passe-MJ"), depuis_le_serveur()):
             return refus()
         try:
-            changements = (request.get_json(silent=True) or {}).get("changements")
+            changements = corps().get("changements")
             redemarrage = ctx.appliquer_reglages(reglages.valider(changements))
         except ValueError as e:
             return erreur(str(e), 400)
@@ -320,10 +372,10 @@ def create_app(cfg, **moteurs):
     # --- Création ---------------------------------------------------------------
     @app.post("/api/npc/generate")
     def generate_npc():
-        d = request.json or {}
+        d = corps()
         try:
-            return jsonify(ctx.creer_pnj(d.get("role", ""), d.get("nom", ""), d.get("genre", ""),
-                                         d.get("consignes", ""), d.get("lieu", "")))
+            return jsonify(ctx.creer_pnj(chaine(d.get("role")), chaine(d.get("nom")), chaine(d.get("genre")),
+                                         chaine(d.get("consignes")), chaine(d.get("lieu"))))
         except ValueError:
             return erreur("Le modèle n'a pas renvoyé de JSON valide. Relancez la génération.", 502)
         except MoteurIndisponible as e:
@@ -336,7 +388,7 @@ def create_app(cfg, **moteurs):
 
     @app.put("/api/scenario")
     def scenario_put():
-        return jsonify(ctx.banque.enregistrer_scenario(request.json or {}))
+        return jsonify(ctx.banque.enregistrer_scenario(corps()))
 
     @app.get("/api/styles")
     def styles_get():
@@ -388,10 +440,10 @@ def create_app(cfg, **moteurs):
     def exemple_charger(exemple_id):
         """Copie l'univers d'exemple dans la banque ; {remplacer: false} garde les PNJ actuels."""
         dossier = EXEMPLES / exemple_id
-        if not NPC_ID.match(exemple_id) or not dossier.is_dir():
+        if not NPC_ID.fullmatch(exemple_id) or not dossier.is_dir():
             return erreur("Exemple introuvable.", 404)
         fichiers = {f.name: f.read_bytes() for f in dossier.glob("*.json") if f.name != INFOS}
-        remplacer = (request.get_json(silent=True) or {}).get("remplacer", True)
+        remplacer = corps().get("remplacer", True)
         return jsonify(ctx.banque.importer(fichiers, remplacer=remplacer))
 
     @app.get("/api/lieux")
@@ -401,7 +453,10 @@ def create_app(cfg, **moteurs):
     @app.put("/api/lieux")
     def lieux_put():
         """Remplace la liste des lieux : [{id (absent pour un nouveau lieu), nom, description, notes_mj}]."""
-        return jsonify(ctx.banque.enregistrer_lieux(request.json or []))
+        return jsonify(ctx.banque.enregistrer_lieux(corps(list)))
+
+    def fiche_complete(npc):
+        return all(isinstance(npc.get(c), str) and npc[c].strip() for c in ("nom", "salutation"))
 
     @app.get("/api/bank")
     def bank_list():
@@ -416,17 +471,17 @@ def create_app(cfg, **moteurs):
 
     @app.post("/api/bank")
     def bank_save():
-        npc = request.json or {}
-        if not npc.get("nom") or not npc.get("salutation"):
+        npc = corps()
+        if not fiche_complete(npc):
             return erreur("Fiche de PNJ incomplète.", 400)
         return jsonify({"id": ctx.enregistrer_pnj(npc)})
 
     @app.put("/api/bank/<npc_id>")
     def bank_update(npc_id):
-        npc = request.json or {}
+        npc = corps()
         if not ctx.banque.existe(npc_id):
             return erreur("PNJ introuvable.", 404)
-        if not npc.get("nom") or not npc.get("salutation"):
+        if not fiche_complete(npc):
             return erreur("Fiche de PNJ incomplète.", 400)
         return jsonify({"id": ctx.enregistrer_pnj(npc, npc_id)})
 
@@ -456,7 +511,7 @@ def create_app(cfg, **moteurs):
             return erreur("PNJ introuvable.", 404)
         if not ctx.portraits.disponible():
             return erreur("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.", 400)
-        npc.update(request.get_json(silent=True) or {})
+        npc.update(corps())
         prompt = prompt_portrait(ctx.moteurs, npc, ctx.style_portrait())
         try:
             octets, ext = ctx.portraits.generer(prompt, secrets.randbelow(2**31))
@@ -476,8 +531,9 @@ def create_app(cfg, **moteurs):
     def new_voice():
         """Tire une autre voix pour le PNJ (changement de genre ou de moteur), en évitant celles des
         autres PNJ de la scène (`eviter`), ou applique celle demandée dans `choix` (nom de GET /api/voices)."""
-        npc = request.json or {}
-        voice = voix.attribuer(ctx.tts, npc, eviter=npc.get("eviter") or [])
+        npc = corps()
+        eviter = npc.get("eviter") if isinstance(npc.get("eviter"), list) else []
+        voice = voix.attribuer(ctx.tts, npc, eviter=[v for v in eviter if isinstance(v, dict)])
         choix = npc.get("choix")
         if choix:
             trouvee = next((v for v, _ in ctx.tts.catalogue() if v["name"] == choix), None)
@@ -499,20 +555,21 @@ def create_app(cfg, **moteurs):
     def voice_engine_set():
         """Change de moteur de synthèse pour tout le serveur, sans toucher à config.toml."""
         try:
-            ctx.changer_tts((request.json or {}).get("moteur", ""))
+            ctx.changer_tts(chaine(corps().get("moteur")))
         except ValueError as e:
             return erreur(str(e), 400)
         return jsonify({"actuel": ctx.tts.nom})
 
     @app.post("/api/tts")
     def synthese():
-        data = request.json or {}
-        text = texte.chiffres_en_lettres(texte.nettoyer(data.get("text", "")))[:600]
+        data = corps()
+        text = texte.chiffres_en_lettres(texte.nettoyer(chaine(data.get("text"))))[:600]
         if not text:
             return erreur("Rien à lire.", 400)
-        voice = data.get("voice") or {}
+        voice = data.get("voice") if isinstance(data.get("voice"), dict) else {}
         if data.get("narrateur"):  # description entre parenthèses : voix neutre, autre que celles des PNJ
-            eviter = [voice] + [v for v in data.get("eviter") or [] if isinstance(v, dict)]
+            autres = data.get("eviter") if isinstance(data.get("eviter"), list) else []
+            eviter = [voice] + [v for v in autres if isinstance(v, dict)]
             voice = voix.voix_narrateur(ctx.tts, eviter)
             if voice is None:
                 return erreur("Synthèse vocale indisponible.", 503)
@@ -528,9 +585,14 @@ def create_app(cfg, **moteurs):
     def talk():
         """Réplique de `npc` dans la scène `history` (voir le module dialogue), en NDJSON :
         une ligne {"phrase": ...} par phrase prête à être lue, ou {"error": ...}."""
-        data = request.json or {}
+        data = corps()
         npc = data.get("npc") or {}
-        presents = [p for p in data.get("presents") or [] if isinstance(p, dict) and p.get("nom")][:4]
+        if not isinstance(npc, dict):
+            return erreur("Requête invalide : « npc » doit être une fiche de PNJ.", 400)
+        npc = fiche_recue(npc)
+        autres = data.get("presents") if isinstance(data.get("presents"), list) else []
+        presents = [fiche_recue(p) for p in autres if isinstance(p, dict)]
+        presents = [p for p in presents if p["nom"]][:ctx.pnj_max - 1]  # le PNJ qui parle compte dans la scène
         history = dialogue.nettoyer_historique(data.get("history"), ctx.historique)
         longueur = data.get("longueur", "normal")
         if not npc.get("nom") or not history:
@@ -556,6 +618,9 @@ def create_app(cfg, **moteurs):
                     yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
             except MoteurIndisponible as e:
                 yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"
+            except Exception:  # pylint: disable=broad-exception-caught
+                log.exception("Erreur inattendue pendant la réplique")  # le flux est lancé : pas d'erreur 500 possible
+                yield json.dumps({"error": "La réplique a échoué de façon inattendue."}, ensure_ascii=False) + "\n"
             if usage:
                 yield json.dumps({"usage": usage}, ensure_ascii=False) + "\n"
         return Response(lignes(), mimetype="application/x-ndjson")

@@ -23,7 +23,7 @@ class TestConfig:
         assert cfg.chemin("pnj") == fichier.parent.resolve() / "pnj"
 
     @pytest.mark.parametrize("reglages, attendu", [
-        ({}, False),  # moteurs par défaut : Claude
+        ({}, True),  # moteurs par défaut : local (Ollama)
         ({"moteurs": {"creation": "claude", "dialogue": "claude"}}, False),
         ({"moteurs": {"creation": "claude", "dialogue": "local"}}, True),
         ({"moteurs": {"creation": "local", "dialogue": "claude"}}, True),

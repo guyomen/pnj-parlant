@@ -49,8 +49,19 @@ def charger(config, base_dir, moteur=None):
 
 
 def cle(voix):
-    """Identité d'une voix : nom + locuteur (Piper)."""
-    return (voix.get("name"), voix.get("speaker"))
+    """Identité d'une voix : nom + locuteur (Piper). Toujours hachable, même pour une voix reçue du navigateur."""
+    valeurs = (voix.get("name"), voix.get("speaker"))
+    return tuple(v if isinstance(v, (str, int, type(None))) else repr(v) for v in valeurs)
+
+
+def echelle_debit(voix):
+    """`length_scale` d'une voix (1 = débit normal, plus grand = plus lent), borné de 0,5 à 2 ; 1 s'il est absent
+    ou illisible. Une valeur absurde ne doit pas faire échouer la synthèse (503 → repli sur la voix du navigateur)."""
+    try:
+        valeur = float(voix.get("length_scale", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return min(2.0, max(0.5, valeur)) if valeur == valeur else 1.0  # NaN : valeur != valeur
 
 
 def attribuer(moteur, npc, rng=random, eviter=()):
@@ -161,13 +172,13 @@ class Piper:
     def synthese(self, texte, voix):
         installees = self._voix_installees()
         name = voix.get("name")
-        if name not in installees:  # protège aussi contre les chemins arbitraires
+        if not isinstance(name, str) or name not in installees:  # protège aussi contre les chemins arbitraires
             raise VoixIndisponible(f"Voix Piper « {name} » absente.")
         PiperVoice, SynthesisConfig = self._piper
         if name not in self._cache:
             self._cache[name] = PiperVoice.load(self.dossier / f"{name}.onnx")
         cfg = SynthesisConfig(speaker_id=voix.get("speaker") if installees[name] > 1 else None,
-                              length_scale=float(voix.get("length_scale", 1.0)))
+                              length_scale=echelle_debit(voix))
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav_file:
             self._cache[name].synthesize_wav(texte, wav_file, syn_config=cfg)
@@ -231,7 +242,7 @@ class Pocket:
 
     def synthese(self, texte, voix):
         name = voix.get("name")
-        if not self._ok or name not in self.genres:
+        if not self._ok or not isinstance(name, str) or name not in self.genres:
             raise VoixIndisponible(f"Voix Pocket TTS « {name} » absente.")
         try:
             with self._verrou:
@@ -279,10 +290,10 @@ class Edge:
 
     def synthese(self, texte, voix):
         name = voix.get("name")
-        if not self._edge or name not in self.genres:
+        if not self._edge or not isinstance(name, str) or name not in self.genres:
             raise VoixIndisponible(f"Voix Edge « {name} » absente.")
         # Débit et hauteur d'après la fiche du PNJ (Piper règle le débit avec length_scale)
-        rate = round((1 / float(voix.get("length_scale", 1.0)) - 1) * 100)
+        rate = round((1 / echelle_debit(voix) - 1) * 100)
         pitch = {"grave": -8, "aigu": 8}.get(voix.get("timbre"), 0)
         try:
             com = self._edge.Communicate(texte, name, rate=f"{rate:+d}%", pitch=f"{pitch:+d}Hz")

@@ -398,7 +398,9 @@ let busy = false;
 let responseLength = "normal";
 let contextLimit = null;
 let tokenUsage = { input: 0, output: 0, lastInput: null, lastOutput: 0, available: false };
-const MAX_PNJ = 3;
+let maxPnj = 3;       // PNJ en scène au plus : [dialogue] pnj_max du serveur (/api/config)
+const PNJ_CONSEILLES = 3;  // au-delà, les petits modèles locaux suivent mal la scène
+const COULEURS_PNJ = 3;    // couleurs des noms (npc-0 à npc-2), reprises en boucle
 let lieux = [];        // lieux du scénario
 let lieuActuel = "";   // identifiant du lieu de la scène ("" : aucun)
 let banque = [];       // PNJ de la banque : [{id, nom, metier, lieu}]
@@ -494,7 +496,7 @@ const opt = (id) => $(id).checked && $("optMulti").checked;
 // qui : le PNJ qui parle, ou null pour le joueur
 function addLine(qui, text) {
   const div = document.createElement("div");
-  div.className = qui ? `line npc-line npc-${Math.max(0, npcs.indexOf(qui)) % MAX_PNJ}` : "line pj";
+  div.className = qui ? `line npc-line npc-${Math.max(0, npcs.indexOf(qui)) % COULEURS_PNJ}` : "line pj";
   div.innerHTML = `<span class="who">${qui ? esc(qui.nom) : "Vous"}</span><span class="text">${formatLine(text)}</span>`;
   $("log").appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -590,16 +592,16 @@ function setBusy(b) {
   $("lieuSel").disabled = b;
   $("propOui").disabled = b;
   for (const btn of document.querySelectorAll("[data-aborder]")) {
-    btn.disabled = b || (npcs.length >= MAX_PNJ && multi);
+    btn.disabled = b || (npcs.length >= maxPnj && multi);
   }
   $("loadBtn").disabled = b || !$("bankSel").value;
   $("addBtn").hidden = !multi;
-  $("addBtn").disabled = b || !scene || npcs.length >= MAX_PNJ || !$("bankSel").value
+  $("addBtn").disabled = b || !scene || npcs.length >= maxPnj || !$("bankSel").value
                          || npcs.some(n => n.id === $("bankSel").value);
   $("multiOpts").classList.toggle("inactif", !multi);  // sous-options de « Plusieurs PNJ » : grisées sans elle
   for (const c of $("multiOpts").querySelectorAll("input")) c.disabled = !multi;
   $("entreeRow").hidden = !opt("optEntree") || !scene;  // faire entrer quelqu'un : seulement dans une scène
-  $("entreeBtn").disabled = b || !scene || npcs.length >= MAX_PNJ;
+  $("entreeBtn").disabled = b || !scene || npcs.length >= maxPnj;
   $("discuterBtn").hidden = !multi || npcs.length < 2;
   $("discuterBtn").disabled = b;
   for (const btn of document.querySelectorAll("[data-retirer]")) btn.disabled = b;
@@ -796,7 +798,8 @@ async function joinScene(n) {
   if (lieuActuel) positions[n.nom] = lieuActuel;
   renderCards();
   renderLieu();
-  status("");
+  status(npcs.length > PNJ_CONSEILLES ? `Scène de ${npcs.length} PNJ : les petits modèles locaux suivent mal une scène chargée `
+    + "(réponses plus lentes, PNJ qui se confondent). Vous pouvez limiter le nombre de PNJ dans les options." : "");
   setBusy(true);
   await saluer(n);
 }
@@ -885,7 +888,7 @@ async function generate() {
 
 // Un PNJ inventé d'après la conversation entre dans la scène
 async function faireEntrer() {
-  if (busy || !npcs.length || npcs.length >= MAX_PNJ) return;
+  if (busy || !npcs.length || npcs.length >= maxPnj) return;
   const qui = $("entree").value.trim();
   setBusy(true); status("Quelqu’un approche…");
   const consignes = consignesEntree(history, npcs, qui);
@@ -970,7 +973,7 @@ async function importerConversation(fichier) {
       fiches.push(n);
     }
     rencontres = fiches;
-    npcs = sceneImportee(lu.lignes, $("optMulti").checked ? MAX_PNJ : 1).map(nom => fiches.find(f => f.nom === nom));
+    npcs = sceneImportee(lu.lignes, $("optMulti").checked ? maxPnj : 1).map(nom => fiches.find(f => f.nom === nom));
     for (let i = 1; i < npcs.length; i++) {  // deux PNJ de la scène n'ont jamais la même voix
       const avant = npcs.slice(0, i);
       if (avant.some(x => memeVoix(x.voix, npcs[i].voix))) {
@@ -1423,6 +1426,7 @@ async function chargerConfig(premiere = false) {
   if (!c) return;
   cfg = c;
   contextLimit = c.contexte_max;
+  if (Number.isInteger(c.pnj_max) && c.pnj_max >= 1) maxPnj = c.pnj_max;
   afficherUsage();
   setBusy(busy);
   if (document.body.dataset.vue === "options") refreshSys();  // la carte Machine reprend la configuration
