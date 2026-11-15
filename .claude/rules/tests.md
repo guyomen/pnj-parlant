@@ -9,7 +9,7 @@ Aucun ne demande réseau, modèle ni carte graphique.
 
 ```bash
 pytest                       # Python ; pytest est dans l'option dev (uv sync --extra tout --extra dev)
-node --test tests/js/        # fonctions pures de static/js/scene.js (Node 22+)
+node --test tests/js/        # modules sans DOM de static/js/ (Node 22+)
 python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran (NAVIGATEUR=... pour le choisir)
 ```
 
@@ -21,7 +21,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_acces.py` (décision D1) : chaque route d'écriture depuis le PC, depuis une adresse distante sans mot de passe
   défini, avec mot de passe (absent, faux, bon, accentué) ; masquage des secrets et notes ; champ masqué gardé ;
   secret relu par /api/npc/talk ; `Origin` étranger ; `Frein` (horloge injectée) et verrou 429 ; tailles (413 : JSON,
-  /api/stt, nombre et cumul de l'import, constantes de `serveur` remplacées par `monkeypatch`). Tests JS : `envoyer`
+  /api/stt, nombre et cumul de l'import : `monkeypatch` de `routes.entrees` (`STT_MAX_OCTETS`) et de `routes.univers`
+  (`IMPORT_MAX_*`), importé sous le nom `routes_univers` : `univers` est une fixture). Tests JS : `envoyer`
   (mot de passe demandé, gardé, oublié), `verifierAcces`, `nomTelecharge`.
 - `test_reglages.py` : catalogue (défauts dans les bornes), `valider`, `ecrire` (commentaires gardés), routes
   `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
@@ -45,6 +46,12 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
+- `test_api.py` (`TestPages`) fige la liste des routes de l'API (règle, méthode) et celles gardées par `@mj` : à
+  mettre à jour avec toute route ajoutée (Blueprints de `routes/`).
+- Tests JS par module (lot 8) : `api.test.mjs` (`apiStream` : vrai `ReadableStream` découpé en morceaux, caractère
+  coupé, erreur, lecteur relâché), `tours.test.mjs`, `controles.test.mjs`, `micro.test.mjs` (faux `AudioContext`),
+  `partie.test.mjs`, `preparation.test.mjs` (fiche.js, apparence.js), `tete.test.mjs` (script classique exécuté par
+  `vm` avec un faux `document`). Ils chargent leur module par son chemin.
 - `tests/js/scene.test.mjs` charge scene.js depuis son texte (data: URL), univers.js et api.js par leur chemin (ils
   importent d'autres modules ; le package.json de la racine, `"type": "module"`, en fait des modules ES) ;
   `fauxFetch(reponses)` remplace `fetch` (et `document`/`localStorage` minimaux pour `chargerTheme`). Tests JS de
@@ -79,4 +86,7 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     pour essayer une page à la main, lancer une copie de `tests/e2e/donnees/` sur un autre port.
   - `tests/e2e/donnees/pnj/ysolde-0001.png` (8×8) : portrait affiché dans la fiche quand on aborde Ysolde.
   - Fin par `Browser.close` : sous Windows, `kill()` laisse vivre les processus d'Edge (port 9333 pris ensuite).
-- Ajouter un test à chaque changement de logique ; pour index.html, une étape dans l'e2e.
+- Ajouter un test à chaque changement de logique ; pour jeu.js, options.js et creation.js (DOM), une étape dans l'e2e.
+- Vérifier une page sans lancer tout l'e2e : servir une copie de `tests/e2e/donnees/` sur un autre port et lire la
+  console d'Edge sans écran (`Runtime.exceptionThrown`) ; un renommage de variables peut passer `node --check` et
+  casser la page (`...rencontres` oublié lors du passage à `partie`).

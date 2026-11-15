@@ -5,8 +5,8 @@ import pytest
 
 from pnj_parlant.banque import NPC_ID, Banque
 from pnj_parlant.fiches import NPC_SCHEMA
-from pnj_parlant.serveur import EXEMPLES as DOSSIER
-from pnj_parlant.serveur import exemples
+from pnj_parlant.routes.univers import EXEMPLES as DOSSIER
+from pnj_parlant.routes.univers import exemples
 
 EXEMPLES = sorted(p for p in DOSSIER.iterdir() if p.is_dir())
 STYLE = (DOSSIER.parent / "static" / "style.css").read_text(encoding="utf-8")

@@ -169,8 +169,8 @@ LIEUX_MAX = 60
 class Banque:
     def __init__(self, dossier):
         self.dossier = dossier
-        self.scenario_path = dossier / "_scenario.json"
-        self.lieux_path = dossier / "_lieux.json"
+        self.scenario_path = dossier / SCENARIO
+        self.lieux_path = dossier / LIEUX
         self._verrou = threading.RLock()  # opérations composées (import, vider, portrait) : une à la fois
         self._memo = {}  # scénario, lieux, styles lus : {nom: (signature des fichiers, valeur)}, voir _en_cache
         self._verrou_memo = threading.Lock()

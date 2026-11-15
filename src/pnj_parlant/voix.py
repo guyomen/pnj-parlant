@@ -18,9 +18,12 @@ du PNJ, plus les réglages de débit et de hauteur (et ceux de la voix du naviga
 """
 import io
 import json
+import logging
 import random
 import threading
 import wave
+
+log = logging.getLogger(__name__)
 
 
 class VoixIndisponible(Exception):
@@ -252,8 +255,8 @@ class Pocket:
                     self._etat(name)
             except Exception as e:  # réseau absent, voix inconnue… : la voix ne sera plus attribuée
                 self._absentes.add(name)
-                print(f"[voix] Pocket TTS : voix « {name} » indisponible ({type(e).__name__}). "
-                      "Lancez l'application une fois avec le réseau pour la télécharger.")
+                log.warning("Pocket TTS : voix « %s » indisponible (%s). Lancez l'application une fois avec le réseau "
+                            "pour la télécharger.", name, type(e).__name__)
 
     def synthese(self, texte, voix):
         name = voix.get("name")

@@ -31,16 +31,20 @@ python tests/e2e/lancer.py
 
 ## Reste à faire
 
-- **Lot 8 — Remaniement** (Opus) : découpage de `serveur.py` en Blueprints, extraction du JS en ligne
-  d'`index.html` et de `creation.html`. À faire dans une session à part, après relecture et fusion du reste.
-  Prompt dans [audit-actions.md](audit-actions.md).
+- **Lot 8 — Remaniement** (Opus) : fait sur la branche `remaniement-lot8`, à relire et commiter. Sans changement
+  de comportement : `serveur.py` 888 → 328 lignes, routes dans `routes/` (six Blueprints, `acces.py`, `entrees.py`) ;
+  plus de JS en ligne (`js/jeu.js`, `js/options.js`, `js/creation.js`, `js/tete.js`) ; logique extraite et testée
+  dans `js/partie.js`, `tours.js`, `controles.js`, `micro.js`, `fiche.js`, `apparence.js`, `apiStream` dans `api.js` ;
+  `print` → `logging` ; `.status` et `button.petit` dans `style.css`. pytest 561, node 102, ruff sans alerte, e2e
+  46/46 identique à avant, texte et styles calculés des pages identiques à `master`. URL de l'API non renommées.
 
 ### Reliquats laissés volontairement
 
 - **1.6** : le dialogue Claude garde 1 reprise (le SDK ne permet `max_retries=0` que par appel).
 - **4.12** : premières syllabes perdues en coupure automatique du micro (risque d'écho envoyé à Whisper) : à
   juger à l'oreille avant de décider.
-- **4.12** : `sauverPartie` tourne encore à chaque `setBusy(false)` (relève du lot 8).
+- **4.12** : `sauverPartie` tourne encore à chaque `setBusy(false)` : le lot 8 l'a isolé dans `setBusy`
+  (calcul des contrôles à part, `etatControles`) sans changer quand il tourne.
 - **4.9** : le `fetch` de `/api/tts` dans `prepareSegment` ne passe pas par `requete` (il a son repli).
 - **4.5** : après un changement d'univers fait sur un autre appareil, un téléphone restaure encore les PNJ
   de l'ancien univers ; il faudrait un identifiant d'univers côté serveur.

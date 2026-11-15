@@ -11,7 +11,10 @@ import pytest
 from faux import FICHE, PNG, FausseReconnaissance
 
 from pnj_parlant import reglages, serveur
-from pnj_parlant.serveur import create_app, masquer, mot_de_passe_recu
+from pnj_parlant.routes import entrees
+from pnj_parlant.routes import univers as routes_univers
+from pnj_parlant.routes.entrees import masquer, mot_de_passe_recu
+from pnj_parlant.serveur import create_app
 
 DISTANT = {"REMOTE_ADDR": "192.168.1.30"}   # le téléphone d'un joueur
 LOCAL = {"REMOTE_ADDR": "127.0.0.1"}
@@ -249,10 +252,10 @@ class TestFrein:
 
 class TestTailles:
     def test_plafond_global_celui_de_l_import(self, app):
-        assert app.config["MAX_CONTENT_LENGTH"] == serveur.IMPORT_MAX_OCTETS + serveur.MARGE_MULTIPART
+        assert app.config["MAX_CONTENT_LENGTH"] == serveur.IMPORT_MAX_OCTETS + entrees.MARGE_MULTIPART
 
     def test_corps_json_trop_gros(self, client, ctx, univers):
-        r = client.put("/api/scenario", data=json.dumps({"monde": "x" * serveur.CORPS_MAX}),
+        r = client.put("/api/scenario", data=json.dumps({"monde": "x" * entrees.CORPS_MAX}),
                        content_type="application/json")
         assert r.status_code == 413 and r.get_json()["error"] == "Requête trop volumineuse."
         assert ctx.banque.scenario()["monde"] == "Le Val"  # rien n'est effacé
@@ -270,7 +273,7 @@ class TestTailles:
             return client.post("/api/stt", data={"audio": (io.BytesIO(octets), "q.webm")},
                                content_type="multipart/form-data")
         assert stt(b"x" * 1000).get_json() == {"text": "bonjour"}
-        monkeypatch.setattr(serveur, "STT_MAX_OCTETS", 500)
+        monkeypatch.setattr(entrees, "STT_MAX_OCTETS", 500)
         assert stt(b"x" * 1000).status_code == 413
 
     def test_import_cumul_et_nombre(self, client, ctx, monkeypatch):
@@ -278,16 +281,16 @@ class TestTailles:
             fichiers = [(io.BytesIO(json.dumps({**FICHE, "nom": n}).encode()), f"{n}.json") for n in noms]
             return client.post("/api/scenario/import", data={"fichiers": fichiers},
                                content_type="multipart/form-data")
-        monkeypatch.setattr(serveur, "IMPORT_MAX_FICHIERS", 2)
+        monkeypatch.setattr(routes_univers, "IMPORT_MAX_FICHIERS", 2)
         assert importer("a", "b", "c").status_code == 413
         assert importer("a", "b").status_code == 200
-        monkeypatch.setattr(serveur, "IMPORT_MAX_OCTETS", 600)  # chaque fiche passe, pas les deux ensemble
+        monkeypatch.setattr(routes_univers, "IMPORT_MAX_OCTETS", 600)  # chaque fiche passe, pas les deux ensemble
         r = importer("d", "e")
         assert r.status_code == 413 and "au total" in r.get_json()["error"]
         assert not any(n["nom"] in ("d", "e") for n in ctx.banque.liste())
 
     def test_import_un_fichier_trop_volumineux(self, client, ctx, monkeypatch):
-        monkeypatch.setattr(serveur, "IMPORT_MAX_OCTETS", 100)
+        monkeypatch.setattr(routes_univers, "IMPORT_MAX_OCTETS", 100)
         gros = json.dumps({**FICHE, "nom": "gros"}).encode()
         assert len(gros) > 100
         r = client.post("/api/scenario/import", data={"fichiers": [(io.BytesIO(gros), "gros.json")]},

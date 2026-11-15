@@ -17,7 +17,10 @@ interface et documentation).
 Paquet Python `pnj_parlant` (layout src/), installé par `uv sync --extra tout` (ou `pip install -e ".[tout]"`).
 ```
 src/pnj_parlant/
-  serveur.py         # Flask : create_app(cfg, moteurs=, tts=, reconnaissance=) + main() (Ctrl+C, HTTPS)
+  serveur.py         # Flask : Contexte (moteurs, banque, réglages à chaud, santé), create_app(cfg, moteurs=, tts=,
+                     # reconnaissance=) (plafonds, erreurs JSON) + main() (Ctrl+C, HTTPS)
+  routes/            # API, un Blueprint par domaine (ctx = entrees.contexte()) : options, univers, pnj, portraits,
+                     # voix, dialogue ; acces.py (mot de passe du MJ, @mj), entrees.py (corps(), erreur(), tailles)
   config.py          # config.toml du dossier courant, PNJ_CONFIG ou --config
   dependances.py     # dépendances absentes du .venv (lancer.bat)
   fiches.py          # création des fiches (prompt, schéma JSON, tirages au sort)
@@ -30,9 +33,11 @@ src/pnj_parlant/
   banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes),
-                     # js/scene.js (testé) + js/univers.js (univers, thèmes) + js/bandeau.js (alertes)
-                     # + js/api.js (requêtes communes aux deux pages)
+  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes)
+                     # js/ : jeu.js + options.js (index.html), creation.js : DOM, relient la page aux modules testés
+                     # sans navigateur : scene.js, partie.js (état de la partie), tours.js (qui parle), controles.js,
+                     # micro.js, fiche.js, apparence.js, univers.js (univers, thèmes), api.js (requêtes, NDJSON),
+                     # bandeau.js (alertes) ; tete.js (script classique du <head> : thème sans flash)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
@@ -69,7 +74,10 @@ pytest && node --test tests/js/      # tests, sans réseau ni modèle ; e2e : py
 ```
 
 ## Conventions
-- Ajouter un test à chaque changement de logique ; une fonction JS testable va dans `static/js/scene.js`.
+- Ajouter un test à chaque changement de logique ; une fonction JS testable (sans DOM) va dans le module de
+  `static/js/` de son domaine, avec son test dans `tests/js/` ; jeu.js, options.js et creation.js ne gardent que le DOM.
+- Nouvelle route : dans le Blueprint de son domaine (`routes/`), écriture de l'univers sous `@mj` (test_api.py
+  fige la liste des routes et celles gardées).
 - Tout nouveau réglage : `config.toml.example` (commenté) et README.md.
 - Garder README.md, docs/installation-windows.md et ces règles à jour quand le comportement change : un hook
   (`.claude/hooks/doc_a_jour.py`, événement Stop) le rappelle si du code a changé sans la documentation.

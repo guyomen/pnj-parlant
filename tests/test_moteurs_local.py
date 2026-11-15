@@ -166,14 +166,14 @@ class TestClaudeErreurs:
         with pytest.raises(MoteurIndisponible, match="interrompue"):
             m.replique("s", MESSAGE)
 
-    def test_fiche_coupee_a_max_tokens_garde_le_texte(self, monkeypatch, capsys):
+    def test_fiche_coupee_a_max_tokens_garde_le_texte(self, monkeypatch, caplog):
         m = claude()
         msg = SimpleNamespace(stop_reason="max_tokens", content=[SimpleNamespace(type="text", text='{"nom": "Y')])
         monkeypatch.setattr(m.client.messages, "create", lambda **kw: msg)
         assert m.fiche("s", "d", {}) == '{"nom": "Y'
-        assert "max_tokens=2000" in capsys.readouterr().out
+        assert "max_tokens=2000" in caplog.text
 
-    def test_flux_complet_texte_usage_et_fermeture(self, monkeypatch, capsys):
+    def test_flux_complet_texte_usage_et_fermeture(self, monkeypatch, caplog):
         m = claude()
         evenements = [
             SimpleNamespace(type="message_start", message=SimpleNamespace(usage=SimpleNamespace(
@@ -198,7 +198,7 @@ class TestClaudeErreurs:
         assert "".join(m.replique("s", MESSAGE, ["Léo :"], on_usage=usage.update)) == "Salut voyageur."
         assert usage == {"input_tokens": 15, "output_tokens": 7} and etat["ferme"]
         assert appels[0]["stop_sequences"] == ["Léo :"] and appels[0]["stream"] is True
-        assert "coupée" in capsys.readouterr().out
+        assert "coupée" in caplog.text
 
 
 # --- LM Studio hors flux --------------------------------------------------------------------------
