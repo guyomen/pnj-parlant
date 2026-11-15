@@ -272,6 +272,18 @@ test("api : un 403 sans demande de mot de passe est rendu tel quel", async () =>
   } finally { api.poserDialogueMdp(async () => null); }
 });
 
+test("api : question du mot de passe propre à la requête (modèle de l’IA dans la partie)", async () => {
+  const { stock } = serveurProtege();
+  const questions = [];
+  api.poserDialogueMdp(async (message) => { questions.push(message); return questions.length === 1 ? "faux" : "dragée"; });
+  try {
+    const message = "Changer le modèle de l’IA demande le mot de passe du MJ.";
+    assert.deepEqual(await api.api("/api/reglages", { changements: { "local.modele": "x" } }, "PUT", { message }), { ok: 1 });
+    assert.deepEqual(questions, [message, "Mot de passe du MJ incorrect. Réessayez :"]);
+    assert.equal(stock["mdp-mj"], "dragée");
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
 test("api : verifierAcces demande le mot de passe jusqu'à Annuler", async () => {
   const { stock } = serveurProtege();
   const saisies = ["dragée"];
@@ -382,6 +394,37 @@ test("options : valeur d'un champ, groupes utiles, résumé", () => {
   assert.equal(scene.resumeModifs(0), "");
   assert.equal(scene.resumeModifs(1), "1 réglage modifié");
   assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
+});
+
+test("choixModele : liste « Modèle de l’IA » de la vue Partie", () => {
+  assert.equal(scene.choixModele(null), null);
+  assert.equal(scene.choixModele(undefined), null);
+  assert.equal(scene.choixModele({ moteur: "claude", cle: "claude.modele", valeur: "x", modeles: [] }), null);
+  // Ollama : modèles installés, doublons et entrées vides retirés ; le modèle en cours choisi
+  assert.deepEqual(scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "qwen3:4b",
+                                       modeles: ["qwen3:4b", "gemma3:12b", "qwen3:4b", "", 3], modifiable: true }),
+    { cle: "local.modele", valeur: "qwen3:4b", modifiable: true,
+      options: [{ valeur: "qwen3:4b", libelle: "qwen3:4b" }, { valeur: "gemma3:12b", libelle: "gemma3:12b" }] });
+  // modèle configuré absent d'Ollama (ou Ollama arrêté) : toujours affiché, marqué
+  const absent = scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "mistral", modeles: [] });
+  assert.deepEqual(absent.options, [{ valeur: "mistral", libelle: "mistral (introuvable)" }]);
+  assert.equal(absent.modifiable, true);
+  // LM Studio : "" = le modèle chargé, proposé en premier
+  const lm = scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "", modeles: ["qwen"], modifiable: false });
+  assert.deepEqual(lm.options.map(o => o.valeur), ["", "qwen"]);
+  assert.equal(lm.options[0].libelle, "Modèle chargé dans LM Studio");
+  assert.equal(lm.modifiable, false);
+  assert.deepEqual(scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "gemma", modeles: null })
+    .options.map(o => o.libelle), ["Modèle chargé dans LM Studio", "gemma (introuvable)"]);
+});
+
+test("changementModele : réglage à envoyer, rien si le modèle ne change pas", () => {
+  const choix = scene.choixModele({ moteur: "local", cle: "local.modele", valeur: "qwen3:4b", modeles: ["qwen3:4b", "gemma3:12b"] });
+  assert.deepEqual(scene.changementModele(choix, "gemma3:12b"), { "local.modele": "gemma3:12b" });
+  assert.equal(scene.changementModele(choix, "qwen3:4b"), null);
+  assert.equal(scene.changementModele(null, "gemma3:12b"), null);
+  const lm = scene.choixModele({ moteur: "lmstudio", cle: "lmstudio.modele", valeur: "qwen", modeles: ["qwen"] });
+  assert.deepEqual(scene.changementModele(lm, ""), { "lmstudio.modele": "" });  // revenir au modèle chargé
 });
 
 test("NDJSON : lignes complètes, reste, ligne illisible", () => {

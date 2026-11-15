@@ -162,6 +162,44 @@ def test_mot_de_passe_du_mj(web):
     assert web.get("/api/reglages").get_json()["protege"] is False
 
 
+def test_mot_de_passe_demande_par_la_partie_pas_par_les_options(web):
+    """PUT /api/reglages (vue Partie, js/api.js) dit à la page de demander le mot de passe ; la vérification du
+    formulaire de la page Options, non (elle a son propre champ)."""
+    web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}})
+    modif = {"changements": {"local.modele": "qwen3:4b"}}
+    r = web.put("/api/reglages", json=modif, environ_base=DISTANT)
+    assert r.status_code == 403 and r.get_json()["mot_de_passe"] is True
+    assert "demandé" in r.get_json()["error"]
+    r = web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "x"}, environ_base=DISTANT)
+    assert r.get_json() == {"error": "Mot de passe du MJ incorrect.", "mot_de_passe": True}
+    assert "mot_de_passe" not in web.post("/api/reglages/verifier", json={"mot_de_passe": "x"}).get_json()
+
+
+def test_sans_mot_de_passe_defini_le_refus_ne_le_demande_pas(web):
+    r = web.put("/api/reglages", json={"changements": {"local.modele": "qwen3:4b"}}, environ_base=DISTANT)
+    assert r.status_code == 403 and "mot_de_passe" not in r.get_json()
+
+
+def test_modele_de_dialogue_pour_la_partie(web, moteurs):
+    """/api/config : modèle de dialogue en cours et modèles installés (Ollama ou LM Studio), pour la liste de la
+    vue Partie ; `modifiable` suit les droits sur les réglages."""
+    moteurs.modeles_locaux = lambda: [{"nom": "faux", "taille": 1}, {"nom": "qwen3:4b", "taille": 2}]
+    assert web.get("/api/config").get_json()["modele_dialogue"] == {
+        "moteur": "local", "cle": "local.modele", "valeur": "faux", "modeles": ["faux", "qwen3:4b"],
+        "modifiable": True}
+    assert web.get("/api/config", environ_base=DISTANT).get_json()["modele_dialogue"]["modifiable"] is False
+    web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}})
+    # mot de passe défini : la liste est utilisable partout (il sera demandé au changement)
+    assert web.get("/api/config", environ_base=DISTANT).get_json()["modele_dialogue"]["modifiable"] is True
+    moteurs.choix["dialogue"] = "lmstudio"
+    d = web.get("/api/config").get_json()["modele_dialogue"]
+    assert (d["cle"], d["valeur"], d["modeles"]) == ("lmstudio.modele", "", ["qwen", "gemma"])
+    moteurs.lmstudio_cfg["modele"] = "gemma"
+    assert web.get("/api/config").get_json()["modele_dialogue"]["valeur"] == "gemma"
+    moteurs.choix["dialogue"] = "claude"
+    assert web.get("/api/config").get_json()["modele_dialogue"] is None
+
+
 def test_sans_fichier_en_memoire(client, ctx):
     assert client.put("/api/reglages", json={"changements": {"dialogue.intervention": 0.5}}).status_code == 200
     assert ctx.intervention == 0.5 and client.get("/api/reglages").get_json()["fichier"] is None

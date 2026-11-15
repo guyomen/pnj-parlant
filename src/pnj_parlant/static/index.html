@@ -318,6 +318,11 @@
         <button class="ghost" id="entreeBtn">Faire entrer</button>
       </div>
     </div>
+    <!-- Modèle de l'IA locale (Ollama ou LM Studio) : changé à chaud, comme dans les options -->
+    <div class="bloc modele-ia" id="modeleBloc" hidden>
+      <label for="modeleSel">Modèle de l’IA</label>
+      <select id="modeleSel"></select>
+    </div>
   </aside>
 </main>
 
@@ -390,8 +395,8 @@
 import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs, decouperNdjson, partieValide,
-         fichesRelues, VERSION_PARTIE, messageContexteMicro } from "./js/scene.js";
-import { requete, signaler, verifierSante } from "./js/bandeau.js";
+         fichesRelues, VERSION_PARTIE, messageContexteMicro, choixModele, changementModele } from "./js/scene.js";
+import { requete, retirer as retirerAlerte, signaler, verifierSante } from "./js/bandeau.js";
 import { api, enTeteMdp, garderMdp, lireReponse, mdpMJ } from "./js/api.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
          importerFichiers, resumeImport, resumeUnivers } from "./js/univers.js";
@@ -606,6 +611,7 @@ function setBusy(b) {
   $("discuterBtn").hidden = !multi || npcs.length < 2;
   $("discuterBtn").disabled = b;
   for (const btn of document.querySelectorAll("[data-retirer]")) btn.disabled = b;
+  $("modeleSel").disabled = b || !choixModele(cfg.modele_dialogue)?.modifiable;
   if (!b) { const a = attentesLibre; attentesLibre = []; a.forEach(r => r()); sauverPartie(); }
 }
 
@@ -1527,6 +1533,7 @@ async function chargerConfig(premiere = false) {
   contextLimit = c.contexte_max;
   if (Number.isInteger(c.pnj_max) && c.pnj_max >= 1) maxPnj = c.pnj_max;
   afficherUsage();
+  afficherModele();
   setBusy(busy);
   if (document.body.dataset.vue === "options") refreshSys();  // la carte Machine reprend la configuration
   const alerteMicro = messageContexteMicro(window.isSecureContext);
@@ -1536,6 +1543,40 @@ async function chargerConfig(premiere = false) {
 }
 chargerConfig(true);
 verifierSante();
+
+// --- Modèle de l'IA (vue Partie) ------------------------------------------------------------------
+// Liste des modèles installés (Ollama ou LM Studio, selon [moteurs] dialogue ; cachée avec Claude). Le choix passe
+// par PUT /api/reglages comme dans les options : même validation, mot de passe du MJ demandé hors du PC s'il
+// existe (js/api.js, gardé pour l'onglet), appliqué à chaud. Désactivée pendant qu'un PNJ parle (setBusy).
+function afficherModele() {
+  const choix = choixModele(cfg.modele_dialogue);
+  $("modeleBloc").hidden = !choix;
+  if (!choix) return;
+  $("modeleSel").innerHTML = choix.options.map(o => `<option value="${esc(o.valeur)}">${esc(o.libelle)}</option>`).join("");
+  $("modeleSel").value = choix.valeur;
+  $("modeleSel").title = !choix.modifiable
+    ? "Sans mot de passe du MJ, le modèle ne se change que depuis le PC du serveur."
+    : choix.cle === "local.modele" ? "Sert aussi à créer les PNJ si la création passe par Ollama." : "";
+}
+$("modeleSel").addEventListener("change", async () => {
+  const choix = choixModele(cfg.modele_dialogue), choisi = $("modeleSel").value;
+  const changements = changementModele(choix, choisi);
+  if (!changements || busy) { $("modeleSel").value = choix?.valeur ?? ""; return; }
+  setBusy(true);
+  try {
+    await api("/api/reglages", { changements }, "PUT",
+              { message: "Changer le modèle de l’IA depuis cet appareil demande le mot de passe du MJ." });
+    retirerAlerte("modele");
+    status(`Modèle de l’IA : ${choix.options.find(o => o.valeur === choisi)?.libelle ?? choisi}.`);
+    await chargerConfig();
+    verifierSante();
+  } catch (e) {
+    $("modeleSel").value = choix.valeur;
+    alerte(e.message, "erreur", "modele");
+  } finally {
+    setBusy(false);
+  }
+});
 setInterval(() => { if (!document.hidden) verifierSante(); }, 60000);
 
 // --- Options : rubriques ---------------------------------------------------------------------------

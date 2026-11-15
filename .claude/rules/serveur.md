@@ -81,7 +81,10 @@ Serveur sans état : l'historique vit dans le navigateur.
 
 ## Routes
 - `GET /api/config` : moteurs, moteur de voix (`tts`, null si aucune voix), `stt_local`, `modeles_locaux`,
-  `modele_local`, `intervention`, `pnj_max`, `contexte_max`.
+  `modele_local`, `intervention`, `pnj_max`, `contexte_max`, `modele_dialogue` (liste « Modèle de l'IA » de la vue
+  Partie : null avec Claude, sinon `{moteur, cle: "local.modele"|"lmstudio.modele", valeur, modeles, modifiable}` ;
+  modèles d'Ollama, ou `Moteurs.modeles_lmstudio()` = identifiants llm/vlm de LM Studio, liste gardée, vide s'il
+  est injoignable ; `modifiable` = mot de passe du MJ défini ou PC du serveur).
 - Entrées : `corps(dict|list)` (400 si le JSON n'a pas le bon type), `chaine`, `fiche_recue` : aucune route ne répond 500
   sur un corps mal formé (tests : `TestEntreesInvalides`).
 - `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
@@ -136,8 +139,10 @@ Serveur sans état : l'historique vit dans le navigateur.
   voix via `tts_charges`, Reconnaissance, portraits, `parametres()` : historique, intervention, phrases_max, style).
 - Routes : `GET /api/reglages` → `{groupes, protege, local, fichier}` (suggestions `local.modele` = modèles
   d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause si un mauvais
-  mot de passe a été envoyé) / 429 (frein) / 400 / 500 (écriture) / 200 `{..., redemarrage: [libellés]}` ;
-  `POST /api/reglages/verifier {mot_de_passe}` (même frein).
+  mot de passe a été envoyé ; avec `mot_de_passe: true` si un mot de passe existe, `garde(…, demander=True)`, pour
+  que `envoyer` de js/api.js le demande depuis la vue Partie) / 429 (frein) / 400 / 500 (écriture) / 200
+  `{..., redemarrage: [libellés]}` ; `POST /api/reglages/verifier {mot_de_passe}` (même frein, sans
+  `mot_de_passe` dans le refus : la page Options a son propre formulaire).
 
 ## Portraits (portraits.py, facultatif)
 - `[portraits] moteur` : `aucun` (défaut, `Aucun`), `local` (`Local` : SD-Turbo via diffusers, option `portraits` hors

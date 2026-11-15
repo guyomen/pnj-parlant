@@ -52,8 +52,8 @@ export function demanderMotDePasse(message = MESSAGE_MDP) {
 
 // Requête avec le mot de passe du MJ gardé ; un 403 qui demande le mot de passe (`mot_de_passe` dans la réponse)
 // l'oublie, ouvre la fenêtre et renvoie la requête avec le nouveau, jusqu'à « Annuler » (la réponse 403 est alors
-// rendue). Le corps doit pouvoir être renvoyé (texte JSON, FormData).
-export async function envoyer(path, opts = {}) {
+// rendue). Le corps doit pouvoir être renvoyé (texte JSON, FormData). `message` : question de la première demande.
+export async function envoyer(path, opts = {}, { message = MESSAGE_MDP } = {}) {
   for (;;) {
     const envoye = mdpMJ();
     const r = await requete(path, { ...opts, headers: { ...opts.headers, ...enTeteMdp(envoye) } });
@@ -62,7 +62,7 @@ export async function envoyer(path, opts = {}) {
     if (!data.mot_de_passe) return r;
     if (mdpMJ() === envoye) garderMdp("");
     else if (mdpMJ()) continue;  // un autre appel vient d'en faire saisir un : on l'essaie
-    const saisi = await demanderMotDePasse(envoye ? MESSAGE_INCORRECT : MESSAGE_MDP);
+    const saisi = await demanderMotDePasse(envoye ? MESSAGE_INCORRECT : message);
     if (!saisi) return r;
     garderMdp(saisi);
   }
@@ -97,10 +97,10 @@ export async function lireReponse(r, { panne = false } = {}) {
   return data;
 }
 
-// Requête JSON : GET sans corps, POST avec (ou `method`). options : panne (voir lireReponse), signal, headers.
-// Passe par envoyer : mot de passe du MJ joint, et demandé si le serveur le réclame.
-export async function api(path, body, method = body === undefined ? "GET" : "POST", { panne = false, signal, headers } = {}) {
+// Requête JSON : GET sans corps, POST avec (ou `method`). options : panne (voir lireReponse), signal, headers,
+// message (question du mot de passe). Passe par envoyer : mot de passe du MJ joint, et demandé si le serveur le réclame.
+export async function api(path, body, method = body === undefined ? "GET" : "POST", { panne = false, signal, headers, message } = {}) {
   const opts = { method, headers: { "Content-Type": "application/json", ...headers }, signal };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  return lireReponse(await envoyer(path, opts), { panne });
+  return lireReponse(await envoyer(path, opts, message ? { message } : {}), { panne });
 }

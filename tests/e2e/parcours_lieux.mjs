@@ -182,6 +182,17 @@ const barreVisible = await quand(`!document.getElementById("barreReglages").hidd
 await js(`document.getElementById("reglagesEnregistrer").click()`);
 verifier("options : réglage du serveur enregistré et appliqué", barreVisible && await quand(`document.getElementById("reglagesMessage").textContent.startsWith("Enregistré dans config.toml") && document.getElementById("barreReglages").hidden`) && await js(`fetch("/api/reglages").then(r => r.json()).then(d => d.groupes.flatMap(g => g.reglages).find(r => r.cle === "dialogue.phrases_max").valeur === 4)`));
 
+// Partie : modèle de l'IA dans la colonne de droite (modèles installés dans le faux Ollama), changé à chaud par
+// /api/reglages (depuis le PC, sans mot de passe du MJ), puis remis
+await js(`location.hash = "jeu"`);
+const choisirModele = (nom) => js(`(() => { const s = document.getElementById("modeleSel"); s.value = ${JSON.stringify(nom)}; s.dispatchEvent(new Event("change")); })()`);
+const modeleServeur = (nom) => `fetch("/api/config").then(r => r.json()).then(c => c.modele_dialogue?.valeur === ${JSON.stringify(nom)})`;
+verifier("partie : modèle de l'IA affiché avec les modèles installés", await quand(`document.body.dataset.vue === "jeu" && document.getElementById("modeleBloc").offsetParent !== null && document.getElementById("modeleSel").value === "faux" && document.querySelectorAll("#modeleSel option").length === 2 && !document.getElementById("modeleSel").disabled`));
+await choisirModele("autre");
+const modeleChange = await quand(modeleServeur("autre")) && await quand(`document.getElementById("modeleSel").value === "autre" && !document.getElementById("modeleSel").disabled`);
+await choisirModele("faux");
+verifier("partie : modèle de l'IA changé à chaud, puis remis", modeleChange && await quand(modeleServeur("faux")) && await quand(`!document.getElementById("modeleSel").disabled`));
+
 // Préparation : trois parties (scénario, lieux, PNJ) ; « Créer un PNJ ici » ouvre la demande avec ce lieu
 await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/creation.html#lieux` });
 await quand(`document.readyState === "complete"`);

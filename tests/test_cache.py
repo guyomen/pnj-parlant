@@ -109,6 +109,19 @@ class TestModeleLMStudio:
         assert reseau["combien"]("/api/v0/models") == 2
 
 
+    def test_liste_des_modeles_pour_la_partie(self, reseau):
+        """modeles_lmstudio (liste « Modèle de l’IA » de la vue Partie) : modèles de langage seulement, liste gardée
+        comme celle du modèle chargé ; LM Studio injoignable = liste vide, sans exception."""
+        reseau["lm"] = [{"id": "qwen", "type": "llm", "state": "loaded"}, {"id": "nomic", "type": "embeddings"},
+                        {"id": "gemma", "type": "vlm", "state": "not-loaded"}, {"type": "llm"}]
+        m = moteurs()
+        assert m.modeles_lmstudio() == ["qwen", "gemma"]
+        assert m._lmstudio_modele()["id"] == "qwen"
+        assert reseau["combien"]("/api/v0/models") == 1
+        reseau["en_panne"] = True
+        assert moteurs().modeles_lmstudio() == []
+
+
 class TestModelesOllama:
     def test_liste_gardee_puis_relue(self, reseau):
         m = moteurs()

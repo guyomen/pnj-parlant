@@ -214,6 +214,6 @@ Au lancement, si la fenêtre affiche « modèle Whisper absent », la reconnaiss
 | « Micro refusé » | Ouvrez la page sur `localhost`, ou en `https://` depuis un autre appareil, puis autorisez le micro dans le navigateur. |
 | Voix robotique du navigateur à la place de celle du PNJ | Pocket TTS : lancez l'application une fois avec le réseau pour télécharger le modèle et les voix. Piper : les voix ne sont pas dans `voices\` (étape 2.3). Edge : le réseau est coupé. |
 | « Pocket TTS : voix … indisponible » au lancement | Cette voix n'a pas encore été téléchargée : relancez l'application avec le réseau. |
-| Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
+| Changer de modèle | `docker compose exec ollama ollama pull gemma3:12b`, puis choisissez-le dans la liste **Modèle de l’IA** de la partie (colonne de droite) ou dans les options, sans relancer ; ou `modele = "gemma3:12b"` dans la section `[local]` de `config.toml`. |
 
 **Désinstaller le modèle local** : `docker compose down -v` arrête Ollama et supprime les modèles téléchargés. Docker Desktop se désinstalle ensuite comme n'importe quel programme. Carte AMD : `ollama rm qwen3:8b` supprime le modèle, puis Ollama se désinstalle comme n'importe quel programme.

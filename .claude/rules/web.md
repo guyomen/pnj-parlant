@@ -33,7 +33,8 @@ paths:
   `mdpMJ`/`garderMdp` (sessionStorage `mdp-mj`, partagé avec la page Options), `enTeteMdp` (en-tête encodé),
   `envoyer(path, opts)` (utilisé par `api`, l'import, les exemples et l'export de univers.js) : sur un 403 avec
   `mot_de_passe`, oublie le mot de passe refusé, ouvre `demanderMotDePasse` (`<dialog class="dialogue-mdp">`, une
-  seule à la fois, remplaçable par `poserDialogueMdp` dans les tests) et renvoie la requête, jusqu'à « Annuler » ;
+  seule à la fois, remplaçable par `poserDialogueMdp` dans les tests) et renvoie la requête, jusqu'à « Annuler »
+  (question de la première demande : option `message` de `envoyer` et de `api`) ;
   `verifierAcces({demander, message})` (/api/acces). Export : `fetch` + blob (`nomTelecharge`), plus de lien direct. bandeau.js n'utilise
   `document` que par `globalThis.document` (chargé sous Node par les tests). index.html : `apiStream` (lecteur
   relâché en `finally`, lignes découpées par `decouperNdjson` de scene.js, ligne illisible = erreur en français) ; `alerte(message,
@@ -127,6 +128,13 @@ paths:
 - `npcs` (scène, `maxPnj` au plus : `pnj_max` de /api/config, 3 par défaut ; message d'information au-delà de 3), `history` (envoyé tel quel à /api/npc/talk), `dernier` (répond si personne n'est
   nommé), `rencontres` (pour l'export), `lieuActuel`, `positions` (nom → lieu pendant la partie), `ici`.
 - `busy` + `setBusy(b)` : active/désactive tous les contrôles ; `libre()` attend la fin de l'action en cours.
+- Modèle de l'IA (`#modeleBloc.modele-ia`, dernier bloc de la colonne de droite, styles dans style.css) : liste
+  `#modeleSel` construite par `afficherModele()` (dans `chargerConfig`) d'après `modele_dialogue` de /api/config,
+  via `choixModele` (scene.js : null avec Claude = bloc caché ; LM Studio : "" = « Modèle chargé dans LM Studio » ;
+  modèle configuré absent = « (introuvable) ») ; désactivée par `setBusy` pendant une action et si `modifiable` est
+  faux (titre explicatif). Au changement : `changementModele` → `api("/api/reglages", {changements}, "PUT",
+  {message})` sous `setBusy(true)` (mot de passe du MJ demandé par `envoyer`, gardé en `mdp-mj`), puis
+  `chargerConfig()` et `verifierSante()` ; échec ou « Annuler » = liste remise, alerte `modele`.
 - `parole` (`debutParole` / `finParole` / `stopNpc`) : prise de parole en cours, `{ctrl: AbortController, stop}`.
   Stop/Échap annule requêtes et son ; une réplique interrompue est raccourcie dans `history` à ce qui a été dit.
 - Options mémorisées dans localStorage (`OPTIONS`, `DESACTIVEES` = désactivées par défaut).

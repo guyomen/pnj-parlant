@@ -20,6 +20,8 @@ class FauxMoteurs:
     def __init__(self):
         self.choix = {"creation": "local", "dialogue": "local"}
         self.local_cfg = {"url": "http://localhost:1", "modele": "faux"}
+        self.lmstudio_cfg = {"url": "http://localhost:2", "modele": ""}
+        self.lmstudio = ["qwen", "gemma"]  # modèles de LM Studio (modeles_lmstudio)
         self.fiche_json = json.dumps(FICHE, ensure_ascii=False)
         self.reponses = ["Bonjour."]
         self.usage = None
@@ -38,6 +40,9 @@ class FauxMoteurs:
 
     def modele_local_installe(self, installes):
         return self.local_cfg["modele"]
+
+    def modeles_lmstudio(self):
+        return list(self.lmstudio)
 
     def fiche(self, system, demande, schema):
         self.derniere_demande = demande

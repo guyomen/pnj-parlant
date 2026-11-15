@@ -118,6 +118,12 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 .npc .k { color: var(--muted); }
 .npc .empty { color: var(--muted); }
 .gen { display: flex; gap: .5rem; margin-top: 1.25rem; flex-wrap: wrap; }
+/* Modèle de l'IA (vue Partie, colonne de droite) : libellé et liste sur une ligne, discrets */
+.modele-ia { display: flex; align-items: center; gap: .4rem .75rem; flex-wrap: wrap; }
+.modele-ia[hidden] { display: none; }
+.modele-ia label { font: italic 1.05rem var(--display); color: var(--muted); }
+.modele-ia select { min-width: 8rem; padding: .3rem .5rem; font-size: .95rem; }
+.modele-ia select:disabled { opacity: .55; cursor: not-allowed; }
 
 /* Champs */
 input[type=text], input[type=number], input[type=url], input[type=password], textarea, select { font: inherit; color: var(--ink); background: var(--bg);

@@ -378,6 +378,15 @@ class Moteurs:
         except MoteurIndisponible as e:
             return {"ok": False, "message": str(e)}
 
+    def modeles_lmstudio(self):
+        """Modèles de langage connus de LM Studio (identifiants), pour le choix du modèle dans la partie. Vide si
+        LM Studio ne répond pas."""
+        try:
+            modeles = self._en_cache(("lmstudio", self.lmstudio_cfg.get("url")), self._lire_modeles_lmstudio)
+        except MoteurIndisponible:
+            return []
+        return [m["id"] for m in modeles if m.get("type") in ("llm", "vlm") and isinstance(m.get("id"), str)]
+
     def _lmstudio_modele(self):
         """Modèle chargé dans LM Studio (fiche de /api/v0/models), celui de config.toml s'il est renseigné."""
         cfg = self.lmstudio_cfg

@@ -225,6 +225,24 @@ export const groupeUtile = (groupe, valeurs) =>
 
 export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifié${n > 1 ? "s" : ""}` : "";
 
+// --- Modèle de l'IA, dans la vue Partie ------------------------------------------------------------------
+// `modele_dialogue` de /api/config ({moteur, cle, valeur, modeles, modifiable}, null avec Claude) → contenu de la
+// liste : {cle, valeur, options: [{valeur, libelle}], modifiable}, ou null (liste cachée). LM Studio : "" = le
+// modèle chargé dans LM Studio ; un modèle configuré mais introuvable reste affiché, marqué « introuvable ».
+export function choixModele(info) {
+  if (!info || typeof info.cle !== "string" || !["local", "lmstudio"].includes(info.moteur)) return null;
+  const valeur = typeof info.valeur === "string" ? info.valeur : "";
+  const noms = [...new Set((Array.isArray(info.modeles) ? info.modeles : []).filter(m => typeof m === "string" && m))];
+  const options = noms.map(m => ({ valeur: m, libelle: m }));
+  if (info.moteur === "lmstudio") options.unshift({ valeur: "", libelle: "Modèle chargé dans LM Studio" });
+  if (!options.some(o => o.valeur === valeur)) options.push({ valeur, libelle: `${valeur || "aucun"} (introuvable)` });
+  return { cle: info.cle, valeur, options, modifiable: info.modifiable !== false };
+}
+
+// Changement à envoyer à PUT /api/reglages quand le joueur choisit `choisi` ; null s'il n'y a rien à changer.
+export const changementModele = (choix, choisi) =>
+  choix && typeof choisi === "string" && choisi !== choix.valeur ? { [choix.cle]: choisi } : null;
+
 // --- Réponse NDJSON (/api/npc/talk) ------------------------------------------------------------------
 // Découpe le texte reçu en objets, une ligne JSON chacun ; `reste` = début de ligne encore incomplète
 // (fin : tout est arrivé, la dernière ligne compte aussi). Ligne illisible : erreur en français.

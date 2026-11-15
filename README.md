@@ -60,6 +60,7 @@ Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisi
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
 - Sous la discussion : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle.
+- **Modèle de l’IA** (en bas de la colonne de droite, seulement si les dialogues passent par Ollama ou LM Studio) : la liste des modèles installés, sur le modèle en cours. Un autre choix s'applique aussitôt, sans relancer, et s'enregistre dans `config.toml` (`modele` de `[local]` ou de `[lmstudio]`, comme dans les options ; avec Ollama, il sert aussi à la création des PNJ si elle passe par Ollama). Avec LM Studio, « Modèle chargé dans LM Studio » reprend celui qui y est chargé. La liste est grisée pendant qu'un PNJ parle. Hors du PC du serveur, elle demande le mot de passe du MJ (gardé jusqu'à la fermeture de l'onglet) ; sans mot de passe défini, elle ne se change que depuis le PC.
 
 La page **Options** a trois parties (rubriques à gauche, en haut sur téléphone) :
 
@@ -179,7 +180,7 @@ Le conteneur redémarre ensuite avec le PC. `docker compose down` l'arrête ; `d
 
   Sans cela, une partie du modèle reste sur le processeur et les répliques sont plus lentes (14 tokens/s mesurés avec l'écran allumé, 21 sans).
 
-**Changer de modèle** : téléchargez-le (`ollama pull`), puis changez `modele` dans la section `[local]`. Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
+**Changer de modèle** : téléchargez-le (`ollama pull`), puis choisissez-le dans la liste **Modèle de l’IA** de la partie (ou changez `modele` dans la section `[local]`). Avec 12 Go de mémoire vidéo, `qwen3:8b`, `gemma3:12b` et `mistral-nemo` tiennent sans problème. Comparez-les sur les mêmes PNJ : la qualité du français varie d'un modèle à l'autre.
 
 **Avant de partir sans réseau**, vérifiez que tout est sur le PC : l'image Docker et le modèle (`docker compose exec ollama ollama list`), les voix (lancez l'application une fois avec le réseau pour Pocket TTS ; `voices/` pour Piper), et la banque de PNJ dans `pnj/`.
 

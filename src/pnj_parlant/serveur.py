@@ -370,6 +370,7 @@ def create_app(cfg, **moteurs):
                         "stt_local": ctx.reconnaissance.disponible(), "modeles_locaux": installes,
                         "intervention": ctx.intervention, "pnj_max": ctx.pnj_max,
                         "modele_local": m.modele_local_installe(installes),
+                        "modele_dialogue": modele_dialogue(m, installes),
                         "contexte_max": m.contexte_max(),
                         "portraits": ctx.portraits.nom if ctx.portraits.disponible() else None})
 
@@ -382,6 +383,20 @@ def create_app(cfg, **moteurs):
         if "lmstudio" in ctx.moteurs.choix.values():
             lmstudio = ctx.moteurs.etat_lmstudio()
         return jsonify({"gpu": systeme.etat_gpu(), "ollama": ollama, "lmstudio": lmstudio})
+
+    def modele_dialogue(m, installes):
+        """Choix du modèle de dialogue depuis la vue Partie : None avec Claude ; sinon {moteur, cle (réglage du
+        CATALOGUE), valeur (modèle en cours ; LM Studio : "" = le modèle chargé), modeles (installés), modifiable
+        (cet appareil peut changer les réglages : mot de passe du MJ s'il existe, sinon PC du serveur)}."""
+        moteur = m.choix.get("dialogue")
+        if moteur == "local":
+            valeur, modeles = m.modele_local_installe(installes), [x["nom"] for x in installes]
+        elif moteur == "lmstudio":
+            valeur, modeles = m.lmstudio_cfg.get("modele") or "", m.modeles_lmstudio()
+        else:
+            return None
+        return {"moteur": moteur, "cle": f"{moteur}.modele", "valeur": valeur, "modeles": modeles,
+                "modifiable": protege() or depuis_le_serveur()}
 
     # --- Réglages du serveur (page Options) ---------------------------------------
     def depuis_le_serveur():
@@ -425,24 +440,30 @@ def create_app(cfg, **moteurs):
         """Cet appareil voit les secrets des PNJ et les notes du MJ (PC du serveur, ou bon mot de passe)."""
         return droits(mdp_en_tete(), True)[0] == "ok"
 
-    def garde(mdp, univers):
-        """None si la requête est permise, sinon la réponse de refus (403, ou 429 pendant un verrou)."""
+    def garde(mdp, univers, demander=False):
+        """None si la requête est permise, sinon la réponse de refus (403, ou 429 pendant un verrou).
+        `demander` : voir refus."""
         etat, attente = droits(mdp, univers)
         if etat == "ok":
             return None
         if etat == "verrou":
             return trop_d_essais(attente)
-        return refus(mdp, univers)
+        return refus(mdp, univers, demander)
 
     def trop_d_essais(attente):
         return erreur(f"Trop d’essais de mot de passe : réessayez dans {math.ceil(attente)} s.", 429)
 
-    def refus(mdp, univers=False):
-        """Réponse 403 ; un mauvais mot de passe attend aussi une seconde. Pour l'univers, `mot_de_passe` dit à
-        la page qu'elle peut le demander (js/api.js)."""
+    def refus(mdp, univers=False, demander=False):
+        """Réponse 403 ; un mauvais mot de passe attend aussi une seconde. Pour l'univers (et les réglages avec
+        `demander` : PUT /api/reglages, utilisé par la vue Partie), `mot_de_passe` dit à la page qu'elle peut le
+        demander (js/api.js). La page Options vérifie le mot de passe par son propre formulaire : sans `demander`."""
         if mdp:
             time.sleep(1)
         if protege():
+            if not univers and demander:
+                message = ("Mot de passe du MJ incorrect." if mdp else
+                           "Mot de passe du MJ demandé pour modifier les réglages du serveur.")
+                return erreur(message, 403, mot_de_passe=True)
             if not univers:
                 return erreur("Mot de passe du MJ incorrect.", 403)
             message = ("Mot de passe du MJ incorrect." if mdp else
@@ -488,7 +509,7 @@ def create_app(cfg, **moteurs):
     def reglages_put():
         """{changements: {clé: valeur}} ; mot de passe du MJ dans l'en-tête X-Mot-De-Passe-MJ. Écrit config.toml et
         applique aussitôt ; renvoie les réglages et `redemarrage` (libellés qui attendent un redémarrage)."""
-        refuse = garde(mdp_en_tete(), False)
+        refuse = garde(mdp_en_tete(), False, demander=True)
         if refuse:
             return refuse
         try:

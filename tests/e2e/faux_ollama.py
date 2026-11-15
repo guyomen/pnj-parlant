@@ -12,8 +12,9 @@ class Gestion(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def repondre(self, corps, type_="application/json"):
         self.send_response(200); self.send_header("Content-Type", type_); self.end_headers(); self.wfile.write(corps)
-    def do_GET(self):
-        self.repondre(b'{"models": []}')
+    def do_GET(self):  # /api/tags : modèles installés (liste « Modèle de l'IA » de la partie) ; /api/ps : aucun chargé
+        self.repondre(b'{"models": [{"name": "faux"}, {"name": "autre"}]}' if self.path.startswith("/api/tags")
+                      else b'{"models": []}')
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         system = req["messages"][0]["content"]

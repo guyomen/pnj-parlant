@@ -69,7 +69,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     ignorée pendant une réplique), puis passe par l'accueil (barre d'espace sans effet, exemple Pré-Novice chargé
     deux fois : partie gardée si on refuse de la vider, vidée sinon ; son thème Parchemin, PNJ au
     hasard), un rechargement (conversation reprise, fiche modifiée sur le serveur relue), les options (onglet actif, barre du haut immobile, sous-options
-    grisées, réglage du serveur enregistré dans le config.toml temporaire), la page de
+    grisées, réglage du serveur enregistré dans le config.toml temporaire), la liste « Modèle de l'IA » de la partie
+    (`faux_ollama.py` liste `faux` et `autre` dans /api/tags ; changé puis remis), la page de
     préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence) et finit
     par « Nouvelle table » (destructive :
     toujours en dernier, suivie seulement d'une sauvegarde abîmée, écrite au `pagehide`, effacée au rechargement).

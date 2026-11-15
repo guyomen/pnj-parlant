@@ -106,6 +106,15 @@ def test_modele_claude_reconstruit_les_moteurs(chaud):
     assert tomllib.loads(fichier.read_text(encoding="utf-8"))["claude"]["modele"] == "claude-sonnet-5-5"
 
 
+def test_modele_de_dialogue_choisi_dans_la_partie(chaud):
+    """Liste « Modèle de l’IA » de la vue Partie : PUT /api/reglages {local.modele} reconstruit les moteurs et
+    écrit config.toml (la page relit ensuite /api/config)."""
+    client, _, fichier, *_ = chaud
+    assert mettre(client, **{"local.modele": "qwen3:4b"}).status_code == 200
+    assert MoteursConstruits.construits[-1].reglages["local"]["modele"] == "qwen3:4b"
+    assert tomllib.loads(fichier.read_text(encoding="utf-8"))["local"]["modele"] == "qwen3:4b"
+
+
 def test_reglage_sans_rapport_garde_les_moteurs(chaud):
     client, ctx, _, voix_construites, _ = chaud
     avant, tts = ctx.moteurs, ctx.tts
