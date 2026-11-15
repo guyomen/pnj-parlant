@@ -178,8 +178,9 @@ test("adressePortrait : seulement pour un PNJ de la banque qui a un portrait", (
 });
 
 // --- univers.js : messages de l'import et de l'accueil ---------------------------------
-const sourceUnivers = readFileSync(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url), "utf8");
-const univers = await import(`data:text/javascript;base64,${Buffer.from(sourceUnivers).toString("base64")}`);
+// Chargé par son chemin (il importe api.js et bandeau.js) : le package.json de la racine en fait un module ES.
+const univers = await import(new URL("../../src/pnj_parlant/static/js/univers.js", import.meta.url));
+const api = await import(new URL("../../src/pnj_parlant/static/js/api.js", import.meta.url));
 
 test("univers : fichiers importables, résumés et confirmation", () => {
   const noms = univers.fichiersImportables([{ name: "a.json" }, { name: "B.ZIP" }, { name: "brom-0001.png" },
@@ -192,6 +193,48 @@ test("univers : fichiers importables, résumés et confirmation", () => {
   assert.match(univers.resumeUnivers(0, 0), /^Aucun univers chargé/);
   assert.match(univers.confirmationImport(4, false), /4 PNJ de la banque seront remplacés/);
   assert.match(univers.confirmationImport(4, true), /s’ajouteront/);
+  assert.match(univers.confirmationViderPartie(["Ysolde", "Brom"]), /^Une conversation est en cours avec Ysolde et Brom\. /);
+  assert.match(univers.confirmationViderPartie([]), /^Une conversation est en cours\. .*Annuler : elle est gardée/);
+});
+
+// Faux navigateur pour les fonctions qui appellent le serveur : fetch(url) → réponses[url]
+function fauxFetch(reponses) {
+  const appels = [];
+  globalThis.fetch = async (url, opts) => {
+    appels.push([url, opts]);
+    const r = reponses[url];
+    if (r instanceof Error) throw r;
+    return { ok: r.status < 400, status: r.status, json: async () => { if (r.corps === undefined) throw new SyntaxError("vide"); return r.corps; } };
+  };
+  return appels;
+}
+
+test("api : erreurs du serveur en français, serveur injoignable", async () => {
+  const appels = fauxFetch({ "/a": { status: 200, corps: { ok: 1 } }, "/b": { status: 400, corps: { error: "Nom absent." } },
+                             "/c": { status: 502 }, "/d": new TypeError("Failed to fetch") });
+  assert.deepEqual(await api.api("/a", { x: 1 }), { ok: 1 });
+  assert.equal(appels[0][1].method, "POST");
+  assert.equal(appels[0][1].body, '{"x":1}');
+  await assert.rejects(api.api("/b"), { message: "Nom absent." });
+  await assert.rejects(api.api("/c", undefined, "GET", { panne: true }), { message: "Erreur serveur (502)" });
+  await assert.rejects(api.api("/d"), { message: /^Serveur injoignable/ });  // pas « Failed to fetch »
+  const abandon = Object.assign(new Error("abandon"), { name: "AbortError" });
+  fauxFetch({ "/e": abandon });
+  await assert.rejects(api.api("/e"), { name: "AbortError" });  // Stop / Échap : pas une panne
+});
+
+test("univers : thème gardé quand le serveur répond en erreur", async () => {
+  const ecrits = {};
+  globalThis.localStorage = { setItem: (k, v) => { ecrits[k] = v; } };
+  globalThis.document = { documentElement: { dataset: { theme: "givre" } }, getElementById: () => null };
+  try {
+    fauxFetch({ "/api/scenario": { status: 500, corps: { error: "panne" } }, "/api/styles": { status: 500 } });
+    assert.equal(await univers.chargerTheme(), "givre");
+    assert.deepEqual(ecrits, {});  // le thème par défaut n'est ni appliqué ni mémorisé
+    fauxFetch({ "/api/scenario": { status: 200, corps: { theme: "donjon" } }, "/api/styles": new TypeError("x") });
+    assert.equal(await univers.chargerTheme(), "donjon");
+    assert.equal(ecrits.theme, "donjon");
+  } finally { delete globalThis.document; delete globalThis.localStorage; }
 });
 
 // --- univers.js : thèmes graphiques -------------------------------------------------------
@@ -228,6 +271,10 @@ test("thèmes : CSS des thèmes de l'univers", () => {
   assert.match(lignes[1], /^@media \(prefers-color-scheme: dark\) \{ html\[data-theme="forge"\].* --bg: #121a17;/);
   assert.match(lignes[2], /data-theme="nuit"\] \{ color-scheme: dark; --bg: #121a17;.*--wax-ink: #fff4f0; --ombre:/);
   assert.equal(univers.cssThemes({}), "");
+  // couleur ou mode inattendus (le serveur les refuse déjà) : thème ignoré, rien n'est injecté
+  const piege = { ...p.sombre, bg: "red; } body { display: none" };
+  assert.equal(univers.cssThemes({ a: { mode: "sombre", sombre: piege }, b: { mode: "auto", clair: p.clair },
+                                   c: { mode: "x", x: p.sombre } }), "");
 });
 
 test("thèmes : contraste, alertes, identifiants", () => {
@@ -256,6 +303,51 @@ test("options : valeur d'un champ, groupes utiles, résumé", () => {
   assert.equal(scene.resumeModifs(0), "");
   assert.equal(scene.resumeModifs(1), "1 réglage modifié");
   assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
+});
+
+test("NDJSON : lignes complètes, reste, ligne illisible", () => {
+  assert.deepEqual(scene.decouperNdjson('{"phrase":"Un."}\n{"phrase":"De'), { objets: [{ phrase: "Un." }], reste: '{"phrase":"De' });
+  assert.deepEqual(scene.decouperNdjson('\n{"usage":{}}\n\n'), { objets: [{ usage: {} }], reste: "" });
+  assert.deepEqual(scene.decouperNdjson('{"phrase":"Fin."}', true), { objets: [{ phrase: "Fin." }], reste: "" });
+  assert.deepEqual(scene.decouperNdjson("", true), { objets: [], reste: "" });
+  assert.throws(() => scene.decouperNdjson("<html>\n"), { message: /^Réponse du serveur illisible/ });
+});
+
+test("partie gardée : sauvegarde valide ou rejetée", () => {
+  const ok = { version: 1, rencontres: [YSOLDE], scene: ["Ysolde la Rousse"], dernier: null, lieuActuel: "",
+               history: [{ speaker: null, content: "Bonjour" }, { speaker: "Ysolde la Rousse", content: "Salut" }],
+               positions: {}, lignes: [["Vous", "Bonjour"], ["", "(Elle sourit.)"]], tokenUsage: { input: 3 } };
+  assert.equal(scene.partieValide(ok), true);
+  const { version, ...ancienne } = ok;
+  assert.equal(scene.partieValide(ancienne), true);  // sauvegarde d'avant les versions : même forme
+  for (const abimee of [null, 42, "texte", [], { ...ok, version: 2 }, { ...ok, rencontres: [] },
+                        { ...ok, rencontres: [{ metier: "x" }] }, { ...ok, lignes: "x" }, { ...ok, lignes: [["Vous"]] },
+                        { ...ok, scene: "Ysolde" }, { ...ok, history: [{ speaker: 3, content: "x" }] },
+                        { ...ok, history: {} }, { ...ok, positions: [] }, { ...ok, lieuActuel: 5 },
+                        { ...ok, dernier: {} }, { ...ok, tokenUsage: "x" }]) {
+    assert.equal(scene.partieValide(abimee), false, JSON.stringify(abimee));
+  }
+});
+
+test("partie restaurée : fiches relues sur le serveur", () => {
+  const v = (name) => ({ name });
+  const ysolde = { ...YSOLDE, id: "y", suit: true, voix: v("b"), humeur: "gaie" };  // voix réattribuée en partie
+  const brom = { ...BROM, id: "b", voix: v("a") };
+  const gaspard = { nom: "Gaspard", metier: "colporteur", voix: v("c") };          // inventé : pas dans la banque
+  const relues = [{ ...YSOLDE, nom: "Ysolde (renommée)", id: "y", voix: v("a"), humeur: "furieuse" },
+                  { ...BROM, id: "b", voix: v("d"), apparence: "Gigantesque." }, null];
+  const [y, b, g] = scene.fichesRelues([ysolde, brom, gaspard], ["Brom Œil-de-Fer", "Ysolde la Rousse"], relues);
+  assert.equal(y.humeur, "furieuse");                 // modifiée en préparation
+  assert.equal(y.nom, "Ysolde la Rousse");            // le journal la cite sous ce nom
+  assert.equal(y.suit, true);                         // accompagne toujours le voyageur
+  assert.equal(b.apparence, "Gigantesque.");
+  assert.equal(b.voix.name, "d");                     // nouvelle voix de la banque : reprise
+  assert.equal(y.voix.name, "a");                     // la voix de la banque ne gêne plus personne (Brom a « d »)
+  assert.equal(g, gaspard);                           // inventé, ou fiche supprimée : copie gardée
+  // la voix de la banque se confond avec celle d'un PNJ de la scène placé avant : la voix réattribuée reste
+  const [y2] = scene.fichesRelues([ysolde, brom], ["Brom Œil-de-Fer", "Ysolde la Rousse"],
+                                  [relues[0], { ...relues[1], voix: v("a") }]);
+  assert.equal(y2.voix.name, "b");
 });
 
 test("bandeau : ajout sans doublon, limite, problèmes du serveur", () => {

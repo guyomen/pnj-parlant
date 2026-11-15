@@ -383,10 +383,12 @@
 <script type="module">
 import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
-         consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs } from "./js/scene.js";
+         consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs, decouperNdjson, partieValide,
+         fichesRelues, VERSION_PARTIE } from "./js/scene.js";
 import { requete, signaler, verifierSante } from "./js/bandeau.js";
-import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, importerFichiers,
-         resumeImport, resumeUnivers } from "./js/univers.js";
+import { api, lireReponse } from "./js/api.js";
+import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
+         importerFichiers, resumeImport, resumeUnivers } from "./js/univers.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };
@@ -443,34 +445,27 @@ function reinitialiserUsage() {
 // Erreur à montrer dans le bandeau sous la barre du haut (js/bandeau.js) ; même clé : remplace la précédente
 const alerte = (message, niveau = "erreur", cle = message) => signaler(message, { cle, niveau });
 
-async function api(path, body, method = body === undefined ? "GET" : "POST") {
-  const opts = { method, headers: { "Content-Type": "application/json" } };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await requete(path, opts);  // serveur injoignable : signalé dans le bandeau
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
-  return data;
-}
+// api (js/api.js) : requête JSON, serveur injoignable signalé dans le bandeau, erreurs en français
 
-// Lit une réponse NDJSON (un objet JSON par ligne) au fur et à mesure qu'elle arrive
+// Lit une réponse NDJSON (un objet JSON par ligne) au fur et à mesure qu'elle arrive. Le lecteur est toujours
+// relâché (erreur du serveur, ligne illisible, Stop) : la connexion se ferme.
 async function apiStream(path, body, onItem, signal) {
   const r = await requete(path, { method: "POST", headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify(body), signal });
-  if (!r.ok) {
-    const data = await r.json().catch(() => ({}));
-    throw new Error(data.error || `Erreur serveur (${r.status})`);
-  }
+  if (!r.ok) await lireReponse(r);  // lève l'erreur du serveur
   const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += value;
-    const lines = buf.split("\n");
-    buf = lines.pop();  // ligne pas encore complète
-    for (const line of lines) if (line.trim()) onItem(JSON.parse(line));
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      const { objets, reste } = decouperNdjson(buf + (value ?? ""), done);
+      buf = reste;  // ligne pas encore complète
+      for (const objet of objets) onItem(objet);
+      if (done) break;
+    }
+  } finally {
+    reader.cancel().catch(() => {});
   }
-  if (buf.trim()) onItem(JSON.parse(buf));
 }
 
 // --- Options (mémorisées dans ce navigateur) ----------------------------------
@@ -619,6 +614,7 @@ const libre = () => busy ? new Promise(r => attentesLibre.push(r)) : Promise.res
 let parole = null;
 
 function debutParole() {
+  if (parole) stopNpc();  // une seule prise de parole à la fois : l'ancienne se tait (Stop ne l'atteindrait plus)
   parole = { ctrl: new AbortController(), stop: null };
   $("stopBtn").hidden = false;
   setBusy(busy);  // « Parler » devient un bouton pour interrompre
@@ -668,7 +664,7 @@ async function veiller(p) {
       veille = null;
       stopNpc();
       if (cfg.stt_local) listenLocal({ stream: v.stream, bruit: det.bruit });
-      else { v.stream.getTracks().forEach(t => t.stop()); recognition?.start(); }
+      else { v.stream.getTracks().forEach(t => t.stop()); ecouterNavigateur(); }
     }, 50);
   } catch (e) {
     fermerVeille(v);
@@ -730,7 +726,12 @@ function prepareSegment(text, narrateur, p, onStart, n) {
     const audio = new Audio(URL.createObjectURL(blob));
     await new Promise((res) => {
       p.stop = () => { audio.pause(); res(); };
-      audio.onended = res; audio.onerror = res; audio.play().catch(res);
+      audio.onended = res; audio.onerror = res;
+      audio.play().catch((e) => {
+        // lecture refusée par le navigateur (son jamais autorisé sur cet onglet, souvent sur téléphone)
+        if (e.name === "NotAllowedError") alerte("Le navigateur a bloqué le son : touchez la page, puis reposez la question.", "avertissement", "son");
+        res();
+      });
     });
     URL.revokeObjectURL(audio.src);
   };
@@ -758,13 +759,14 @@ async function browserSpeak(text, narrateur, n) {
 async function saluer(n) {
   const p = debutParole();
   let line = null, said = "";
-  await speak(n.salutation, p, (morceau) => {
-    line ??= addLine(n, "");
-    said += (said ? " " : "") + morceau;
-    line.querySelector(".text").innerHTML = formatLine(said);
-    line.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, n);
-  finParole(p);
+  try {
+    await speak(n.salutation, p, (morceau) => {
+      line ??= addLine(n, "");
+      said += (said ? " " : "") + morceau;
+      line.querySelector(".text").innerHTML = formatLine(said);
+      line.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, n);
+  } finally { finParole(p); }
 }
 
 // Nouvelle scène avec ce PNJ seul, dans son lieu habituel s'il en a un (on va le voir là où il est).
@@ -834,14 +836,18 @@ async function changerLieu(id) {
   setBusy(true);
   const p = debutParole();
   let line = null, said = "";
-  await speak(arrivee(lieu, restent), p, (morceau) => {
-    line ??= addNarration();
-    said += (said ? " " : "") + morceau;
-    line.querySelector(".text").innerHTML = formatLine(said);
-    line.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, null);
-  finParole(p);
-  setBusy(false);
+  try {
+    await speak(arrivee(lieu, restent), p, (morceau) => {
+      line ??= addNarration();
+      said += (said ? " " : "") + morceau;
+      line.querySelector(".text").innerHTML = formatLine(said);
+      line.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, null);
+  } catch (e) { alerte(e.message); }
+  finally {
+    finParole(p);
+    setBusy(false);
+  }
 }
 
 // Aborder un PNJ qui se trouve dans le lieu (`i` : rang dans `ici`) : il rejoint la scène (ou la remplace,
@@ -871,14 +877,18 @@ function masquerProposition() {
   $("proposition").hidden = true;
 }
 
+// Renvoie faux si le serveur n'a pas répondu (la partie gardée n'est alors ni restaurée ni réécrite)
 async function chargerLieux() {
-  lieux = await api("/api/lieux").catch(() => []);
+  const lus = await api("/api/lieux").catch(() => null);
+  lieux = lus ?? [];
   if (!lieux.some(l => l.id === lieuActuel)) lieuActuel = "";
   renderLieu();
   renderCards();
+  return !!lus;
 }
 
 async function generate() {
+  if (busy) return;  // Entrée dans « Métier » pendant qu'un PNJ parle : ignorée
   setBusy(true); status("Le PNJ prend forme…");
   try { await startScene(await api("/api/npc/generate", { role: $("role").value, lieu: lieuActuel })); }
   catch (e) { alerte(e.message); }
@@ -901,14 +911,17 @@ async function faireEntrer() {
 
 // --- Banque de PNJ -----------------------------------------------------------
 async function refreshBank(selectId) {
-  banque = await api("/api/bank").catch(() => []);
+  const lue = await api("/api/bank").catch(() => null);
+  banque = lue ?? [];
   renderLieu();  // remplit aussi le menu de la banque
   if (selectId) $("bankSel").value = selectId;
   setBusy(busy);
+  return !!lue;  // faux : serveur muet
 }
 
 // ajout : le PNJ rejoint la scène en cours au lieu d'en commencer une nouvelle
 async function loadFromBank(ajout, id = $("bankSel").value) {
+  if (busy) return;
   setBusy(true); status("");
   try {
     const n = await api(`/api/bank/${encodeURIComponent(id)}`);
@@ -972,14 +985,18 @@ async function importerConversation(fichier) {
       }
       fiches.push(n);
     }
-    rencontres = fiches;
-    npcs = sceneImportee(lu.lignes, $("optMulti").checked ? maxPnj : 1).map(nom => fiches.find(f => f.nom === nom));
-    for (let i = 1; i < npcs.length; i++) {  // deux PNJ de la scène n'ont jamais la même voix
-      const avant = npcs.slice(0, i);
-      if (avant.some(x => memeVoix(x.voix, npcs[i].voix))) {
-        npcs[i].voix = await api("/api/voice", { ...npcs[i], eviter: avant.map(x => x.voix) });
+    const scene = sceneImportee(lu.lignes, $("optMulti").checked ? maxPnj : 1).map(nom => fiches.find(f => f.nom === nom));
+    for (let i = 1; i < scene.length; i++) {  // deux PNJ de la scène n'ont jamais la même voix
+      const avant = scene.slice(0, i);
+      if (avant.some(x => memeVoix(x.voix, scene[i].voix))) {
+        // copie : si /api/voice échoue, la partie en cours reste intacte
+        const n = { ...scene[i], voix: await api("/api/voice", { ...scene[i], eviter: avant.map(x => x.voix) }) };
+        fiches[fiches.indexOf(scene[i])] = n;
+        scene[i] = n;
       }
     }
+    rencontres = fiches;
+    npcs = scene;
     const parle = lu.lignes.map(([qui]) => qui).filter(qui => npcs.some(n => n.nom === qui));
     dernier = npcs.find(n => n.nom === parle.at(-1)) ?? npcs[0] ?? null;
     lieuActuel = lieu?.id ?? "";
@@ -1025,6 +1042,16 @@ async function send(text) {
     : avecIntervention(cites.length ? cites : [npcs.includes(dernier) ? dernier : npcs[0]]));
 }
 
+// Question dictée au micro : envoyée si c'est possible, sinon laissée dans le champ (rien ne se perd)
+function envoyerDictee(text) {
+  if (!npcs.length || busy) {
+    $("ask").value = text;
+    status("Votre question est restée dans le champ : envoyez-la quand vous voulez.");
+    return;
+  }
+  send(text).catch(e => alerte(e.message));
+}
+
 // Bouton « Laissez-les discuter » : un autre PNJ répond à celui qui vient de parler
 async function discuter() {
   if (busy || npcs.length < 2) return;
@@ -1042,24 +1069,27 @@ async function jouerTours(ordre) {
   const p = debutParole();
   let voice = Promise.resolve();
   const tours = [], file = [...ordre];
-  while (file.length && tours.length < MAX_TOURS) {
-    const n = file.shift();
-    if (p.ctrl.signal.aborted || !npcs.includes(n)) break;
-    const t = await tourDe(n, p, voice);
-    tours.push(t);
-    voice = t.voice;
-    if (t.erreur) break;
-    for (const appele of questionnes(t.reply, n, npcs).reverse()) {
-      const deja = file.indexOf(appele);
-      if (deja >= 0) file.splice(deja, 1);
-      file.unshift(appele);  // il répond avant les suivants prévus, une seule fois
+  try {
+    while (file.length && tours.length < MAX_TOURS) {
+      const n = file.shift();
+      if (p.ctrl.signal.aborted || !npcs.includes(n)) break;
+      const t = await tourDe(n, p, voice);
+      tours.push(t);
+      voice = t.voice;
+      if (t.erreur) break;
+      for (const appele of questionnes(t.reply, n, npcs).reverse()) {
+        const deja = file.indexOf(appele);
+        if (deja >= 0) file.splice(deja, 1);
+        file.unshift(appele);  // il répond avant les suivants prévus, une seule fois
+      }
     }
+    await voice;
+    // Interrompu : chacun « se souvient » seulement de ce qu'il a eu le temps de dire
+    if (p.ctrl.signal.aborted) tours.forEach(t => t.corriger());
+  } finally {  // une erreur imprévue ne laisse pas les contrôles désactivés
+    finParole(p);
+    setBusy(false);
   }
-  await voice;
-  // Interrompu : chacun « se souvient » seulement de ce qu'il a eu le temps de dire
-  if (p.ctrl.signal.aborted) tours.forEach(t => t.corriger());
-  finParole(p);
-  setBusy(false);
 }
 
 // Réplique d'un PNJ : préparée phrase par phrase dès qu'elle arrive, affichée quand elle est dite.
@@ -1121,15 +1151,26 @@ function micPressed(on) {
   setBusy(busy);  // le bouton reste cliquable pendant l'écoute, pour la terminer
 }
 
-let stopListening = () => recognition?.stop();
+const arretNavigateur = () => recognition?.stop();
+let stopListening = arretNavigateur;
+let ecouteLocale = false;  // posé avant d'ouvrir le micro : un double clic ne lance pas deux enregistrements
+let transcription = null;  // AbortController de /api/stt : Échap annule la transcription
+
+// Reconnaissance du navigateur : start() lève une erreur si elle écoute déjà (double clic)
+function ecouterNavigateur() {
+  try { recognition?.start(); } catch {}
+}
 
 // ouvert : { stream, bruit } quand le joueur vient de couper la parole au PNJ (micro déjà ouvert,
 // bruit de fond déjà mesuré, voix déjà entendue)
 async function listenLocal(ouvert = null) {
+  if (ecouteLocale) { ouvert?.stream.getTracks().forEach(t => t.stop()); return; }
+  ecouteLocale = true;
   let stream = ouvert?.stream;
   if (!stream) try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
+    ecouteLocale = false;
     alerte("Micro refusé. Autorisez-le dans le navigateur (et utilisez localhost ou HTTPS).", "erreur", "micro");
     return;
   }
@@ -1146,7 +1187,9 @@ async function listenLocal(ouvert = null) {
     analyser = ctx.createAnalyser();
     ctx.createMediaStreamSource(stream).connect(analyser);
   } catch (e) {
+    ecouteLocale = false;
     stream.getTracks().forEach(t => t.stop());
+    ctx?.close().catch(() => {});
     alerte(`Micro inutilisable : ${e.message}`, "erreur", "micro");
     return;
   }
@@ -1166,13 +1209,17 @@ async function listenLocal(ouvert = null) {
     const seuil = Math.max(0.004, noise * 3);
     if (now - start >= calibrage && level > seuil) { heard = true; lastSound = now; }
     status(`J’écoute… niveau ${"▮".repeat(Math.min(20, Math.round(level * 200)))}`);
-    if ((heard && now - lastSound > 1200) || (!heard && now - start > 8000) || now - start > 30000) stopListening();
+    if ((heard && now - lastSound > 1200) || (!heard && now - start > 8000) || now - start > 30000) arreter();
   }, 100);
 
-  stopListening = () => { if (rec.state !== "inactive") rec.stop(); };
+  // arrêt de CET enregistrement (la minuterie ne passe pas par la globale, qu'une autre écoute remplacerait)
+  const arreter = () => { if (rec.state !== "inactive") rec.stop(); };
+  stopListening = arreter;
 
   rec.onstop = async () => {
     clearInterval(timer); ctx.close(); stream.getTracks().forEach(t => t.stop());
+    ecouteLocale = false;
+    if (stopListening === arreter) stopListening = arretNavigateur;
     micPressed(false);
     // Même si le seuil n'a rien détecté, on laisse Whisper (qui filtre le silence) trancher,
     // sauf si le micro est réellement muet (signal nul : mauvais périphérique ou micro coupé).
@@ -1183,18 +1230,21 @@ async function listenLocal(ouvert = null) {
     await libre();  // réplique interrompue : elle finit de se ranger avant la question
     setBusy(true); status("Je transcris…");
     let text = "";
+    const ctrl = transcription = new AbortController();
     try {
       const form = new FormData();
       form.append("audio", new Blob(chunks, { type: rec.mimeType }), "micro.webm");
       form.append("indice", `Dialogue avec ${npcs.map(n => `${n.nom}, ${n.metier}`).join(" ; ")}.`);
-      const r = await fetch("/api/stt", { method: "POST", body: form });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
+      const data = await lireReponse(await requete("/api/stt", { method: "POST", body: form, signal: ctrl.signal }));
       text = data.text;
       status(text ? "" : "Je n’ai pas compris. Recommencez ou tapez votre question.");
-    } catch (e) { alerte(e.message); }
+    } catch (e) {
+      if (e.name === "AbortError") status("");  // Échap : transcription abandonnée
+      else alerte(e.message);
+    }
+    if (transcription === ctrl) transcription = null;
     setBusy(false);
-    if (text) send(text);
+    if (text) envoyerDictee(text);
   };
   rec.start();
   micPressed(true);
@@ -1224,22 +1274,24 @@ if (SR) {
     micPressed(false);
     if (!finalText) return;
     await libre();  // réplique interrompue : elle finit de se ranger avant la question
-    send(finalText);
+    envoyerDictee(finalText);
   };
 }
 
 $("micBtn").onclick = () => {
   if ($("micBtn").getAttribute("aria-pressed") === "true") return stopListening();
-  if ($("micBtn").disabled) return;
+  if ($("micBtn").disabled || ecouteLocale) return;  // micro en cours d'ouverture : pas de deuxième écoute
   stopNpc();  // le joueur coupe la parole au PNJ (le bouton n'est actif pendant qu'il parle qu'avec l'option)
   if (cfg.stt_local) listenLocal();
-  else recognition?.start();
+  else ecouterNavigateur();
 };
 $("stopBtn").onclick = stopNpc;
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") stopNpc();
-  // Barre d'espace = bouton « Parler », sauf quand on écrit ou qu'un autre bouton a le focus
-  if (e.key === " " && !e.repeat && !e.target.closest?.("input, textarea, select, button, a, [contenteditable]")) {
+  if (e.key === "Escape") { stopNpc(); transcription?.abort(); }
+  // Barre d'espace = bouton « Parler » dans la partie seulement (ailleurs, elle fait défiler la page), sauf quand
+  // on écrit ou qu'un autre bouton a le focus
+  if (e.key === " " && !e.repeat && document.body.dataset.vue === "jeu"
+      && !e.target.closest?.("input, textarea, select, button, a, [contenteditable]")) {
     e.preventDefault();
     $("micBtn").click();
   }
@@ -1255,7 +1307,7 @@ $("importFichier").onchange = async () => {
   $("importFichier").value = "";  // pour pouvoir réimporter le même fichier
   if (fichier) await importerConversation(fichier);
 };
-$("discuterBtn").onclick = discuter;
+$("discuterBtn").onclick = () => discuter().catch(e => alerte(e.message));
 $("entreeBtn").onclick = faireEntrer;
 $("entree").addEventListener("keydown", (e) => { if (e.key === "Enter") faireEntrer(); });
 $("cards").onclick = (e) => {
@@ -1275,34 +1327,65 @@ $("optCoupure").addEventListener("change", () => { arreterVeille(); if (parole) 
 // --- Conversation en cours, gardée dans ce navigateur -----------------------------
 // Rien ne se perd en allant à l'accueil, aux options, à la page de préparation, ni en rechargeant la page.
 const CLE_PARTIE = "pnj-partie";
-let partieRestauree = false;  // pas de sauvegarde avant d'avoir relu la précédente
+let partieRestauree = false;  // pas de sauvegarde avant d'avoir relu la précédente (lieux et banque lus)
+let sauvegardeRefusee = false;  // stockage plein ou interdit : signalé une seule fois
 
 function sauverPartie() {
   if (!partieRestauree) return;
   try {
     if (!rencontres.length) { localStorage.removeItem(CLE_PARTIE); return; }
     localStorage.setItem(CLE_PARTIE, JSON.stringify({
-      rencontres, scene: npcs.map(n => n.nom), dernier: dernier?.nom ?? null, history, lieuActuel, positions,
-      lignes: lignesDuLog(), tokenUsage }));
-  } catch {}  // stockage plein ou interdit : la partie continue, sans sauvegarde
+      version: VERSION_PARTIE, rencontres, scene: npcs.map(n => n.nom), dernier: dernier?.nom ?? null, history,
+      lieuActuel, positions, lignes: lignesDuLog(), tokenUsage }));
+  } catch {  // la partie continue, sans sauvegarde
+    if (!sauvegardeRefusee) alerte("Ce navigateur refuse de garder la conversation (stockage plein ou interdit) : "
+      + "elle sera perdue au rechargement. Exportez-la pour la garder.", "avertissement", "sauvegarde");
+    sauvegardeRefusee = true;
+  }
 }
 
-function restaurerPartie() {
+// Vide la partie en cours (nouvelle table, ou nouvel univers chargé depuis l'accueil)
+function viderPartie() {
+  stopNpc();
+  npcs = []; history = []; dernier = null; rencontres = []; positions = {}; lieuActuel = "";
+  masquerProposition();
+  $("log").innerHTML = "";
+  reinitialiserUsage();
+  try { localStorage.removeItem(CLE_PARTIE); } catch {}
+}
+
+// Reprend la partie gardée dans ce navigateur. Les fiches sont relues sur le serveur (modifiées en préparation
+// entre-temps) ; la partie garde son journal, qui accompagne le voyageur et les voix réattribuées (fichesRelues).
+// Sauvegarde abîmée ou d'une autre version : effacée, la page démarre sans partie.
+async function restaurerPartie() {
   let p = null;
   try { p = JSON.parse(localStorage.getItem(CLE_PARTIE) || "null"); } catch {}
+  if (p === null) { partieRestauree = true; return; }
+  try {
+    if (!partieValide(p)) throw new Error("sauvegarde illisible");
+    setBusy(true);
+    // fiche supprimée (404), PNJ inventé ou serveur muet : la copie gardée reste
+    const relues = await Promise.all(p.rencontres.map(r => r.id
+      ? api(`/api/bank/${encodeURIComponent(r.id)}`).catch(() => null) : null));
+    const scene = p.scene ?? [];
+    rencontres = fichesRelues(p.rencontres, scene, relues);
+    npcs = scene.map(nom => rencontres.find(r => r.nom === nom)).filter(Boolean);
+    dernier = npcs.find(n => n.nom === p.dernier) ?? npcs[0] ?? null;
+    history = p.history ?? [];
+    lieuActuel = lieux.some(l => l.id === p.lieuActuel) ? p.lieuActuel : "";
+    positions = p.positions ?? {};
+    tokenUsage = { ...tokenUsage, ...p.tokenUsage };
+    afficherUsage();
+    afficherLignes(p.lignes, rencontres);
+    renderCards();
+    renderLieu();
+  } catch {
+    viderPartie();
+    renderCards();
+    renderLieu();
+    alerte("La conversation gardée dans ce navigateur était illisible : elle a été effacée.", "avertissement", "sauvegarde");
+  }
   partieRestauree = true;
-  if (!p?.rencontres?.length || !Array.isArray(p.lignes)) return;
-  rencontres = p.rencontres;
-  npcs = (p.scene ?? []).map(nom => rencontres.find(r => r.nom === nom)).filter(Boolean);
-  dernier = npcs.find(n => n.nom === p.dernier) ?? npcs[0] ?? null;
-  history = Array.isArray(p.history) ? p.history : [];
-  lieuActuel = lieux.some(l => l.id === p.lieuActuel) ? p.lieuActuel : "";
-  positions = p.positions ?? {};
-  tokenUsage = { ...tokenUsage, ...p.tokenUsage };
-  afficherUsage();
-  afficherLignes(p.lignes, rencontres);
-  renderCards();
-  renderLieu();
   setBusy(false);
 }
 window.addEventListener("pagehide", sauverPartie);
@@ -1329,8 +1412,8 @@ window.addEventListener("hashchange", afficherVue);
 // --- Accueil -------------------------------------------------------------------
 let exemples = null;
 async function majAccueil() {
-  exemples ??= await api("/api/exemples").catch(() => []);
-  $("exemplesListe").innerHTML = exemples.map(e => `<button class="exemple" data-exemple="${esc(e.id)}">`
+  exemples ??= await api("/api/exemples").catch(() => null);  // échec : redemandés au prochain affichage
+  $("exemplesListe").innerHTML = (exemples ?? []).map(e => `<button class="exemple" data-exemple="${esc(e.id)}">`
     + `Exemple : ${esc(e.nom)}<small>${esc(e.resume)}</small></button>`).join("");
   $("universActuel").textContent = resumeUnivers(lieux.length, banque.length);
   $("accHasardBtn").disabled = !banque.length;
@@ -1364,11 +1447,7 @@ $("nouvelleTableBtn").onclick = async () => {
   stopNpc();
   try { await api("/api/univers", undefined, "DELETE"); }
   catch (e) { $("accStatus").textContent = e.message; return; }
-  npcs = []; history = []; dernier = null; rencontres = []; positions = {}; lieuActuel = "";
-  masquerProposition();
-  $("log").innerHTML = "";
-  reinitialiserUsage();
-  try { localStorage.removeItem(CLE_PARTIE); } catch {}
+  viderPartie();
   await chargerLieux();
   await refreshBank();
   await chargerTheme();
@@ -1379,11 +1458,14 @@ $("nouvelleTableBtn").onclick = async () => {
 
 const confirmerImport = () => !(banque.length || lieux.length)
   || confirm(confirmationImport(banque.length, $("accGarder").checked));
+// Nouvel univers depuis l'accueil pendant une partie : on demande s'il faut la vider (refuser la garde)
 async function importerUnivers(charger) {
   if (busy || !confirmerImport()) return;
+  const vider = rencontres.length > 0 && confirm(confirmationViderPartie(npcs.map(n => n.nom)));
   $("accStatus").textContent = "Chargement…";
   try {
     const r = await charger($("accGarder").checked);
+    if (vider) viderPartie();
     await chargerLieux();
     await refreshBank();
     await chargerTheme();
@@ -1408,7 +1490,7 @@ for (const id of ["accZip", "accDossier"]) {
 afficherVue();
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
-$("sendBtn").onclick = () => send($("ask").value);
+$("sendBtn").onclick = () => send($("ask").value).catch(e => alerte(e.message));
 $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
 document.querySelectorAll("[data-length]").forEach((button) => {
   button.onclick = () => {
@@ -1480,7 +1562,9 @@ async function chargerReglages() {
   afficherReglages();
 }
 
-function controle(r) {
+function controle(reglage) {
+  // valeur en attente d'enregistrement, s'il y en a une : la page réaffichée montre ce qui sera enregistré
+  const r = reglage.type !== "secret" && reglage.cle in modifsReglages ? { ...reglage, valeur: modifsReglages[reglage.cle] } : reglage;
   const id = idChamp(r.cle), attr = `id="${id}" data-cle="${esc(r.cle)}"${peutModifier() ? "" : " disabled"}`;
   switch (r.type) {
     case "booleen":
@@ -1557,6 +1641,8 @@ $("acces").addEventListener("submit", async (e) => {
 $("acces").addEventListener("click", (e) => {
   if (e.target.id !== "verrouiller") return;
   garderMdp("");
+  modifsReglages = {};  // verrouillé : elles ne pourraient plus être enregistrées
+  messageOptions("");
   afficherReglages();
 });
 
@@ -1572,7 +1658,11 @@ function noterChangement(e) {
   if (!cle) return;
   const r = reglageDe(cle), v = valeurReglage(r.type, e.target);
   if (r.type === "secret") { if (v) modifsReglages[cle] = v; else delete modifsReglages[cle]; }
-  else if (v === null || v === r.valeur) delete modifsReglages[cle];
+  else if (v === null || v === r.valeur) {
+    delete modifsReglages[cle];
+    // nombre vidé ou illisible : en quittant le champ, il reprend la valeur enregistrée (rien n'est en attente)
+    if (v === null && e.type === "change") e.target.value = r.valeur;
+  }
   else modifsReglages[cle] = v;
   if (cle.startsWith("moteurs.")) majUtilite();
   messageOptions("");
@@ -1593,12 +1683,13 @@ $("reglagesAnnuler").onclick = () => { modifsReglages = {}; afficherReglages(); 
 $("reglagesEnregistrer").onclick = async () => {
   const changements = { ...modifsReglages };
   $("reglagesEnregistrer").disabled = true;
+  let refuse = false;
   try {
-    const r = await fetch("/api/reglages", { method: "PUT", body: JSON.stringify({ changements }),
+    const r = await requete("/api/reglages", { method: "PUT", body: JSON.stringify({ changements }),
       headers: { "Content-Type": "application/json", "X-Mot-De-Passe-MJ": mdpMJ() } });
-    const d = await r.json().catch(() => ({}));
-    if (r.status === 403) garderMdp("");
-    if (!r.ok) throw new Error(d.error || `Erreur serveur (${r.status})`);
+    refuse = r.status === 403;
+    if (refuse) garderMdp("");
+    const d = await lireReponse(r);
     if ("serveur.mot_de_passe_mj" in changements) garderMdp(changements["serveur.mot_de_passe_mj"] || "");
     reglagesServeur = d;
     modifsReglages = {};
@@ -1609,8 +1700,9 @@ $("reglagesEnregistrer").onclick = async () => {
     refreshSys();
     verifierSante();
   } catch (err) {
+    // mot de passe refusé : champs verrouillés, modifications gardées (à enregistrer une fois déverrouillé)
+    if (refuse) afficherReglages();
     messageOptions(err.message, true);
-    if (!mdpMJ()) afficherAcces();
   }
   $("reglagesEnregistrer").disabled = false;
 };
@@ -1650,7 +1742,14 @@ async function refreshSys() {
 setInterval(() => { if (!document.hidden && document.body.dataset.vue === "options") refreshSys(); }, 3000);
 setBusy(false);
 chargerTheme();
-chargerLieux().then(() => refreshBank()).then(() => { restaurerPartie(); majAccueil(); });
+// Partie gardée : restaurée seulement si les lieux et la banque ont été lus (serveur injoignable : elle reste
+// intacte dans le navigateur, sans être réécrite sans son lieu, jusqu'au rechargement)
+(async () => {
+  const lieuxLus = await chargerLieux();
+  const banqueLue = await refreshBank();
+  if (lieuxLus && banqueLue) await restaurerPartie();
+  majAccueil();
+})();
 </script>
 </body>
 </html>

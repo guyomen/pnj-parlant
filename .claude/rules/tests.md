@@ -30,7 +30,11 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
-- `tests/js/scene.test.mjs` charge scene.js depuis son texte (data: URL) ; package.json minimal (`npm test`, version de Node).
+- `tests/js/scene.test.mjs` charge scene.js depuis son texte (data: URL), univers.js et api.js par leur chemin (ils
+  importent d'autres modules ; le package.json de la racine, `"type": "module"`, en fait des modules ES) ;
+  `fauxFetch(reponses)` remplace `fetch` (et `document`/`localStorage` minimaux pour `chargerTheme`). Tests JS de
+  `decouperNdjson`, `partieValide`, `fichesRelues`, `api`, `cssThemes` (couleurs piégées). package.json minimal
+  (`npm test`, version de Node).
 - Outillage : `ruff check .` (config dans pyproject.toml, doit rester vert), `pytest --cov` ; CI GitHub Actions
   `.github/workflows/tests.yml` (Linux et Windows, Python 3.11 et 3.13, Node 22). `tests/e2e/donnees/config.toml`
   est versionné (fausse clé `sk-ant-factice`) ; `/config.toml` et `/pnj/` de la racine sont ignorés.
@@ -42,12 +46,16 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     Edge sans écran.
   - Avant d'agir, attendre que le contrôle soit réactivé (`quand(...)`) : une action pendant une narration ou une
     réplique est ignorée (`busy`).
-  - Le parcours commence sur `/#jeu` (bandeau : voix Piper absentes signalées, puis fermées), puis passe par l'accueil (exemple Pré-Novice et son thème Parchemin, PNJ au
-    hasard), un rechargement (conversation reprise), les options (onglet actif, barre du haut immobile, sous-options
+  - `faux_ollama.py` finit chaque réplique par `{"done": true}` (sans elle, le serveur juge le flux coupé net).
+  - Le parcours commence sur `/#jeu` (bandeau : voix Piper absentes signalées, puis fermées ; Entrée dans « Métier »
+    ignorée pendant une réplique), puis passe par l'accueil (barre d'espace sans effet, exemple Pré-Novice chargé
+    deux fois : partie gardée si on refuse de la vider, vidée sinon ; son thème Parchemin, PNJ au
+    hasard), un rechargement (conversation reprise, fiche modifiée sur le serveur relue), les options (onglet actif, barre du haut immobile, sous-options
     grisées, réglage du serveur enregistré dans le config.toml temporaire), la page de
     préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence) et finit
     par « Nouvelle table » (destructive :
-    toujours en dernier). `window.confirm` est remplacé par `() => true` avant les clics qui demandent confirmation.
+    toujours en dernier, suivie seulement d'une sauvegarde abîmée, écrite au `pagehide`, effacée au rechargement).
+    `window.confirm` est remplacé par `() => true` avant les clics qui demandent confirmation.
   - Le serveur sur le réseau local (ex. 192.168.1.21:5000) peut être celui de l'utilisateur : ne pas le relancer ;
     pour essayer une page à la main, lancer une copie de `tests/e2e/donnees/` sur un autre port.
   - `tests/e2e/donnees/pnj/ysolde-0001.png` (8×8) : portrait affiché dans la fiche quand on aborde Ysolde.

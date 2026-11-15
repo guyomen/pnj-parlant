@@ -48,9 +48,9 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 
 **Bandeau d'alertes** : sous la barre du haut, sur toutes les pages, un bandeau signale ce qui ne marche pas alors que le serveur tourne, avec la marche à suivre : paquet absent (tomlkit, moteur de voix, faster-whisper, option portraits), voix ou modèle Whisper manquants, Ollama ou LM Studio arrêtés, modèle local absent, clé API Claude manquante. Il affiche aussi les erreurs en cours de route : serveur injoignable, moteur indisponible pendant une réplique ou une création, micro refusé, synthèse vocale du serveur en échec (la voix du navigateur prend le relais). Les mêmes problèmes s'affichent dans la console au démarrage. Chaque message se ferme d'un clic (×) ; un problème fermé ne revient pas avant la fermeture de l'onglet, sauf si son message change.
 
-La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur.
+La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **partie**, à la préparation de l'univers et aux **options**. La conversation en cours est gardée dans le navigateur : on la retrouve en revenant de l'accueil, des options ou de la préparation, et même après avoir rechargé la page ou relancé le serveur. Au rechargement, les fiches des PNJ sont relues sur le serveur : une fiche modifiée entre-temps en préparation est reprise (la conversation, les compagnons et les voix changées en partie sont gardés ; un PNJ supprimé de la banque reste tel qu'il était). Une sauvegarde illisible est effacée, avec un message.
 
-Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace), ou tapez votre question.
+Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace, dans la partie), ou tapez votre question.
 
 - **Stop** (ou Échap) fait taire le PNJ ; il ne se souvient que de ce qu'il a eu le temps de dire.
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
@@ -115,7 +115,7 @@ Un thème ou un style prédéfini modifié peut être rétabli ; un thème ou un
 
 ### Partager un univers
 
-Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers ». L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
+Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers » (si une conversation est en cours, il demande s'il faut l'effacer ; « Annuler » la garde). L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
 
 ### Univers d'exemple : Pré-Novice
 
@@ -264,7 +264,7 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js
+  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js, js/api.js
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows

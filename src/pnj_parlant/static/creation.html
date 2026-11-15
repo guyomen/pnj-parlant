@@ -400,7 +400,8 @@
 
 <script type="module">
 import { adressePortrait, esc, parLieu } from "./js/scene.js";
-import { requete, signaler, verifierSante } from "./js/bandeau.js";
+import { requete, verifierSante } from "./js/bandeau.js";
+import { api as appel } from "./js/api.js";
 import { COULEURS, THEMES, THEME_DEFAUT, alertesContraste, appliquerTheme, confirmationImport, exporter, identifiant,
          importerFichiers, poserThemesPerso, resumeImport, tousLesThemes } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
@@ -410,19 +411,8 @@ let current = {};     // PNJ en cours d'édition (id présent = déjà dans la b
 let dirty = false;    // modifications non enregistrées
 
 // Serveur injoignable (requete) ou en panne (5xx : moteur indisponible, portrait impossible…) : signalé dans le
-// bandeau sous la barre du haut, en plus du message près de l'action
-async function api(path, body, method = body === undefined ? "GET" : "POST") {
-  const opts = { method, headers: { "Content-Type": "application/json" } };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await requete(path, opts);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const message = data.error || `Erreur serveur (${r.status})`;
-    if (r.status >= 500) signaler(message);
-    throw new Error(message);
-  }
-  return data;
-}
+// bandeau sous la barre du haut, en plus du message près de l'action (js/api.js)
+const api = (path, body, method) => appel(path, body, method, { panne: true });
 
 // --- Parties de la page : scénario (« #scenario »), lieux (« #lieux »), PNJ (« #pnj ») ---------
 function afficherSection() {
@@ -475,7 +465,7 @@ function fillVoiceList() {
   const list = allVoices.filter(v => genre === "neutre" || v.genre === genre);
   const sel = $("voiceSel");
   sel.innerHTML = `<option value="">— choisir une voix —</option>` +
-    list.map(v => `<option value="${v.name}">${v.label ?? v.name}</option>`).join("");
+    list.map(v => `<option value="${esc(v.name)}">${esc(v.label ?? v.name)}</option>`).join("");
   sel.value = list.some(v => v.name === current.voix?.name) ? current.voix.name : "";
 }
 
@@ -590,20 +580,20 @@ async function enregistrerStyles(themes, portraits) {
 function afficherThemes() {
   $("themes").innerHTML = tousLesThemes(stylesUnivers.themes).map(t => `
     <div class="theme-carte">
-      <label class="theme-choix" data-theme="${t.id}">
-        <input type="radio" name="theme" value="${t.id}">
+      <label class="theme-choix" data-theme="${esc(t.id)}">
+        <input type="radio" name="theme" value="${esc(t.id)}">
         <span class="pastilles" aria-hidden="true"><i style="background: var(--bg)"></i><i style="background: var(--glass)"></i><i style="background: var(--verdigris)"></i><i style="background: var(--wax)"></i></span>
         <span class="nom">${esc(t.nom)}</span><small>${esc(t.resume)}${mention(t.origine)}</small>
       </label>
-      <button class="ghost petit" data-modifier-theme="${t.id}">Modifier</button>
+      <button class="ghost petit" data-modifier-theme="${esc(t.id)}">Modifier</button>
     </div>`).join("");
-  const radio = document.querySelector(`input[name=theme][value="${scenarioCharge.theme}"]`);
+  const radio = document.querySelector(`input[name=theme][value="${CSS.escape(scenarioCharge.theme ?? "")}"]`);
   if (radio) radio.checked = true;
 }
 const themeChoisi = () => document.querySelector("input[name=theme]:checked")?.value ?? THEME_DEFAUT;
 function afficherTheme(id) {
   const theme = appliquerTheme(id);
-  const radio = document.querySelector(`input[name=theme][value="${theme}"]`);
+  const radio = document.querySelector(`input[name=theme][value="${CSS.escape(theme)}"]`);
   if (radio) radio.checked = true;
   return theme;
 }
@@ -729,7 +719,7 @@ function afficherStyles() {
   afficherStyle(scenarioCharge.style_portrait);
 }
 function afficherStyle(id) {
-  const radio = document.querySelector(`input[name=style][value="${id}"]`) ?? document.querySelector("input[name=style]");
+  const radio = document.querySelector(`input[name=style][value="${CSS.escape(id ?? "")}"]`) ?? document.querySelector("input[name=style]");
   if (radio) radio.checked = true;
   const liste = stylesUnivers.portraits;
   const nom = liste.find(st => st.id === (id || liste[0]?.id))?.nom;
@@ -1029,15 +1019,22 @@ async function listen() {
   const id = ++listenId;
   stopListen();
   if (!current.voix?.name) await otherVoice();
-  const r = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ text, voice: current.voix }) });
-  if (id !== listenId) return;
-  if (!r.ok) { $("saveStatus").textContent = "Synthèse vocale indisponible (voix absente, ou réseau coupé pour Edge)."; return; }
-  const blob = await r.blob();
+  let blob;
+  try {
+    const r = await requete("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ text, voice: current.voix }) });
+    if (id !== listenId) return;
+    if (!r.ok) { $("saveStatus").textContent = "Synthèse vocale indisponible (voix absente, ou réseau coupé pour Edge)."; return; }
+    blob = await r.blob();
+  } catch (e) { if (id === listenId) $("saveStatus").textContent = e.message; return; }
   if (id !== listenId) return;
   stopListen();
-  player = new Audio(URL.createObjectURL(blob));
-  player.play();
+  const audio = player = new Audio(URL.createObjectURL(blob));
+  audio.onended = () => { if (player === audio) stopListen(); };  // fin de lecture : URL d'objet libérée
+  audio.play().catch((e) => {
+    if (player === audio) stopListen();
+    if (e.name === "NotAllowedError") $("saveStatus").textContent = "Le navigateur a bloqué le son : cliquez de nouveau sur Écouter.";
+  });
 }
 
 $("genBtn").onclick = generate;

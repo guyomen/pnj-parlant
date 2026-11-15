@@ -13,7 +13,7 @@ let alertes = [];
 const fermees = () => { try { return JSON.parse(sessionStorage.getItem(CLE_FERMEES) || "[]"); } catch { return []; } };
 
 function afficher() {
-  const zone = document.getElementById("bandeau");
+  const zone = globalThis.document?.getElementById("bandeau");
   if (!zone) return;
   zone.hidden = !alertes.length;
   zone.innerHTML = alertes.map(a => `
@@ -58,7 +58,8 @@ export async function verifierSante() {
   afficher();
 }
 
-document.addEventListener("click", (e) => {
+// globalThis.document : le module se charge aussi sous Node (tests de js/api.js et js/univers.js)
+globalThis.document?.addEventListener("click", (e) => {
   const cle = e.target.closest?.("[data-fermer]")?.dataset.fermer;
   if (!cle) return;
   const a = alertes.find(x => x.cle === cle);

@@ -1,5 +1,7 @@
 // Univers (scénario, lieux, PNJ de la banque) : chargement d'un exemple, d'un zip ou d'un dossier, export en zip.
 // Partagé par l'accueil (index.html) et la page de préparation (creation.html).
+import { lireReponse } from "./api.js";
+import { requete } from "./bandeau.js";
 
 export const URL_EXPORT = "/api/scenario/export";
 
@@ -43,10 +45,14 @@ export function tousLesThemes(perso = {}) {
 const variables = (p) => COULEURS.map(([c]) => `--${c}: ${p[c]};`).join(" ");
 const OMBRE = { clair: "0 1px 2px rgb(24 36 31 / .06), 0 4px 14px rgb(24 36 31 / .05)",
                 sombre: "0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18)" };
+const COULEUR = /^#[0-9a-f]{6}$/i;  // le serveur vérifie déjà (valider_styles) : défense en profondeur
+const paletteValide = (p) => !!p && COULEURS.every(([c]) => COULEUR.test(p[c] ?? ""));
 const bloc = (sel, nom, p) => `${sel} { color-scheme: ${nom === "sombre" ? "dark" : "light"}; ${variables(p)} --ombre: ${OMBRE[nom]}; }`;
 export function cssThemes(perso = {}) {
   return Object.entries(perso).map(([id, t]) => {
     if (!/^[a-z0-9-]{1,40}$/.test(id)) return "";
+    const modes = { auto: ["clair", "sombre"], clair: ["clair"], sombre: ["sombre"] }[t.mode];
+    if (!modes?.every(m => paletteValide(t[m]))) return "";  // mode ou couleur inattendus : thème ignoré
     const sel = `html[data-theme="${id}"], body [data-theme="${id}"]`;
     if (t.mode !== "auto") return bloc(sel, t.mode, t[t.mode]);
     return `${bloc(sel, "clair", t.clair)}\n@media (prefers-color-scheme: dark) { ${bloc(sel, "sombre", t.sombre)} }`;
@@ -103,8 +109,9 @@ export function appliquerTheme(id) {
 
 // Thème du scénario et thèmes de l'univers enregistrés sur le serveur (au chargement, ou après un import)
 export async function chargerTheme() {
-  const [s, st] = await Promise.all([fetch("/api/scenario"), fetch("/api/styles")]
-    .map(p => p.then(r => r.json()).catch(() => null)));
+  // réponse en erreur (500 passagère…) : rien n'est appliqué ni mémorisé, le thème affiché reste
+  const [s, st] = await Promise.all([requete("/api/scenario"), requete("/api/styles")]
+    .map(p => p.then(r => r.ok ? r.json() : null).catch(() => null)));
   if (st) poserThemesPerso(st.themes ?? {});
   return s ? appliquerTheme(s.theme) : document.documentElement.dataset.theme;
 }
@@ -133,6 +140,11 @@ export const confirmationNouvelleTable = (nbLieux, nbPnj) =>
   + `${pluriel(nbPnj, "PNJ", "")} de la banque seront supprimés, ainsi que la conversation en cours. `
   + "Exportez d’abord l’univers (page de préparation) pour le garder. Continuer ?";
 
+// Question posée quand on change d'univers depuis l'accueil pendant une partie (refuser la garde)
+export const confirmationViderPartie = (noms) =>
+  `Une conversation est en cours${noms.length ? ` avec ${noms.join(" et ")}` : ""}. L’effacer pour repartir de zéro `
+  + "avec le nouvel univers ? (Annuler : elle est gardée telle quelle.)";
+
 // Question posée avant d'écraser la banque (nbPnj : PNJ actuellement enregistrés)
 export function confirmationImport(nbPnj, garder) {
   return garder
@@ -141,21 +153,15 @@ export function confirmationImport(nbPnj, garder) {
       + "Exportez d’abord l’univers actuel pour le garder. Continuer ?";
 }
 
-async function reponse(r) {
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `Erreur serveur (${r.status})`);
-  return data;
-}
-
 export async function importerFichiers(fichiers, garder) {
   const form = new FormData();
   for (const f of fichiersImportables(fichiers)) form.append("fichiers", f, f.name);
   form.append("remplacer", garder ? "0" : "1");
-  return reponse(await fetch("/api/scenario/import", { method: "POST", body: form }));
+  return lireReponse(await requete("/api/scenario/import", { method: "POST", body: form }));
 }
 
 export async function chargerExemple(id, garder) {
-  return reponse(await fetch(`/api/exemples/${encodeURIComponent(id)}`, {
+  return lireReponse(await requete(`/api/exemples/${encodeURIComponent(id)}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remplacer: !garder }) }));
 }
 

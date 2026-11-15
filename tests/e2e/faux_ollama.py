@@ -29,6 +29,7 @@ class Gestion(BaseHTTPRequestHandler):
         lieu = re.search(r"Tu te trouves en ce moment ici : ([^.]+)\.", system)
         texte = f"Moi, {nom}, je suis bien à {lieu[1] if lieu else 'nulle part'}, voyageur. Que veux-tu ?"
         lignes = [json.dumps({"message": {"content": m}}).encode() + b"\n" for m in [w + " " for w in texte.split(" ")]]
+        lignes.append(b'{"done": true}\n')  # sans elle, le serveur juge la réplique coupée net
         self.repondre(b"".join(lignes), "application/x-ndjson")
 
 ThreadingHTTPServer(("127.0.0.1", 5918), Gestion).serve_forever()
