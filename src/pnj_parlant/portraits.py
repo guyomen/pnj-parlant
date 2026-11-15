@@ -177,7 +177,8 @@ class EnLigne:
             if attente is not None:
                 raise PortraitIndisponible("Le service gratuit de portraits limite le rythme (une image toutes les "
                                            f"45 s environ) : réessayez dans {round(attente)} s.") from e
-            raise PortraitIndisponible(f"Le service de portraits en ligne a refusé la demande (erreur {e.code}).") from e
+            raise PortraitIndisponible(
+                f"Le service de portraits en ligne a refusé la demande (erreur {e.code}).") from e
         except OSError as e:
             raise PortraitIndisponible("Le service de portraits en ligne ne répond pas (réseau coupé ?).") from e
         ext = type_image(octets)

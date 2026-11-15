@@ -8,7 +8,6 @@ import json
 import pytest
 
 from pnj_parlant.config import Config
-from pnj_parlant.moteurs import MoteurIndisponible
 from pnj_parlant.serveur import create_app
 
 FICHE = {

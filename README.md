@@ -277,8 +277,9 @@ le modèle de langage, la synthèse et la reconnaissance vocales et le générat
 
 ```bash
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
-pytest                      # tests Python
-node --test tests/js/       # fonctions de la page de jeu (Node 22 ou plus récent)
+pytest --cov                # tests Python, avec couverture
+ruff check .                # style et erreurs courantes (config dans pyproject.toml)
+node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
 ```
 

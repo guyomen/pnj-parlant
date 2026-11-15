@@ -109,14 +109,16 @@ class Contexte:
         avant, nouveaux = self.cfg.reglages, copy.deepcopy(self.cfg.reglages)
         for cle, valeur in changements.items():
             reglages.poser(nouveaux, cle, valeur)
-        change = lambda *prefixes: any(c.startswith(prefixes) and reglages.lire(avant, c) != v
-                                        for c, v in changements.items())
+        def change(*prefixes):
+            return any(c.startswith(prefixes) and reglages.lire(avant, c) != v for c, v in changements.items())
+
         tts = None
         nom_tts = reglages.lire(nouveaux, "voix.moteur")
         if change("voix.") and not self.injectes["tts"] and nom_tts != self.tts.nom:
             tts = self.tts_charges.get(nom_tts) or voix.charger(nouveaux, self.cfg.racine, nom_tts)
             if not tts.catalogue():
-                raise ValueError(f"Le moteur de voix « {nom_tts} » n'est pas utilisable ici (paquet ou voix manquants).")
+                raise ValueError(
+                    f"Le moteur de voix « {nom_tts} » n'est pas utilisable ici (paquet ou voix manquants).")
         moteurs = None
         if change("moteurs.", "claude.", "local.", "lmstudio.") and not self.injectes["moteurs"]:
             moteurs = Moteurs(nouveaux)
@@ -149,7 +151,10 @@ class Contexte:
         pour le bandeau des pages : [{cle, niveau ("erreur" | "avertissement"), message}]. Un avertissement a un
         repli (voix ou reconnaissance du navigateur) ; une erreur bloque une fonction."""
         liste = []
-        signaler = lambda cle, niveau, message: liste.append({"cle": cle, "niveau": niveau, "message": message})
+
+        def signaler(cle, niveau, message):
+            liste.append({"cle": cle, "niveau": niveau, "message": message})
+
         maj = "mettez l'environnement à jour : uv sync --extra tout"
         if not paquet_installe("tomlkit"):
             signaler("tomlkit", "erreur", f"Paquet tomlkit absent : les réglages de la page Options ne peuvent pas "
@@ -181,9 +186,11 @@ class Contexte:
             else:
                 modele = self.moteurs.local_cfg.get("modele", "")
                 installes = self.moteurs.modeles_locaux()
-                if modele and installes and self.moteurs.modele_local_installe(installes) not in [m["nom"] for m in installes]:
-                    signaler("ollama-modele", "erreur", f"Modèle « {modele} » absent d'Ollama : téléchargez-le "
-                                                        f"(ollama pull {modele}) ou choisissez-en un autre dans les options.")
+                noms = [m["nom"] for m in installes]
+                if modele and installes and self.moteurs.modele_local_installe(installes) not in noms:
+                    signaler("ollama-modele", "erreur",
+                             f"Modèle « {modele} » absent d'Ollama : téléchargez-le "
+                             f"(ollama pull {modele}) ou choisissez-en un autre dans les options.")
         if "lmstudio" in choix:
             etat = self.moteurs.etat_lmstudio()
             if not etat["ok"]:
@@ -302,7 +309,8 @@ def create_app(cfg, **moteurs):
         if not reglages.autorise(ctx.cfg.reglages, request.headers.get("X-Mot-De-Passe-MJ"), depuis_le_serveur()):
             return refus()
         try:
-            redemarrage = ctx.appliquer_reglages(reglages.valider((request.get_json(silent=True) or {}).get("changements")))
+            changements = (request.get_json(silent=True) or {}).get("changements")
+            redemarrage = ctx.appliquer_reglages(reglages.valider(changements))
         except ValueError as e:
             return erreur(str(e), 400)
         except OSError as e:
@@ -383,7 +391,8 @@ def create_app(cfg, **moteurs):
         if not NPC_ID.match(exemple_id) or not dossier.is_dir():
             return erreur("Exemple introuvable.", 404)
         fichiers = {f.name: f.read_bytes() for f in dossier.glob("*.json") if f.name != INFOS}
-        return jsonify(ctx.banque.importer(fichiers, remplacer=(request.get_json(silent=True) or {}).get("remplacer", True)))
+        remplacer = (request.get_json(silent=True) or {}).get("remplacer", True)
+        return jsonify(ctx.banque.importer(fichiers, remplacer=remplacer))
 
     @app.get("/api/lieux")
     def lieux_get():
@@ -531,7 +540,7 @@ def create_app(cfg, **moteurs):
         phrases_max = {"short": 1, "normal": ctx.phrases_max,
                        "long": max(ctx.phrases_max * 2, 6)}[longueur]
         lieux = ctx.banque.lieux()
-        lieu = next((l for l in lieux if l["id"] == data.get("lieu")), None)  # lieu de la scène
+        lieu = next((x for x in lieux if x["id"] == data.get("lieu")), None)  # lieu de la scène
         system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, phrases_max, lieu, lieux)
         try:
             usage = {}

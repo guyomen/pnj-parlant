@@ -1,11 +1,12 @@
-"""Les univers d'exemple (src/pnj_parlant/exemples/<nom>/) se chargent comme une banque et leurs fiches respectent le schéma."""
+"""Les univers d'exemple (src/pnj_parlant/exemples/<nom>/) se chargent comme une banque et respectent le schéma."""
 import json
 
 import pytest
 
 from pnj_parlant.banque import NPC_ID, Banque
 from pnj_parlant.fiches import NPC_SCHEMA
-from pnj_parlant.serveur import EXEMPLES as DOSSIER, exemples
+from pnj_parlant.serveur import EXEMPLES as DOSSIER
+from pnj_parlant.serveur import exemples
 
 EXEMPLES = sorted(p for p in DOSSIER.iterdir() if p.is_dir())
 STYLE = (DOSSIER.parent / "static" / "style.css").read_text(encoding="utf-8")

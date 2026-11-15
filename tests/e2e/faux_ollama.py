@@ -1,6 +1,8 @@
 """Faux Ollama pour tests/e2e : répond en citant le PNJ et le lieu trouvés dans ses consignes, et les note.
 Crée aussi des fiches de PNJ (toujours la même)."""
-import json, re, sys
+import json
+import re
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 JOURNAL = sys.argv[1]

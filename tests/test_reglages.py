@@ -3,8 +3,8 @@ commentaires), application à chaud, mot de passe du MJ."""
 import tomllib
 
 import pytest
-
 from conftest import FausseReconnaissance
+
 from pnj_parlant import reglages
 from pnj_parlant.config import Config
 from pnj_parlant.portraits import Aucun, EnLigne
@@ -146,8 +146,9 @@ def test_mot_de_passe_du_mj(web, monkeypatch):
     assert d["protege"] is True and d["local"] is False
     modif = {"changements": {"dialogue.historique": 30}}
     assert web.put("/api/reglages", json=modif).status_code == 403  # même depuis le PC
-    assert web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "faux"}, environ_base=DISTANT).status_code == 403
-    assert web.put("/api/reglages", json=modif, headers={"X-Mot-De-Passe-MJ": "dragon"}, environ_base=DISTANT).status_code == 200
+    faux, bon = {"X-Mot-De-Passe-MJ": "faux"}, {"X-Mot-De-Passe-MJ": "dragon"}
+    assert web.put("/api/reglages", json=modif, headers=faux, environ_base=DISTANT).status_code == 403
+    assert web.put("/api/reglages", json=modif, headers=bon, environ_base=DISTANT).status_code == 200
     assert web.post("/api/reglages/verifier", json={"mot_de_passe": "dragon"}).get_json() == {"ok": True}
     assert web.post("/api/reglages/verifier", json={"mot_de_passe": "x"}).status_code == 403
     # le mot de passe s'efface avec le mot de passe actuel ; ensuite, depuis le PC seulement

@@ -24,7 +24,7 @@ def situation(npc, lieu=None, lieux=()):
     texte_lieu = f"\nTu te trouves en ce moment ici : {lieu['nom']}."
     if lieu.get("description"):
         texte_lieu += f" {lieu['description']}"
-    habituel = next((l for l in lieux if l["id"] == npc.get("lieu")), None)
+    habituel = next((lieu for lieu in lieux if lieu["id"] == npc.get("lieu")), None)
     if habituel and habituel["id"] != lieu["id"]:
         texte_lieu += f"\nCe n'est pas ton lieu habituel ({habituel['nom']}) : tu accompagnes le voyageur."
     return texte_lieu + "\n"

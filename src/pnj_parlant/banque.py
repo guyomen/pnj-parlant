@@ -266,7 +266,8 @@ class Banque:
         tampon = io.BytesIO()
         with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
             for f in sorted(self.dossier.iterdir()) if self.dossier.exists() else []:
-                if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
+                if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (
+                        NPC_ID.match(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
                     archive.write(f, f.name)
         return tampon.getvalue()
 
@@ -338,7 +339,7 @@ def nom_de_fichier(chemin):
 
 
 def lire_zip(octets):
-    """{nom: octets} des fiches (.json) et portraits d'une archive (sous-dossiers aplatis), avec des limites de taille."""
+    """{nom: octets} des fiches (.json) et portraits d'une archive (sous-dossiers aplatis), avec limites de taille."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(octets))
     except zipfile.BadZipFile as e:

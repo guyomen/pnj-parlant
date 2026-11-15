@@ -72,7 +72,7 @@ class TestLieux:
     def test_identifiants_tires_du_nom_et_uniques(self, banque):
         lieux = banque.enregistrer_lieux([{"nom": "Forge"}, {"nom": "Forge"}, {"nom": "  "}, "pas un lieu",
                                           {"nom": "Porte nord", "description": "x" * 3000}])
-        assert [l["id"] for l in lieux] == ["forge", "forge-2", "porte-nord"]
+        assert [x["id"] for x in lieux] == ["forge", "forge-2", "porte-nord"]
         assert len(lieux[2]["description"]) == 2000
 
     def test_un_lieu_renomme_garde_son_identifiant(self, banque):
@@ -115,7 +115,8 @@ def _remplir(banque):
 def test_export_puis_import_dans_une_autre_banque(banque, tmp_path):
     _remplir(banque)
     archive = banque.exporter_zip()
-    assert sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist()) == ["_lieux.json", "_scenario.json", "brom-0001.json"]
+    noms = sorted(zipfile.ZipFile(io.BytesIO(archive)).namelist())
+    assert noms == ["_lieux.json", "_scenario.json", "brom-0001.json"]
     autre = Banque(tmp_path / "autre")
     r = autre.importer(lire_zip(archive))
     assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
@@ -127,7 +128,8 @@ def test_import_remplace_ou_garde_les_pnj(banque):
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'})
     assert [n["nom"] for n in banque.liste()] == ["Ysolde"]
-    assert banque.scenario() == {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""} and banque.lieux() == []  # absents : vidés
+    vide = {"monde": "", "notes_mj": "", "theme": "", "style_portrait": ""}
+    assert banque.scenario() == vide and banque.lieux() == []  # absents : vidés
     _remplir(banque)
     banque.importer({"ysolde-0002.json": b'{"nom": "Ysolde"}'}, remplacer=False)
     assert [n["nom"] for n in banque.liste()] == ["Brom", "Ysolde"]
@@ -135,7 +137,7 @@ def test_import_remplace_ou_garde_les_pnj(banque):
 
 
 def test_import_fichiers_douteux(banque):
-    r = banque.importer({"Mon PNJ.json": '{"nom": "Gaspard"}'.encode(),  # renommé à la main : nouvel identifiant
+    r = banque.importer({"Mon PNJ.json": b'{"nom": "Gaspard"}',  # renommé à la main : nouvel identifiant
                          "abime.json": b"{pas du json", "sans-nom.json": b'{"metier": "x"}',
                          "_autre.json": b"{}", "_scenario.json": "\ufeff{\"monde\": \"Brumecôte\"}".encode()})
     assert r["ignores"] == ["_autre.json", "abime.json", "sans-nom.json"]

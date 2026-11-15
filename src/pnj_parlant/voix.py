@@ -91,7 +91,10 @@ def voix_narrateur(moteur, eviter=()):
     catalogue = [(v, g) for v, g in moteur.catalogue() if cle(v) not in pris]
     if not catalogue:
         return None
-    voulue = lambda v: v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))
+
+    def voulue(v):
+        return v["name"] == moteur.narrateur and moteur.narrateur_locuteur in (None, v.get("speaker"))
+
     genre = next((g for v, g in moteur.catalogue() if voulue(v)), None)
     choisie = (next((v for v, _ in catalogue if voulue(v)), None)
                or next((v for v, g in catalogue if genre and g == genre), None)
@@ -146,7 +149,9 @@ class Piper:
         return None  # genre inconnu
 
     def catalogue(self):
-        court = lambda n: n.removeprefix("fr_FR-").removesuffix("-medium")
+        def court(n):
+            return n.removeprefix("fr_FR-").removesuffix("-medium")
+
         return [({"name": name, "speaker": i, "label": f"{court(name)} · locuteur {i}"}, self._genre(name, i))
                 for name, speakers in self._voix_installees().items() for i in range(speakers)]
 
@@ -263,7 +268,9 @@ class Edge:
     def catalogue(self):
         if not self._edge:
             return []
-        court = lambda n: n.split("-")[2].removesuffix("Neural").removesuffix("Multilingual")
+        def court(n):
+            return n.split("-")[2].removesuffix("Neural").removesuffix("Multilingual")
+
         return [({"name": name, "label": f"{court(name)} ({name[3:5]})"}, genre)
                 for name, genre in self.genres.items()]
 
