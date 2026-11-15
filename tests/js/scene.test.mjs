@@ -350,7 +350,17 @@ test("thèmes : contraste, alertes, identifiants", () => {
   assert.equal(Math.round(univers.contraste("#000000", "#ffffff")), 21);
   assert.equal(univers.contraste("#777777", "#777777"), 1);
   const illisible = { ...univers.THEMES[0].clair, ink: "#cfd6ce" };
-  assert.deepEqual(univers.alertesContraste(illisible).map(a => a.quoi), ["Texte sur le fond"]);
+  const quoi = univers.alertesContraste(illisible).map(a => a.quoi);
+  assert.ok(quoi.includes("Texte sur le fond"));
+  // anneau de focus : seuil de 3 (repère graphique), pas 4,5
+  const focus = { ...univers.THEMES[0].clair, verdigris: "#6fa392" };
+  assert.deepEqual(univers.alertesContraste(focus).map(a => [a.quoi, a.seuil]),
+    [["Anneau de focus sur le fond", 3], ["Anneau de focus sur les cartes", 3]]);
+  // cire des textes : mélange avec l'encre (comme color-mix en CSS)
+  assert.equal(univers.melange("#000000", "#ffffff", 60), "#666666");
+  assert.equal(univers.melange("#ff0000", "#0000ff", 100), "#ff0000");
+  const cire = { ...univers.THEMES[0].sombre, wax: "#2a1010", ink: "#2b1111" };
+  assert.ok(univers.alertesContraste(cire).some(a => a.quoi.startsWith("Texte en cire")));
   assert.equal(univers.identifiant("Forge noire !", []), "forge-noire");
   assert.equal(univers.identifiant("Parchemin", ["parchemin", "parchemin-2"]), "parchemin-3");
   assert.equal(univers.identifiant("Été brûlant", []), "ete-brulant");
@@ -432,4 +442,27 @@ test("bandeau : ajout sans doublon, limite, problèmes du serveur", () => {
   assert.deepEqual(scene.alertesSante(sante, []).map(x => x.cle), ["tts", "serveur"]);  // problème réglé : retiré
   assert.deepEqual(scene.alertesSante([], [{ cle: "voix", niveau: "avertissement", message: "Autre" }],
                                       ["sante:voix|Pas de voix"]).length, 1);  // message changé : revient
+});
+
+test("page ouverte en HTTP : avertissement sur le micro, rien en HTTPS ou si l'information manque", () => {
+  assert.match(scene.messageContexteMicro(false), /HTTP.*micro.*HTTPS/);
+  assert.equal(scene.messageContexteMicro(true), null);
+  assert.equal(scene.messageContexteMicro(undefined), null);
+});
+
+test("styles : aucune couleur en dur hors des palettes, cibles tactiles, viewport dynamique", () => {
+  const dossier = new URL("../../src/pnj_parlant/static/", import.meta.url);
+  const css = readFileSync(new URL("style.css", dossier), "utf8");
+  const sansPalettes = css.slice(0, css.indexOf("/* Vert-de-gris")) + css.slice(css.indexOf("@media (max-width: 40rem)"));
+  const sansCommentaires = sansPalettes.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--(blanc|noir):[^;]*;/g, "");
+  assert.doesNotMatch(sansCommentaires, /(?<![-\w])(white|black)(?![-\w])|rgba?\(|#[0-9a-f]{3,8}\b/i);
+  assert.match(css, /@media \(pointer: coarse\)[\s\S]*min-height: 2\.75rem/);
+  for (const f of ["index.html", "creation.html"]) {
+    const html = readFileSync(new URL(f, dossier), "utf8");
+    const style = html.slice(html.indexOf("<style>"), html.indexOf("</style>")).replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(style, /(?<![-\w])(white|black)(?![-\w])|rgba?\(/i, f);
+    for (const m of style.matchAll(/[^;{}]*\b(?:100|70)vh[^;]*;/g))  // chaque 100vh a sa ligne 100dvh juste après
+      assert.ok(style.includes(m[0].replace(/vh\b/g, "dvh").trim()), `${f} : ${m[0]}`);
+    assert.doesNotMatch(html, /onsubmit=/, f);
+  }
 });

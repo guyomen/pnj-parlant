@@ -164,3 +164,19 @@ test("sessionStorage illisible ou plein : le bandeau marche quand même", async 
   globalThis.sessionStorage = { getItem: (k) => stock[k] ?? null, setItem: (k, v) => { stock[k] = v; }, removeItem() {} };
   repartir();
 });
+
+test("afficher : un diagnostic identique ne réécrit pas le bandeau (le lecteur d'écran ne relit pas tout)", async () => {
+  repartir();
+  globalThis.fetch = async () => reponse(200, { problemes: [{ cle: "voix", niveau: "erreur", message: "M" }] });
+  await bandeau.verifierSante();
+  let ecritures = 0, contenu = zone.innerHTML;
+  Object.defineProperty(zone, "innerHTML", { configurable: true, get: () => contenu, set: (v) => { ecritures++; contenu = v; } });
+  await bandeau.verifierSante();
+  await bandeau.verifierSante();
+  assert.equal(ecritures, 0);
+  bandeau.signaler("Autre", { cle: "autre" });
+  assert.equal(ecritures, 1);
+  delete zone.innerHTML;
+  zone.innerHTML = contenu;
+  repartir();
+});

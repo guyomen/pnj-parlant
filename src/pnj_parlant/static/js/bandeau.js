@@ -9,6 +9,7 @@ const CLE_FERMEES = "alertes-fermees";  // sessionStorage : « clé|message » d
 export const SERVEUR_INJOIGNABLE = "Serveur injoignable : vérifiez qu’il tourne toujours (fenêtre de lancer.bat "
   + "ou terminal), puis rechargez la page.";
 let alertes = [];
+let dernierHtml = null;  // dernier balisage écrit dans le bandeau
 
 const fermees = () => { try { return JSON.parse(sessionStorage.getItem(CLE_FERMEES) || "[]"); } catch { return []; } };
 
@@ -16,11 +17,13 @@ function afficher() {
   const zone = globalThis.document?.getElementById("bandeau");
   if (!zone) return;
   zone.hidden = !alertes.length;
-  zone.innerHTML = alertes.map(a => `
+  const html = alertes.map(a => `
     <div class="alerte ${a.niveau === "erreur" ? "erreur" : "avertissement"}">
       <p><strong>${a.niveau === "erreur" ? "Erreur" : "Attention"} :</strong> ${esc(a.message)}</p>
       <button type="button" class="fermer" data-fermer="${esc(a.cle)}" aria-label="Fermer ce message" title="Fermer">×</button>
     </div>`).join("");
+  // même contenu (diagnostic redemandé toutes les minutes) : on ne réécrit pas, sinon le lecteur d'écran relit tout
+  if (html !== dernierHtml) zone.innerHTML = dernierHtml = html;
 }
 
 // Affiche une alerte (niveau « erreur » ou « avertissement ») ; même clé : elle remplace la précédente

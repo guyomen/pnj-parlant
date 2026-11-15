@@ -53,19 +53,28 @@ paths:
   `aria-current="page"` (posé par `afficherVue` dans index.html, en dur dans creation.html).
 - `style.css` : jetons (couleurs, `--rayon`, `--ombre`, `--page`, `--gouttiere`), `.page` + `.titre-page` (accueil,
   options, préparation), `.carte`, champs et boutons ; chaque page n'ajoute que sa mise en page. N'utiliser que les
-  variables de couleur (jamais de couleur en dur) : elles changent avec le thème.
+  variables de couleur (jamais de couleur en dur : `--blanc` et `--noir` pour les reflets et ombres, `color-mix`
+  avec `--ink` pour les teintes) : elles changent avec le thème. Un test JS le vérifie.
+- Accessibilité et téléphone : un texte en cire s'écrit `color-mix(in srgb, var(--wax) 60%, var(--ink))` (la cire
+  seule est trop claire en sombre) ; les noms des 2e et 3e PNJ ont un repère (`●`, `◆`) en plus de la couleur.
+  `@media (pointer: coarse)` : cibles d'au moins 2,75 rem. `100dvh` après chaque `100vh`. `.controls` (Parler)
+  est collé en bas de la partie (`.line` a un `scroll-margin-bottom`). Dégradés aux bords des onglets qui
+  défilent. Les champs `number`, `url` et `password` suivent le thème comme `text`. Changement de vue : titre de
+  l'onglet du navigateur et focus sur le titre. `messageContexteMicro` (scene.js) : avertissement en HTTP.
 
 ## Thèmes graphiques
 - Choisi par le scénario (`theme` de `_scenario.json`), posé sur `<html data-theme>` ; vide ou inconnu = défaut.
 - Couleurs dans `style.css` : un bloc `[data-theme=<id>]` (clair) + son `@media (prefers-color-scheme: dark)` par
   thème ; `:root, [data-theme=vert-de-gris]` = défaut ; `donjon` toujours sombre. Variables : `--bg --surface --ink
   --muted --line --glass` (principale, texte des boutons = `--surface`) `--verdigris` (appoint) `--wax --wax-ink`
-  (sceau « Parler »). Contraste visé ≥ 4,5 pour ink/bg, muted/surface, surface/glass, wax-ink/wax.
+  (sceau « Parler »). Contrastes visés (`PAIRES` dans js/univers.js, contrôlés pour chaque thème) : ≥ 4,5 pour les textes (ink, muted,
+  glass sur bg et surface ; surface/glass ; wax-ink/wax ; cire mêlée d'encre) et ≥ 3 pour `--verdigris`
+  (anneau de focus) sur bg et surface.
 - `js/univers.js` : `THEMES` = prédéfinis avec leurs palettes (`mode`, `clair`, `sombre`), **identiques à style.css**
   (test JS qui les compare, et qui vérifie leurs contrastes) ; `COULEURS` (variables + libellés de l'éditeur),
   `tousLesThemes(perso)` (origine predefini / modifie / perso), `cssThemes(perso)` (sélecteurs `html[data-theme="id"],
   body [data-theme="id"]` : plus précis que style.css, donc gagnants même placés avant ; `body […]` pour les
-  aperçus), `contraste`, `alertesContraste`, `identifiant(nom, pris)`, `poserThemesPerso(perso, garder)` (`<style
+  aperçus), `contraste`, `melange`, `alertesContraste`, `identifiant(nom, pris)`, `poserThemesPerso(perso, garder)` (`<style
   id="themes-perso">` ; garder = aussi dans localStorage `theme-css`, sinon simple aperçu), `appliquerTheme(id)`
   (prédéfini ou de l'univers, sinon défaut ; localStorage `theme`), `chargerTheme()` (/api/scenario + /api/styles ;
   réponse en erreur = rien n'est appliqué ni mémorisé). `cssThemes` ignore un thème au mode inconnu ou à une couleur

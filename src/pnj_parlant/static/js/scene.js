@@ -288,3 +288,9 @@ export function alertesSante(alertes, problemes, fermees = []) {
     .filter(a => !fermees.includes(`${a.cle}|${a.message}`));
   return [...sante, ...alertes.filter(a => !a.cle.startsWith("sante:"))];
 }
+
+// Page ouverte en HTTP depuis un autre appareil (téléphone) : le navigateur refuse le micro (getUserMedia et
+// reconnaissance vocale exigent HTTPS ou localhost). Renvoie l'avertissement à afficher, ou null si tout va bien.
+export const messageContexteMicro = (securise) => securise !== false ? null
+  : "Cette page est ouverte en HTTP : le navigateur refusera le micro. Ouvrez-la en HTTPS (voir le README) "
+    + "ou tapez vos questions.";

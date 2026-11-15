@@ -11,16 +11,16 @@ export const URL_EXPORT = "/api/scenario/export";
 // "sombre" ou "clair" (une seule palette).
 export const THEMES = [
   { id: "vert-de-gris", nom: "Vert-de-gris", resume: "Verre ancien et cire rouge", mode: "auto",
-    clair: { bg: "#dce3db", surface: "#eef2ec", ink: "#18241f", muted: "#4d5f57", line: "#b9c7bd", glass: "#2f5d50", verdigris: "#6fa392", wax: "#9b2d2a", "wax-ink": "#fbefea" },
+    clair: { bg: "#dce3db", surface: "#eef2ec", ink: "#18241f", muted: "#4d5f57", line: "#b9c7bd", glass: "#2f5d50", verdigris: "#5b8678", wax: "#9b2d2a", "wax-ink": "#fbefea" },
     sombre: { bg: "#121a17", surface: "#1c2723", ink: "#dce3db", muted: "#9db0a6", line: "#2e3d37", glass: "#7db8a6", verdigris: "#4f8a7b", wax: "#c0443f", "wax-ink": "#fff4f0" } },
   { id: "parchemin", nom: "Parchemin", resume: "Taverne, cuir et laiton", mode: "auto",
-    clair: { bg: "#e9dfc9", surface: "#f6efdf", ink: "#2b2118", muted: "#6b5a48", line: "#d3c2a0", glass: "#7a4a1e", verdigris: "#b08a4a", wax: "#8e2a22", "wax-ink": "#fbefea" },
+    clair: { bg: "#e9dfc9", surface: "#f6efdf", ink: "#2b2118", muted: "#6b5a48", line: "#d3c2a0", glass: "#7a4a1e", verdigris: "#977740", wax: "#8e2a22", "wax-ink": "#fbefea" },
     sombre: { bg: "#1c1712", surface: "#27201a", ink: "#ede3cf", muted: "#b3a38a", line: "#3b3129", glass: "#d9a86a", verdigris: "#a07e44", wax: "#b4483a", "wax-ink": "#fff4ec" } },
   { id: "sylve", nom: "Sylve", resume: "Forêt féerique, mousse et baies", mode: "auto",
-    clair: { bg: "#e1e9d6", surface: "#f2f6ea", ink: "#1d2617", muted: "#56644b", line: "#c2cfb1", glass: "#3f6b2a", verdigris: "#a88a2e", wax: "#7b3f8c", "wax-ink": "#f8effa" },
+    clair: { bg: "#e1e9d6", surface: "#f2f6ea", ink: "#1d2617", muted: "#56644b", line: "#c2cfb1", glass: "#3f6b2a", verdigris: "#9b7f2a", wax: "#7b3f8c", "wax-ink": "#f8effa" },
     sombre: { bg: "#11170e", surface: "#1a2316", ink: "#e3ead9", muted: "#a2b094", line: "#2c3826", glass: "#9bc77e", verdigris: "#c9a84e", wax: "#93509f", "wax-ink": "#fbf2fd" } },
   { id: "givre", nom: "Givre", resume: "Contrées du nord, glace et sang", mode: "auto",
-    clair: { bg: "#dce4eb", surface: "#eef3f7", ink: "#16212b", muted: "#4c5d6c", line: "#b6c5d2", glass: "#2c5878", verdigris: "#7aa6c2", wax: "#9b2d3a", "wax-ink": "#fbeef0" },
+    clair: { bg: "#dce4eb", surface: "#eef3f7", ink: "#16212b", muted: "#4c5d6c", line: "#b6c5d2", glass: "#2c5878", verdigris: "#62859b", wax: "#9b2d3a", "wax-ink": "#fbeef0" },
     sombre: { bg: "#0f151b", surface: "#18212a", ink: "#dde5ec", muted: "#98a9b8", line: "#2a3744", glass: "#86b6d6", verdigris: "#4f7f9e", wax: "#b83c50", "wax-ink": "#fff1f3" } },
   { id: "donjon", nom: "Donjon", resume: "Pierre et torches, toujours sombre", mode: "sombre",
     sombre: { bg: "#131315", surface: "#1d1d21", ink: "#e4e1da", muted: "#a19c92", line: "#34343a", glass: "#e0a050", verdigris: "#9c6b2e", wax: "#b23a2e", "wax-ink": "#fff1e8" } },
@@ -43,8 +43,8 @@ export function tousLesThemes(perso = {}) {
 // CSS des thèmes de l'univers. Sélecteurs un cran plus précis que ceux de style.css (html[…], body […]) :
 // ils l'emportent même placés avant lui dans la page ; « body […] » sert aux aperçus de la page de préparation.
 const variables = (p) => COULEURS.map(([c]) => `--${c}: ${p[c]};`).join(" ");
-const OMBRE = { clair: "0 1px 2px rgb(24 36 31 / .06), 0 4px 14px rgb(24 36 31 / .05)",
-                sombre: "0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18)" };
+const OMBRE = { clair: "0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent), 0 4px 14px color-mix(in srgb, var(--ink) 5%, transparent)",
+                sombre: "0 1px 2px color-mix(in srgb, var(--noir) 25%, transparent), 0 4px 14px color-mix(in srgb, var(--noir) 18%, transparent)" };
 const COULEUR = /^#[0-9a-f]{6}$/i;  // le serveur vérifie déjà (valider_styles) : défense en profondeur
 const paletteValide = (p) => !!p && COULEURS.every(([c]) => COULEUR.test(p[c] ?? ""));
 const bloc = (sel, nom, p) => `${sel} { color-scheme: ${nom === "sombre" ? "dark" : "light"}; ${variables(p)} --ombre: ${OMBRE[nom]}; }`;
@@ -70,11 +70,28 @@ export function contraste(a, b) {
   return (l1 + 0.05) / (l2 + 0.05);
 }
 
-// Couples de couleurs d'une palette dont le texte serait peu lisible (contraste < 4,5)
-const PAIRES = [["ink", "bg", "Texte sur le fond"], ["muted", "surface", "Texte secondaire sur les cartes"],
-                ["surface", "glass", "Texte des boutons"], ["wax-ink", "wax", "Texte du sceau « Parler »"]];
-export const alertesContraste = (p) => PAIRES.map(([a, b, quoi]) => ({ quoi, ratio: contraste(p[a], p[b]) }))
-  .filter(x => x.ratio < 4.5);
+// Mélange « a pour cent » de la couleur a avec b, comme color-mix(in srgb, a pour cent, b) en CSS
+export function melange(a, b, pour_cent) {
+  const c = (h, i) => parseInt(h.slice(i, i + 2), 16);
+  return "#" + [1, 3, 5].map(i => Math.round((c(a, i) * pour_cent + c(b, i) * (100 - pour_cent)) / 100)
+    .toString(16).padStart(2, "0")).join("");
+}
+
+// Couples de couleurs réellement utilisés par les pages, avec le contraste minimal : 4,5 pour du texte,
+// 3 pour un repère graphique (anneau de focus, contour). Une couleur peut être un mélange [a, b, pour_cent],
+// comme dans style.css : la cire des textes est mélangée à 60 % avec l'encre (nom du 2e PNJ, alertes, erreurs).
+const CIRE_TEXTE = ["wax", "ink", 60];
+const PAIRES = [
+  ["ink", "bg", 4.5, "Texte sur le fond"], ["ink", "surface", 4.5, "Texte sur les cartes"],
+  ["muted", "bg", 4.5, "Texte secondaire sur le fond"], ["muted", "surface", 4.5, "Texte secondaire sur les cartes"],
+  ["glass", "bg", 4.5, "Titres et liens sur le fond"], ["glass", "surface", 4.5, "Titres et liens sur les cartes"],
+  ["surface", "glass", 4.5, "Texte des boutons"], ["wax-ink", "wax", 4.5, "Texte du sceau « Parler »"],
+  [CIRE_TEXTE, "bg", 4.5, "Texte en cire sur le fond"], [CIRE_TEXTE, "surface", 4.5, "Texte en cire sur les cartes"],
+  ["verdigris", "bg", 3, "Anneau de focus sur le fond"], ["verdigris", "surface", 3, "Anneau de focus sur les cartes"]];
+const teinte = (p, c) => Array.isArray(c) ? melange(p[c[0]], p[c[1]], c[2]) : p[c];
+export const alertesContraste = (p) => PAIRES
+  .map(([a, b, seuil, quoi]) => ({ quoi, ratio: contraste(teinte(p, a), teinte(p, b)), seuil }))
+  .filter(x => x.ratio < x.seuil);
 
 // Identifiant d'un nouveau thème ou style d'après son nom, différent de ceux de `pris`
 export function identifiant(nom, pris) {

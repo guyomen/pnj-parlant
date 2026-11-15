@@ -31,7 +31,8 @@
            grid-template-areas: "scene talk reglages"; }
     /* les colonnes de côté restent visibles pendant que la discussion défile */
     .npc, .reglages { position: sticky; top: calc(var(--barre-h) + 1.5rem);
-                      max-height: calc(100vh - var(--barre-h) - 3rem); overflow-y: auto; }
+                      max-height: calc(100vh - var(--barre-h) - 3rem); max-height: calc(100dvh - var(--barre-h) - 3rem);
+                      overflow-y: auto; }
   }
 
   /* Accueil (adresse « / ») ou table de jeu (« /#jeu ») : une seule page, pour que le clic de l'accueil
@@ -63,17 +64,20 @@
   .bank .row[hidden] { display: none; }
 
   /* Conversation */
-  .talk { display: flex; flex-direction: column; min-height: 70vh; }
+  .talk { display: flex; flex-direction: column; min-height: 70vh; min-height: 70dvh; }
   .log { flex: 1; display: flex; flex-direction: column; gap: .9rem; padding-bottom: 1rem; }
-  .line { max-width: 38rem; }
+  .line { max-width: 38rem; scroll-margin-bottom: 8.5rem; }  /* le défilement ne passe pas sous les contrôles collants */
   .line.npc-line { font: 1.25rem/1.45 var(--display); }
   .line.pj { align-self: flex-end; text-align: right; color: var(--muted); }
   .line .who { display: block; font: 700 .85rem var(--body); color: var(--glass); }
   .line.pj .who { color: var(--muted); }
   .line .narration { color: var(--muted); font-size: .9em; }
   /* Un nom de couleur différente par PNJ de la scène */
-  .line.npc-1 .who { color: var(--wax); }
-  .line.npc-2 .who { color: var(--verdigris); }
+  /* cire mêlée d'encre pour le 2e (lisible, voir PAIRES de js/univers.js), encre pour le 3e ; un repère en plus de la couleur */
+  .line.npc-1 .who { color: color-mix(in srgb, var(--wax) 60%, var(--ink)); }
+  .line.npc-1 .who::before { content: "● "; }
+  .line.npc-2 .who { color: var(--ink); }
+  .line.npc-2 .who::before { content: "◆ "; }
   .usage { color: var(--muted); font-size: .85rem; margin-bottom: .75rem; }
   .usage progress { display: block; width: 100%; height: .55rem; margin: .35rem 0; accent-color: var(--glass); }
   .response-length { display: flex; align-items: center; gap: .4rem; margin-bottom: .75rem; flex-wrap: wrap; }
@@ -146,7 +150,7 @@
   .reglage .controle select, .reglage .controle input:not([type=checkbox]) { flex: 1 1 auto; min-width: 0; width: 100%; }
   .reglage .controle input[type=number] { max-width: 8rem; }
   .reglage.bool .controle { flex: none; }  /* un interrupteur : pas de place réservée */
-  .reglage.modifie .texte strong::after { content: " •"; color: var(--wax); }
+  .reglage.modifie .texte strong::after { content: " •"; color: color-mix(in srgb, var(--wax) 60%, var(--ink)); }
   .sous-reglages { margin-left: .4rem; padding-left: 1rem; border-left: 2px solid var(--line); transition: opacity .15s; }
   .sous-reglages.inactif { opacity: .45; }
   @media (max-width: 40rem) {
@@ -164,25 +168,27 @@
   .barre-reglages[hidden] { display: none; }
   .barre-reglages .nb { flex: 1; font-weight: 500; }
   .message-options { min-height: 1.4rem; margin: .6rem 0 0; color: var(--glass); font-weight: 500; }
-  .message-options.erreur { color: var(--wax); }
+  .message-options.erreur { color: color-mix(in srgb, var(--wax) 60%, var(--ink)); }
   /* État de la machine */
   .sys { font-size: .92rem; display: grid; gap: .45rem; margin-top: .4rem; }
   .sys .ligne { display: flex; gap: .5rem; flex-wrap: wrap; }
   .sys .ligne > span:first-child { color: var(--muted); min-width: 9rem; }
   .sys .bar { height: .45rem; background: var(--line); border-radius: .25rem; overflow: hidden; }
   .sys .bar i { display: block; height: 100%; background: var(--glass); width: 0; transition: width .4s; }
-  .sys .alert { color: var(--wax); font-weight: 500; }
+  .sys .alert { color: color-mix(in srgb, var(--wax) 60%, var(--ink)); font-weight: 500; }
   .status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 
-  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+  /* collés en bas de l'écran : « Parler » reste visible quand la conversation s'allonge (téléphone) */
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; border-top: 1px solid var(--line); padding: 1rem 0 .75rem;
+              position: sticky; bottom: 0; z-index: 4; background: var(--bg); }
   .ask { flex: 1 1 16rem; display: flex; gap: .5rem; }
   /* Le sceau de cire : l'élément fort de la page */
   .mic { width: 5.5rem; height: 5.5rem; flex: none; border-radius: 50%; border: none;
-         background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, white), var(--wax) 60%);
+         background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, var(--blanc)), var(--wax) 60%);
          color: var(--wax-ink); font: 400 1rem/1.1 var(--display);
-         box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--wax) 80%, black); }
+         box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--wax) 80%, var(--noir)); }
   .mic[aria-pressed=true] { animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 50% { box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--wax) 80%, black), 0 0 0 10px color-mix(in srgb, var(--wax) 25%, transparent); } }
+  @keyframes pulse { 50% { box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--wax) 80%, var(--noir)), 0 0 0 10px color-mix(in srgb, var(--wax) 25%, transparent); } }
   @media (prefers-reduced-motion: reduce) { .mic[aria-pressed=true] { animation: none; outline: 4px solid var(--wax); } }
 </style>
 </head>
@@ -241,7 +247,7 @@
   </div>
 </section>
 <main>
-  <section class="npc" aria-live="polite">
+  <section class="npc">
     <div class="lieu" id="lieuBloc" hidden>
       <label for="lieuSel">Lieu</label>
       <select id="lieuSel"></select>
@@ -253,7 +259,7 @@
 
   <section class="talk">
     <div class="log" id="log" aria-live="polite"></div>
-    <div class="status" id="status"></div>
+    <div class="status" id="status" role="status"></div>
     <div class="proposition" id="proposition" hidden>
       <span id="propTexte"></span>
       <button id="propOui">Y aller</button>
@@ -276,7 +282,7 @@
         <button class="ghost" id="stopBtn" title="Interrompre le PNJ (Échap)" hidden>Stop</button>
         <button class="ghost" id="discuterBtn" title="Un autre PNJ répond à celui qui vient de parler" hidden>Laissez-les discuter</button>
       </div>
-      <form class="ask" id="askForm" onsubmit="return false">
+      <form class="ask" id="askForm">
         <input type="text" id="ask" placeholder="Ou tapez votre question…" aria-label="Question au PNJ" disabled>
         <button class="ghost" id="sendBtn" disabled>Envoyer</button>
       </form>
@@ -374,7 +380,7 @@
 
       <section class="carte" id="opt-machine" data-titre="Machine">
         <div class="tete-groupe"><h2>Machine</h2></div>
-        <div class="sys" id="sys" aria-live="polite"></div>
+        <div class="sys" id="sys"></div>
       </section>
     </div>
   </div>
@@ -384,7 +390,7 @@
 import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, memeVoix, consignesEntree, texteExport,
          nomFichierExport, lieuEvoque, arrivee, parLieu, norm, lireExport, sceneImportee,
          consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs, decouperNdjson, partieValide,
-         fichesRelues, VERSION_PARTIE } from "./js/scene.js";
+         fichesRelues, VERSION_PARTIE, messageContexteMicro } from "./js/scene.js";
 import { requete, signaler, verifierSante } from "./js/bandeau.js";
 import { api, enTeteMdp, garderMdp, lireReponse, mdpMJ } from "./js/api.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
@@ -1395,7 +1401,9 @@ let vuePrecedente = "accueil";  // où revient le lien « Retour » des options
 function afficherVue() {
   const vue = { "#jeu": "jeu", "#options": "options" }[location.hash] ?? "accueil";
   if (vue === "options" && document.body.dataset.vue !== "options") vuePrecedente = document.body.dataset.vue;
+  const change = document.body.dataset.vue !== vue;
   document.body.dataset.vue = vue;
+  document.title = { jeu: "Partie", options: "Options" }[vue] ? `${{ jeu: "Partie", options: "Options" }[vue]} - PNJ parlants` : "PNJ parlants";
   for (const a of document.querySelectorAll(".onglets [data-vue]")) {
     if (a.dataset.vue === vue) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
@@ -1406,7 +1414,15 @@ function afficherVue() {
   if (vue === "options") queueMicrotask(() => { if (!Object.keys(modifsReglages).length) chargerReglages(); refreshSys(); verifierSante(); });
   if (vue === "accueil") majAccueil();
   window.scrollTo(0, 0);
+  // changement de vue : le lecteur d'écran est amené au titre de la nouvelle vue (pas au premier affichage)
+  if (change && firstVue) {
+    const titre = { accueil: "accueilTitre", options: "optionsTitre", jeu: "cards" }[vue];
+    const el = $(titre);
+    if (el) { el.tabIndex = -1; el.focus({ preventScroll: true }); }
+  }
+  firstVue = true;
 }
+let firstVue = false;
 window.addEventListener("hashchange", afficherVue);
 
 // --- Accueil -------------------------------------------------------------------
@@ -1490,6 +1506,7 @@ for (const id of ["accZip", "accDossier"]) {
 afficherVue();
 loadOptions();
 $("bankSel").onchange = () => setBusy(busy);
+$("askForm").addEventListener("submit", (e) => e.preventDefault());  // Entrée envoie via « Envoyer », sans recharger
 $("sendBtn").onclick = () => send($("ask").value).catch(e => alerte(e.message));
 $("role").addEventListener("keydown", (e) => { if (e.key === "Enter") generate(); });
 document.querySelectorAll("[data-length]").forEach((button) => {
@@ -1512,6 +1529,8 @@ async function chargerConfig(premiere = false) {
   afficherUsage();
   setBusy(busy);
   if (document.body.dataset.vue === "options") refreshSys();  // la carte Machine reprend la configuration
+  const alerteMicro = messageContexteMicro(window.isSecureContext);
+  if (premiere && alerteMicro) alerte(alerteMicro, "avertissement", "http");
   if (premiere && !c.stt_local && !recognition) status("La saisie vocale demande Chrome ou Edge. Vous pouvez taper vos questions.");
   else if (premiere && !c.tts) status("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
 }

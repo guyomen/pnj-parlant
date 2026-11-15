@@ -3,14 +3,15 @@
   --display: "IM Fell English", "Iowan Old Style", Georgia, serif;
   --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
   --rayon: 12px;
-  --ombre: 0 1px 2px rgb(24 36 31 / .06), 0 4px 14px rgb(24 36 31 / .05);
+  --blanc: #FFFFFF; --noir: #000000;  /* neutres des reflets et des ombres (aucun thème ne les change) */
+  --ombre: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent), 0 4px 14px color-mix(in srgb, var(--ink) 5%, transparent);
   --barre-h: 3.5rem;      /* hauteur de la barre du haut (colonnes collantes de la partie) */
   --page: 76rem;          /* largeur du contenu : accueil, options, préparation */
   --page-large: 100rem;   /* largeur de la partie, et de la barre du haut sur toutes les pages */
   --gouttiere: 1.5rem;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --ombre: 0 1px 2px rgb(0 0 0 / .25), 0 4px 14px rgb(0 0 0 / .18); }
+  :root { --ombre: 0 1px 2px color-mix(in srgb, var(--noir) 25%, transparent), 0 4px 14px color-mix(in srgb, var(--noir) 18%, transparent); }
 }
 
 /* --- Thèmes graphiques ---------------------------------------------------------------
@@ -24,7 +25,7 @@
 /* Vert-de-gris (par défaut) : verre ancien et cire rouge */
 :root, [data-theme=vert-de-gris] {
   --bg: #DCE3DB; --surface: #EEF2EC; --ink: #18241F; --muted: #4D5F57;
-  --glass: #2F5D50; --verdigris: #6FA392; --wax: #9B2D2A; --wax-ink: #FBEFEA; --line: #B9C7BD; }
+  --glass: #2F5D50; --verdigris: #5B8678; --wax: #9B2D2A; --wax-ink: #FBEFEA; --line: #B9C7BD; }
 @media (prefers-color-scheme: dark) {
   :root, [data-theme=vert-de-gris] { color-scheme: dark;
     --bg: #121A17; --surface: #1C2723; --ink: #DCE3DB; --muted: #9DB0A6;
@@ -33,7 +34,7 @@
 /* Parchemin : taverne, cuir et laiton */
 [data-theme=parchemin] { color-scheme: light;
   --bg: #E9DFC9; --surface: #F6EFDF; --ink: #2B2118; --muted: #6B5A48;
-  --glass: #7A4A1E; --verdigris: #B08A4A; --wax: #8E2A22; --wax-ink: #FBEFEA; --line: #D3C2A0; }
+  --glass: #7A4A1E; --verdigris: #977740; --wax: #8E2A22; --wax-ink: #FBEFEA; --line: #D3C2A0; }
 @media (prefers-color-scheme: dark) {
   [data-theme=parchemin] { color-scheme: dark;
     --bg: #1C1712; --surface: #27201A; --ink: #EDE3CF; --muted: #B3A38A;
@@ -42,7 +43,7 @@
 /* Sylve : forêt féerique, mousse et baies */
 [data-theme=sylve] { color-scheme: light;
   --bg: #E1E9D6; --surface: #F2F6EA; --ink: #1D2617; --muted: #56644B;
-  --glass: #3F6B2A; --verdigris: #A88A2E; --wax: #7B3F8C; --wax-ink: #F8EFFA; --line: #C2CFB1; }
+  --glass: #3F6B2A; --verdigris: #9B7F2A; --wax: #7B3F8C; --wax-ink: #F8EFFA; --line: #C2CFB1; }
 @media (prefers-color-scheme: dark) {
   [data-theme=sylve] { color-scheme: dark;
     --bg: #11170E; --surface: #1A2316; --ink: #E3EAD9; --muted: #A2B094;
@@ -51,7 +52,7 @@
 /* Givre : contrées du nord, glace et sang */
 [data-theme=givre] { color-scheme: light;
   --bg: #DCE4EB; --surface: #EEF3F7; --ink: #16212B; --muted: #4C5D6C;
-  --glass: #2C5878; --verdigris: #7AA6C2; --wax: #9B2D3A; --wax-ink: #FBEEF0; --line: #B6C5D2; }
+  --glass: #2C5878; --verdigris: #62859B; --wax: #9B2D3A; --wax-ink: #FBEEF0; --line: #B6C5D2; }
 @media (prefers-color-scheme: dark) {
   [data-theme=givre] { color-scheme: dark;
     --bg: #0F151B; --surface: #18212A; --ink: #DDE5EC; --muted: #98A9B8;
@@ -61,7 +62,7 @@
 [data-theme=donjon] { color-scheme: dark;
   --bg: #131315; --surface: #1D1D21; --ink: #E4E1DA; --muted: #A19C92;
   --glass: #E0A050; --verdigris: #9C6B2E; --wax: #B23A2E; --wax-ink: #FFF1E8; --line: #34343A;
-  --ombre: 0 1px 2px rgb(0 0 0 / .35), 0 4px 14px rgb(0 0 0 / .25); }
+  --ombre: 0 1px 2px color-mix(in srgb, var(--noir) 35%, transparent), 0 4px 14px color-mix(in srgb, var(--noir) 25%, transparent); }
 
 @media (max-width: 40rem) { :root { --gouttiere: 1rem; } }
 * { box-sizing: border-box; }
@@ -79,8 +80,8 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 .marque { display: flex; align-items: center; gap: .55rem; flex: none; text-decoration: none;
           color: var(--ink); font: 400 1.4rem/1 var(--display); }
 .marque .sceau { width: 1.15rem; height: 1.15rem; border-radius: 50%; flex: none;
-                 background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, white), var(--wax) 65%);
-                 box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wax) 80%, black); }
+                 background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, var(--blanc)), var(--wax) 65%);
+                 box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wax) 80%, var(--noir)); }
 .onglets { display: flex; gap: .25rem; align-self: stretch; overflow-x: auto; scrollbar-width: none; }
 .onglets a { display: flex; align-items: center; padding: 0 .85rem; white-space: nowrap;
              color: var(--muted); text-decoration: none; font-weight: 500;
@@ -119,13 +120,14 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 .gen { display: flex; gap: .5rem; margin-top: 1.25rem; flex-wrap: wrap; }
 
 /* Champs */
-input[type=text], textarea, select { font: inherit; color: var(--ink); background: var(--bg);
+input[type=text], input[type=number], input[type=url], input[type=password], textarea, select { font: inherit; color: var(--ink); background: var(--bg);
        border: 1px solid var(--line); border-radius: 8px; padding: .55rem .7rem;
        transition: border-color .15s; }
-input[type=text], select { flex: 1; min-width: 10rem; }
+input[type=text], input[type=url], input[type=password], select { flex: 1; min-width: 10rem; }
 select { padding: .5rem; }
 textarea { width: 100%; resize: vertical; line-height: 1.45; }
-input[type=text]:hover, textarea:hover, select:hover { border-color: var(--verdigris); }
+input[type=text]:hover, input[type=number]:hover, input[type=url]:hover, input[type=password]:hover,
+textarea:hover, select:hover { border-color: var(--verdigris); }
 input[type=checkbox] { accent-color: var(--glass); width: 1rem; height: 1rem; }
 
 /* Boutons */
@@ -147,7 +149,8 @@ a.link:hover { text-decoration: underline; }
           background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--wax); box-shadow: var(--ombre); }
 .alerte.avertissement { border-left-color: var(--verdigris); }
 .alerte p { flex: 1; margin: 0; line-height: 1.45; }
-.alerte strong { color: var(--wax); }
+/* texte en cire : mélangé à l'encre pour rester lisible (contrôlé par PAIRES dans js/univers.js) */
+.alerte strong { color: color-mix(in srgb, var(--wax) 60%, var(--ink)); }
 .alerte.avertissement strong { color: var(--glass); }
 .alerte button.fermer { background: transparent; border: 0; color: var(--muted); padding: 0 .45rem; font-size: 1.3rem;
                         line-height: 1.2; flex: none; }
@@ -157,7 +160,7 @@ a.link:hover { text-decoration: underline; }
 input.interrupteur { appearance: none; width: 2.6rem; height: 1.5rem; margin: 0; flex: none; position: relative;
                      border-radius: 999px; background: var(--line); cursor: pointer; transition: background-color .15s; }
 input.interrupteur::after { content: ""; position: absolute; top: .2rem; left: .2rem; width: 1.1rem; height: 1.1rem;
-                            border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .3);
+                            border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px color-mix(in srgb, var(--noir) 30%, transparent);
                             transition: transform .15s; }
 input.interrupteur:checked { background: var(--glass); }
 input.interrupteur:checked::after { transform: translateX(1.1rem); }
@@ -175,3 +178,37 @@ dialog.dialogue-mdp input { font: inherit; color: var(--ink); background: var(--
                             border-radius: 8px; padding: .5rem .65rem; }
 dialog.dialogue-mdp .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 textarea:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Onglets qui défilent (téléphone) : un dégradé aux bords signale qu'il y a de la suite */
+@media (max-width: 40rem) {
+  .onglets { background:
+    linear-gradient(to right, var(--surface), transparent) left / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface), transparent) right / 1.5rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 22%, transparent), transparent) left / .5rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 22%, transparent), transparent) right / .5rem 100% no-repeat scroll; }
+}
+
+@media (max-width: 59.99rem) {
+  .sections, .options-nav { background:
+    linear-gradient(to right, var(--bg), transparent) left / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--bg), transparent) right / 1.5rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 22%, transparent), transparent) left / .5rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 22%, transparent), transparent) right / .5rem 100% no-repeat scroll; }
+}
+
+/* Texte réservé aux lecteurs d'écran */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+           clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Écran tactile : cibles d'au moins 44 px (boutons, champs, cases, onglets) */
+@media (pointer: coarse) {
+  button, select, input[type=text], input[type=number], input[type=url], input[type=password] { min-height: 2.75rem; }
+  button.petit, button.suppr, button.fermer, .petit, .suppr { min-height: 2.75rem; min-width: 2.75rem; }
+  .alerte button.fermer { padding: 0 .9rem; }
+  .onglets a, .sections a, .titre-options .link { min-height: 2.75rem; }
+  .onglets a { padding: 0 1rem; }
+  input[type=checkbox]:not(.interrupteur) { width: 1.5rem; height: 1.5rem; }
+  input.interrupteur { height: 1.75rem; width: 3rem; }
+  input.interrupteur::after { width: 1.35rem; height: 1.35rem; }
+  input.interrupteur:checked::after { transform: translateX(1.25rem); }
+}
