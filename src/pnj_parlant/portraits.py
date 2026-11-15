@@ -131,7 +131,7 @@ class Aucun:
         return False
 
     def generer(self, prompt, graine):
-        raise PortraitIndisponible("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.")
+        raise PortraitIndisponible("Portraits désactivés : choisissez un moteur dans la page Options.")
 
 
 class EnLigne:

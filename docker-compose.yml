@@ -19,6 +19,12 @@ services:
       - "127.0.0.1:11434:11434"   # accessible seulement depuis ce PC (l'application Flask)
     volumes:
       - ollama-modeles:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]   # l'image n'a pas curl : `ollama list` interroge le serveur
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     deploy:
       resources:
         reservations:

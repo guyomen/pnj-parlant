@@ -39,6 +39,7 @@ config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas ver
 lancer.bat, docker-compose.yml  # lancement Windows, Ollama dans Docker
 scripts/ecran.sh     # libère la VRAM sous Linux (écran graphique coupé)
 docs/                # installation-windows.md : guide pas à pas Windows
+LICENSE              # GPL-3.0 ; static/fonts/OFL.txt pour les polices (SIL OFL 1.1)
 ```
 Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` / `dialogue` = `"claude"`, `"local"`
 (Ollama) ou `"lmstudio"` ;

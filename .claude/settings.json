@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc_a_jour.py\"",
+            "command": "P=python; python3 -c pass >/dev/null 2>&1 && P=python3; exec $P \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc_a_jour.py\"",
             "timeout": 20,
             "statusMessage": "Vérification de la documentation…"
           }

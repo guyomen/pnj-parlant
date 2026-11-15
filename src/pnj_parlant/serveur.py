@@ -673,7 +673,7 @@ def create_app(cfg, **moteurs):
         if npc is None:
             return erreur("PNJ introuvable.", 404)
         if not ctx.portraits.disponible():
-            return erreur("Portraits désactivés : choisissez un moteur dans [portraits] de config.toml.", 400)
+            return erreur("Portraits désactivés : choisissez un moteur dans la page Options.", 400)
         npc.update(corps())
         prompt = prompt_portrait(ctx.moteurs, npc, ctx.style_portrait())
         try:

@@ -14,7 +14,7 @@ paths:
 - Attribution : voix tirée parmi celles du genre du PNJ (`genres` par moteur, surchargeables dans
   `[voix.<moteur>.genres]`), réglée d'après `timbre` et `debit` (`length_scale` ; Edge en tire rate/pitch,
   Pocket n'applique ni l'un ni l'autre). `browser_pitch` / `browser_rate` servent au repli `speechSynthesis`.
-- `ensure_voice` réattribue une voix stable (graine = nom du PNJ) si la sienne manque sur la machine ou vient
+- `voix.verifier` réattribue une voix stable (graine = nom du PNJ) si la sienne manque sur la machine ou vient
   d'un autre moteur. Deux PNJ d'une même scène n'ont jamais la même voix (`eviter`).
 - Piper : catalogue des voix gardé tant que la date de modification du dossier ne change pas (`_voix_installees`) ;
   un `.onnx.json` illisible = une voix à un locuteur ; chargement des voix sous verrou (une seule fois par voix).

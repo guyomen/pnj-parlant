@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,25 +7,27 @@ name = "pnj-parlant"
 version = "1.0.0"
 description = "Générateur de PNJ parlants pour jeu de rôle médiéval-fantastique, avec voix de synthèse"
 readme = "README.md"
+license = "GPL-3.0-or-later"          # fichier LICENSE ; Piper (GPL) est une dépendance facultative
+license-files = ["LICENSE", "src/pnj_parlant/static/fonts/OFL.txt"]
 requires-python = ">=3.11"          # tomllib
 dependencies = [
-    "flask>=3.0",
-    "anthropic>=2.4",               # output_config (effort, sorties structurées)
-    "num2words>=0.5",               # nombres en toutes lettres avant la synthèse vocale
-    "pyopenssl",                    # https = true dans config.toml (certificat auto-signé)
-    "tomlkit>=0.13",                # page Options : réécrit config.toml en gardant les commentaires
+    "flask>=3.0,<4",
+    "anthropic>=2.4,<3",             # output_config (effort, sorties structurées) ; le SDK 2.x repose sur httpx2 (moteurs.py)
+    "num2words>=0.5,<1",               # nombres en toutes lettres avant la synthèse vocale
+    "cryptography>=42,<51",         # https = true dans config.toml : werkzeug en tire le certificat auto-signé
+    "tomlkit>=0.13,<1",                # page Options : réécrit config.toml en gardant les commentaires
 ]
 
 [project.optional-dependencies]
 # Synthèse vocale sur le serveur ; sans elle, le navigateur lit les répliques lui-même
 voix = [
-    "piper-tts>=1.3",
-    "pocket-tts>=4.0",              # voix locale plus naturelle (installe PyTorch, ~1 Go)
-    "edge-tts>=7.0",                # voix de Microsoft Edge (en ligne)
+    "piper-tts>=1.3,<2",
+    "pocket-tts>=4.0,<5",             # voix locale plus naturelle (installe PyTorch, ~1 Go)
+    "edge-tts>=7.0,<8",                # voix de Microsoft Edge (en ligne)
 ]
 # Reconnaissance vocale locale ; sans elle, le navigateur s'en charge (en ligne)
 stt = [
-    "faster-whisper>=1.2",
+    "faster-whisper>=1.2,<2",
     "av>=11,<19",                   # faster-whisper 1.2.x utilise une option supprimée dans PyAV 19
     # sur carte NVIDIA (appareil = "cuda") : CUDA 12 et cuDNN 9 pour CTranslate2
     # "nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10",
@@ -33,14 +35,14 @@ stt = [
 # Portraits générés sur ce PC ([portraits] moteur = "local") ; PyTorch vient avec l'option voix (Pocket TTS).
 # Pas dans « tout » : le modèle pèse ~2,5 Go et les portraits sont facultatifs (ou en ligne).
 portraits = [
-    "torch>=2.4",
-    "diffusers>=0.30",
-    "transformers>=4.44",
-    "accelerate>=0.33",
-    "pillow>=10",
+    "torch>=2.4,<3",
+    "diffusers>=0.30,<1",
+    "transformers>=4.44,<6",
+    "accelerate>=0.33,<2",
+    "pillow>=10,<14",
 ]
 tout = ["pnj-parlant[voix,stt]"]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+dev = ["pytest>=8,<10", "pytest-cov>=5,<8", "ruff>=0.6,<1"]
 
 [project.scripts]
 pnj-parlant = "pnj_parlant.serveur:main"   # le serveur

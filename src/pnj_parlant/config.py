@@ -58,7 +58,7 @@ def ollama_sur_ce_pc(cfg):
 
 if __name__ == "__main__":
     # python -m pnj_parlant.config : code de sortie 0 si Ollama doit tourner sur ce PC, 1 sinon,
-    # 2 si config.toml manque (l'application affichera alors l'erreur). Utilisé par lancer.bat et lancerAMD.bat.
+    # 2 si config.toml manque (l'application affichera alors l'erreur). Utilisé par lancer.bat.
     try:
         sys.exit(0 if ollama_sur_ce_pc(charger()) else 1)
     except ConfigIntrouvable:

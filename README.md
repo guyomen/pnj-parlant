@@ -77,7 +77,7 @@ La page **Options** a trois parties (rubriques à gauche, en haut sur téléphon
 
 ## Préparer le scénario et les PNJ (pour jouer sans réseau)
 
-Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par Claude : faites-la avant de partir, avec le réseau.
+Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par le moteur choisi dans `[moteurs] creation` (`"local"` par défaut, sur ce PC ; `"claude"` demande le réseau et une clé API) : si c'est Claude, faites-la avant de partir.
 
 La page a quatre onglets : **Scénario**, **Lieux**, **PNJ** (avec le nombre de lieux et de PNJ) et **Apparence**. Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
 
@@ -210,7 +210,7 @@ Le modèle se télécharge une fois, avec le réseau, dans `modeles-stt/` :
 python -c "from faster_whisper import download_model; download_model('small', 'modeles-stt/small')"
 ```
 
-Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9.
+Pour un autre modèle, remplacez `small` aux deux endroits de la commande et dans `modele`. Sur le processeur d'un PC récent, `small` transcrit une phrase en 1 à 3 secondes ; `base` est deux à trois fois plus rapide mais se trompe plus souvent, ce qui convient mieux à un PC peu puissant. Avec une carte NVIDIA, `appareil = "cuda"` permet `medium` ou `large-v3-turbo`, à condition d'installer CUDA 12 et cuDNN 9 (paquets pip `nvidia-cublas-cu12` et `nvidia-cudnn-cu12`) ; le préchargement de `stt.py` ne couvre que les `.so` de Linux : sous Windows, gardez `appareil = "cpu"` sauf si `cuda` fonctionne chez vous.
 
 ## Portraits des PNJ (facultatif)
 
@@ -232,11 +232,15 @@ Le moteur local demande l'option `portraits` (diffusers ; PyTorch vient déjà a
 uv sync --extra tout --extra portraits
 ```
 
+**Windows et carte NVIDIA** : PyPI ne fournit sous Windows que PyTorch pour processeur (`torch ... +cpu`) : avec `appareil = "auto"`, les portraits se font alors au processeur, même avec une carte NVIDIA. Pour utiliser la carte, remplacez PyTorch par une roue CUDA, après l'installation : `uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu128` (sans uv : `.venv\Scripts\python.exe -m pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128`), puis vérifiez avec `.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available())"` (`True` attendu). Un `uv sync` ultérieur remet la version processeur : refaites alors la commande. Le projet ne change pas la source des paquets (`uv.lock` reste celui de PyPI). Sous Linux, la roue de PyPI contient déjà CUDA.
+
 Ollama ne génère pas d'images sous Windows ni sous Linux (sa génération d'images expérimentale était réservée à macOS, puis a été retirée). Avec un modèle de dialogue local sur une petite carte (4 Go), générez les portraits pendant la préparation, quand Ollama n'occupe pas la mémoire vidéo, ou mettez `appareil = "cpu"` dans `[portraits.local]`.
 
 ## Configuration
 
-Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Un réglage absent du fichier prend sa valeur par défaut (celle de `config.toml.example`) ; `delai_max` dans `[claude]` borne l'attente d'une réponse de Claude (60 s). Après une modification à la main, relancez `pnj-parlant`.
+Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `max_tokens` et effort pour la génération et le dialogue, taille de l'historique, moteur et voix de synthèse, reconnaissance vocale, portraits, hôte, port et HTTPS. Un réglage absent du fichier prend sa valeur par défaut (celle de `config.toml.example`) ; `delai_max` dans `[claude]` borne l'attente d'une réponse de Claude (60 s). Après une modification à la main, relancez `pnj-parlant`. Par défaut, le serveur lit `config.toml` dans le dossier courant ; la variable d'environnement `PNJ_CONFIG` (ou `--config chemin`) désigne un autre fichier, les dossiers (`pnj/`, `certs/`…) étant alors relatifs à celui-ci.
+
+Réglages que la page Options ne montre pas : `garder_en_memoire` (`[local]`, durée pendant laquelle Ollama garde le modèle chargé, `"2h"`), `delai_max` (`[local]`, `[lmstudio]` et `[claude]` : secondes d'attente d'une réponse), `precision` et `beam_size` (`[reconnaissance]` : calcul de Whisper, `int8` ou `float16`, et largeur de recherche, 5 par défaut ; 1 va plus vite) et `url` dans `[portraits.en_ligne]` (adresse du service d'images, Pollinations par défaut).
 
 **Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, PNJ en scène, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
 
@@ -244,7 +248,7 @@ Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` d
 
 Le serveur refuse les requêtes trop volumineuses (413) : 60 Mo pour un import d'univers (500 fichiers au plus, zip décompressés compris), 5 Mo pour un enregistrement du micro, 2 Mo pour le reste.
 
-`config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
+`config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`) seulement si vous choisissez Claude pour la création ou le dialogue. Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 
 ## Organisation du code et tests
 
@@ -254,7 +258,8 @@ cherchent `config.toml` dans le dossier courant ; `--config chemin/vers/config.t
 Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté de `config.toml`.
 
 ```
-pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev), commandes
+pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev) bornées par version majeure, commandes
+LICENSE                     GNU GPL 3.0 ou ultérieure
 src/pnj_parlant/
   serveur.py                application Flask (routes) et lancement
   config.py                 lecture de config.toml (et son chemin, pour la page Options)
@@ -270,7 +275,8 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js, js/api.js
+  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js, js/api.js ;
+                            fonts/ : Alegreya Sans et IM Fell English (SIL OFL 1.1, texte dans fonts/OFL.txt)
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows
@@ -286,10 +292,14 @@ La couverture des modules Python est d'environ 97 %.
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest --cov                # tests Python, avec couverture
 ruff check .                # style et erreurs courantes (config dans pyproject.toml)
-node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent)
+node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent, comme la CI)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
                             # ports : PNJ_E2E_PORT_SERVEUR (5917), PNJ_E2E_PORT_OLLAMA (5918), PNJ_E2E_PORT_DEVTOOLS (9333)
 ```
+
+## Licence
+
+PNJ parlants est distribué sous licence **GNU GPL 3.0 ou ultérieure** (fichier [`LICENSE`](LICENSE)), en cohérence avec Piper, moteur de voix facultatif sous GPL. Les polices de `static/fonts/` restent sous SIL Open Font License 1.1 ([`OFL.txt`](src/pnj_parlant/static/fonts/OFL.txt)). Le modèle de portraits Stable Diffusion Turbo, les voix et les modèles de langage gardent chacun leur propre licence.
 
 ## Pistes pour la suite
 
