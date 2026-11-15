@@ -67,6 +67,18 @@ Serveur sans état : l'historique vit dans le navigateur.
   = message distinct d'« injoignable ».
 - Réponses en streaming pour les trois moteurs ; `usage` (tokens) renvoyé en fin de réplique.
 
+## Caches de latence (lot 6)
+- Chaque cache a son invalidation ; tests dans `tests/test_cache.py`.
+- `Moteurs._en_cache` (`DUREE_CACHE` = 15 s) : liste des modèles d'Ollama (`modeles_locaux`, aussi quand Ollama est
+  injoignable : c'est le délai de connexion qu'on évite) et de LM Studio (`/api/v0/models`, une erreur n'est pas
+  gardée). Un modèle LM Studio fixé dans `config.toml` ne coûte aucun aller-retour avant la réplique. Vidé en
+  reconstruisant `Moteurs` (`appliquer_reglages`) ou par `Moteurs.oublier()`.
+- `Contexte.problemes_recents()` (`SANTE_DUREE` = 15 s) sert `/api/sante` ; vidé par `appliquer_reglages` (même en
+  cas d'échec) et `changer_tts`. `problemes()` reste sans cache (console au démarrage, tests).
+- `Banque` : scénario, lieux et styles gardés (`_en_cache`), invalidés par la signature du fichier (date, taille,
+  inode : une modification à la main compte) et par chaque écriture de la banque (`Banque._ecrire` → `_invalider`) ;
+  `scenario()` dépend aussi de `_styles.json`. Chaque appelant reçoit une copie.
+
 ## Routes
 - `GET /api/config` : moteurs, moteur de voix (`tts`, null si aucune voix), `stt_local`, `modeles_locaux`,
   `modele_local`, `intervention`, `pnj_max`, `contexte_max`.

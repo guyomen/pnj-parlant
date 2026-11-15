@@ -27,6 +27,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
   distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé). `test_moteurs.py` couvre LM Studio
   (`urlopen` simulé, `etat_lmstudio`).
+- `test_cache.py` : caches du lot 6 (modèles Ollama et LM Studio, `/api/sante`, catalogue Piper, scénario/lieux/styles
+  de la banque), délai simulé par `time.monotonic` remplacé, invalidation par réglages, date de fichier et écriture.
 - `test_styles.py` : `valider_styles` (refus, injection CSS impossible), `prompt_du_style`, stockage, export/import,
   « Nouvelle table », routes `/api/styles`. Tests JS : palettes de `THEMES` = style.css et lisibles, `cssThemes`,
   `tousLesThemes`, `contraste`, `identifiant`.

@@ -11,6 +11,8 @@ des fiches et pour les dialogues :
 import copy
 import json
 import re
+import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -20,6 +22,9 @@ try:  # le SDK Anthropic 2.x repose sur httpx2 (ses erreurs réseau en viennent)
     import httpx2 as httpx
 except ImportError:  # pragma: no cover
     import httpx
+
+
+DUREE_CACHE = 15  # secondes : liste des modèles d'Ollama et de LM Studio
 
 
 class MoteurIndisponible(Exception):
@@ -64,11 +69,32 @@ class Moteurs:
         self.claude_cfg = config["claude"]
         self.local_cfg = config["local"]
         self.lmstudio_cfg = config["lmstudio"]
+        # Réponses des serveurs de modèles gardées quelques secondes : {clé: (échéance, valeur)}. Le cache vit avec
+        # l'instance : changer de réglages reconstruit les moteurs (Contexte.appliquer_reglages) et le vide.
+        self._cache = {}
+        self._verrou_cache = threading.Lock()
         # Clé de config.toml ; si elle est vide, le SDK lit ANTHROPIC_API_KEY dans l'environnement.
         # Délai de lecture borné (le SDK attend 10 minutes par défaut) ; la connexion doit s'établir en 5 s.
         delai = self._delai(self.claude_cfg)
         self.client = anthropic.Anthropic(api_key=self.claude_cfg.get("cle_api") or None,
                                           timeout=httpx.Timeout(delai, connect=5), max_retries=1)
+
+    def _en_cache(self, cle, calculer):
+        """Valeur de `calculer()` gardée DUREE_CACHE secondes (un serveur injoignable aussi : c'est le délai de
+        connexion qu'on évite de payer à chaque page). Une exception (MoteurIndisponible) n'est pas gardée."""
+        with self._verrou_cache:
+            trouve = self._cache.get(cle)
+        if trouve and trouve[0] > time.monotonic():
+            return copy.deepcopy(trouve[1])
+        valeur = calculer()
+        with self._verrou_cache:
+            self._cache[cle] = (time.monotonic() + DUREE_CACHE, valeur)
+        return copy.deepcopy(valeur)
+
+    def oublier(self):
+        """Vide le cache des modèles (après un `ollama pull`, ou à la demande)."""
+        with self._verrou_cache:
+            self._cache.clear()
 
     @staticmethod
     def _delai(cfg):
@@ -100,7 +126,11 @@ class Moteurs:
         return limite if type(limite) is int and limite > 0 else None
 
     def modeles_locaux(self):
-        """Modèles installés dans Ollama : [{"nom": ..., "taille": octets}]. Vide si Ollama ne répond pas."""
+        """Modèles installés dans Ollama : [{"nom": ..., "taille": octets}]. Vide si Ollama ne répond pas.
+        Gardé quelques secondes (chaque ouverture de page le demande)."""
+        return self._en_cache(("ollama", self.local_cfg.get("url")), self._lire_modeles_locaux)
+
+    def _lire_modeles_locaux(self):
         url = f"{self.local_cfg.get('url', 'http://localhost:11434').rstrip('/')}/api/tags"
         try:
             with urllib.request.urlopen(url, timeout=3) as r:
@@ -351,15 +381,9 @@ class Moteurs:
     def _lmstudio_modele(self):
         """Modèle chargé dans LM Studio (fiche de /api/v0/models), celui de config.toml s'il est renseigné."""
         cfg = self.lmstudio_cfg
-        url = f"{cfg.get('url', 'http://localhost:1234').rstrip('/')}/api/v0/models"
-        try:
-            with urllib.request.urlopen(url, timeout=5) as r:
-                modeles = json.loads(r.read()).get("data", [])
-        except (OSError, ValueError) as e:
-            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
-                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
+        modeles = self._en_cache(("lmstudio", cfg.get("url")), self._lire_modeles_lmstudio)
         if cfg.get("modele"):
-            return next((m for m in modeles if m["id"] == cfg["modele"]), {"id": cfg["modele"]})
+            return next((m for m in modeles if m.get("id") == cfg["modele"]), {"id": cfg["modele"]})
         # /api/v0/models (propre à LM Studio) indique le type et l'état de chaque modèle, contrairement à /v1/models
         charges = [m for m in modeles if m.get("state") == "loaded" and m.get("type") in ("llm", "vlm")]
         if not charges:
@@ -367,11 +391,21 @@ class Moteurs:
                                      "`modele` dans la section [lmstudio] de config.toml.")
         return charges[0]
 
+    def _lire_modeles_lmstudio(self):
+        url = f"{self.lmstudio_cfg.get('url', 'http://localhost:1234').rstrip('/')}/api/v0/models"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as r:
+                return [m for m in json.loads(r.read()).get("data", []) if isinstance(m, dict)]
+        except (OSError, ValueError, AttributeError) as e:
+            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
+                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
+
     def _lmstudio_requete(self, system, messages, max_tokens, schema=None, stream=False, arrets=()):
         """Envoie la requête à LM Studio et renvoie la réponse HTTP ouverte."""
         cfg = self.lmstudio_cfg
         body = {
-            "model": self._lmstudio_modele()["id"],
+            # modèle de config.toml : aucun aller-retour de plus ; sinon celui qui est chargé (liste en cache)
+            "model": cfg.get("modele") or self._lmstudio_modele().get("id"),
             "messages": [{"role": "system", "content": system}] + messages,
             "max_tokens": max_tokens,
             "temperature": cfg.get("temperature", 0.8),

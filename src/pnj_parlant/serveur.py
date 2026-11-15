@@ -67,6 +67,7 @@ EN_TETE_MDP = "X-Mot-De-Passe-MJ"              # mot de passe du MJ, encodé par
 # l'enveloppe multipart) fixe le plafond global ; /api/stt et les corps JSON ont le leur.
 MARGE_MULTIPART = 1_000_000
 STT_MAX_OCTETS = 5_000_000   # quelques minutes d'audio webm/opus : une question dure moins d'une minute
+SANTE_DUREE = 15             # secondes : durée de vie du diagnostic de /api/sante (Contexte.problemes_recents)
 CORPS_MAX = 2_000_000        # JSON : scénario (20 000 caractères), 60 lieux, fiches, historique de la scène
 
 
@@ -163,6 +164,7 @@ class Contexte:
         self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
         self.verrou_reglages = threading.RLock()  # un seul changement de réglages ou de moteur de voix à la fois
+        self._sante = None  # (échéance, problèmes) : le diagnostic coûte jusqu'à 10 s avec un moteur injoignable
         self.frein = reglages.Frein()  # essais de mot de passe du MJ, par adresse
         self.parametres()
 
@@ -181,7 +183,10 @@ class Contexte:
         redémarrer. Ce qui peut échouer (moteur de voix inutilisable…) est essayé avant d'écrire : en cas d'erreur
         (ValueError), rien ne change. Renvoie les libellés des réglages qui attendent un redémarrage."""
         with self.verrou_reglages:  # deux PUT simultanés : fichier et mémoire reçoivent les deux, l'un après l'autre
-            return self._appliquer_reglages(changements)
+            try:
+                return self._appliquer_reglages(changements)
+            finally:
+                self._sante = None  # le diagnostic dépend des réglages : refait à la prochaine page
 
     def _appliquer_reglages(self, changements):
         avant, nouveaux = self.cfg.reglages, copy.deepcopy(self.cfg.reglages)
@@ -223,6 +228,16 @@ class Contexte:
         """Suite du prompt des portraits : le style choisi par le scénario, sinon celui de config.toml."""
         return prompt_du_style(self.banque.scenario()["style_portrait"], self.banque.styles()["portraits"],
                                self.style_defaut)
+
+    def problemes_recents(self):
+        """`problemes()` gardé SANTE_DUREE secondes : chaque ouverture de page le demande, et il interroge Ollama et
+        LM Studio à la suite. Vidé par `appliquer_reglages` et `changer_tts`."""
+        vu = self._sante
+        if vu and vu[0] > time.monotonic():
+            return copy.deepcopy(vu[1])
+        liste = self.problemes()
+        self._sante = (time.monotonic() + SANTE_DUREE, liste)
+        return copy.deepcopy(liste)
 
     def problemes(self):
         """Ce qui ne marche pas alors que le serveur tourne (dépendance absente, moteur injoignable, clé manquante),
@@ -290,6 +305,7 @@ class Contexte:
                 self.tts_charges[nom] = moteur
                 threading.Thread(target=moteur.prechauffer, daemon=True).start()
             self.tts = moteur
+            self._sante = None
 
     def creer_pnj(self, role="", nom="", genre="", consignes="", lieu=""):
         """Fiche d'un nouveau PNJ, avec sa voix, rattaché au lieu `lieu` (identifiant) s'il existe.
@@ -456,7 +472,7 @@ def create_app(cfg, **moteurs):
     @app.get("/api/sante")
     def sante():
         """Problèmes à afficher dans le bandeau des pages (vide si tout va bien)."""
-        return jsonify({"problemes": ctx.problemes()})
+        return jsonify({"problemes": ctx.problemes_recents()})
 
     @app.get("/api/reglages")
     def reglages_get():

@@ -131,6 +131,8 @@ class Piper:
         self.dossier = base_dir / cfg.get("dossier", "voices")  # un chemin absolu reste absolu
         self.genres = cfg.get("genres", {})
         self._cache = {}
+        self._verrou = threading.Lock()  # chargement des voix (deux fils ne chargent pas la même deux fois)
+        self._catalogue_vu = None  # (date de modification du dossier, {voix: locuteurs}) : voir _voix_installees
         try:
             from piper import PiperVoice, SynthesisConfig
             self._piper = (PiperVoice, SynthesisConfig)
@@ -138,17 +140,28 @@ class Piper:
             self._piper = None
 
     def _voix_installees(self):
-        """{nom de la voix: nombre de locuteurs} pour chaque .onnx du dossier."""
-        if not self._piper or not self.dossier.exists():
+        """{nom de la voix: nombre de locuteurs} pour chaque .onnx du dossier. Relu seulement quand la date de
+        modification du dossier change (voix ajoutée ou retirée), pas à chaque phrase synthétisée."""
+        if not self._piper:
             return {}
+        try:
+            version = self.dossier.stat().st_mtime_ns
+        except OSError:
+            return {}
+        vu = self._catalogue_vu
+        if vu and vu[0] == version:
+            return dict(vu[1])
         voix = {}
         for onnx in sorted(self.dossier.glob("*.onnx")):
-            cfg = onnx.with_suffix(".onnx.json")
             speakers = 1
-            if cfg.exists():
-                speakers = json.loads(cfg.read_text(encoding="utf-8")).get("num_speakers", 1)
+            try:  # un .onnx.json absent ou illisible : voix à un seul locuteur, pas une erreur 500
+                data = json.loads(onnx.with_suffix(".onnx.json").read_text(encoding="utf-8"))
+                speakers = int(data.get("num_speakers", 1))
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
             voix[onnx.stem] = max(1, speakers)
-        return voix
+        self._catalogue_vu = (version, voix)
+        return dict(voix)
 
     def _genre(self, name, speaker):
         """Genre d'un locuteur d'après la section [voix.piper.genres] de config.toml."""
@@ -175,13 +188,15 @@ class Piper:
         if not isinstance(name, str) or name not in installees:  # protège aussi contre les chemins arbitraires
             raise VoixIndisponible(f"Voix Piper « {name} » absente.")
         PiperVoice, SynthesisConfig = self._piper
-        if name not in self._cache:
-            self._cache[name] = PiperVoice.load(self.dossier / f"{name}.onnx")
+        with self._verrou:
+            if name not in self._cache:
+                self._cache[name] = PiperVoice.load(self.dossier / f"{name}.onnx")
+            voice = self._cache[name]
         cfg = SynthesisConfig(speaker_id=voix.get("speaker") if installees[name] > 1 else None,
                               length_scale=echelle_debit(voix))
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav_file:
-            self._cache[name].synthesize_wav(texte, wav_file, syn_config=cfg)
+            voice.synthesize_wav(texte, wav_file, syn_config=cfg)
         return buf.getvalue(), "audio/wav"
 
 

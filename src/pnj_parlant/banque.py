@@ -9,6 +9,7 @@ Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiab
 
 Un scénario complet (scénario, lieux, PNJ) s'exporte en zip et s'importe depuis un zip ou un dossier.
 """
+import copy
 import io
 import json
 import os
@@ -171,15 +172,52 @@ class Banque:
         self.scenario_path = dossier / "_scenario.json"
         self.lieux_path = dossier / "_lieux.json"
         self._verrou = threading.RLock()  # opérations composées (import, vider, portrait) : une à la fois
+        self._memo = {}  # scénario, lieux, styles lus : {nom: (signature des fichiers, valeur)}, voir _en_cache
+        self._verrou_memo = threading.Lock()
 
+    @staticmethod
+    def _signature(chemin):
+        """Date, taille et numéro du fichier (un remplacement atomique en crée un nouveau) ; None s'il manque."""
+        try:
+            s = chemin.stat()
+        except OSError:
+            return None
+        return (s.st_mtime_ns, s.st_size, s.st_ino)
+
+    def _en_cache(self, nom, chemins, calculer):
+        """Valeur de `calculer()`, gardée tant que les fichiers `chemins` n'ont pas changé (relus à chaque réplique
+        sinon). Invalidé par la signature des fichiers, donc aussi par une modification faite à la main, et par
+        nos propres écritures (`_invalider`). Chaque appelant reçoit sa copie : il peut la modifier."""
+        signature = tuple(self._signature(c) for c in chemins)
+        with self._verrou_memo:
+            trouve = self._memo.get(nom)
+        if trouve and trouve[0] == signature:
+            return copy.deepcopy(trouve[1])
+        valeur = calculer()
+        with self._verrou_memo:
+            self._memo[nom] = (signature, valeur)
+        return copy.deepcopy(valeur)
+
+    def _invalider(self):
+        with self._verrou_memo:
+            self._memo.clear()
+
+    def _ecrire(self, chemin, octets):
+        _ecrire(chemin, octets)
+        self._invalider()
     # --- Scénario ---------------------------------------------------------------
     def scenario(self):
         """{"monde": connu de tous les PNJ, "notes_mj": réservé à la création des PNJ,
         "theme": thème graphique des pages ("" : thème par défaut),
         "style_portrait": style de dessin des portraits (portraits.STYLES, "" : style par défaut)}."""
+        return self._en_cache("scenario", (self.scenario_path, self.dossier / STYLES_UNIVERS), self._lire_scenario)
+
+    def _lire_scenario(self):
         try:
             data = json.loads(_lire(self.scenario_path))
         except (OSError, ValueError):
+            data = {}
+        if not isinstance(data, dict):
             data = {}
         return {"monde": data.get("monde", ""), "notes_mj": data.get("notes_mj", ""),
                 "theme": theme_valide(data.get("theme")),
@@ -190,13 +228,16 @@ class Banque:
         scenario["theme"] = theme_valide(data.get("theme"))
         scenario["style_portrait"] = style_valide(data.get("style_portrait"), self.styles()["portraits"])
         with self._verrou:
-            _ecrire(self.scenario_path, _json(scenario))
+            self._ecrire(self.scenario_path, _json(scenario))
         return scenario
 
     # --- Lieux ------------------------------------------------------------------
     def lieux(self):
         """[{"id", "nom", "description" (publique, lue par le narrateur, connue des PNJ),
         "notes_mj" (secrets du lieu, servent seulement à la création des PNJ)}]."""
+        return self._en_cache("lieux", (self.lieux_path,), self._lire_lieux)
+
+    def _lire_lieux(self):
         try:
             data = json.loads(_lire(self.lieux_path))
         except (OSError, ValueError):
@@ -226,12 +267,15 @@ class Banque:
                           "description": str(item.get("description") or "").strip()[:2000],
                           "notes_mj": str(item.get("notes_mj") or "").strip()[:4000]})
         with self._verrou:
-            _ecrire(self.lieux_path, _json(lieux))
+            self._ecrire(self.lieux_path, _json(lieux))
         return lieux
 
     # --- Thèmes et styles de portrait de l'univers -------------------------------------
     def styles(self):
         """Thèmes et styles créés ou modifiés pour l'univers (voir valider_styles) ; vides si absents ou abîmés."""
+        return self._en_cache("styles", (self.dossier / STYLES_UNIVERS,), self._lire_styles)
+
+    def _lire_styles(self):
         try:
             return valider_styles(json.loads(_lire(self.dossier / STYLES_UNIVERS)))
         except (OSError, ValueError):
@@ -241,7 +285,7 @@ class Banque:
         """Remplace les thèmes et styles de l'univers ; lève ValueError s'ils sont invalides."""
         styles = valider_styles(data)
         with self._verrou:
-            _ecrire(self.dossier / STYLES_UNIVERS, _json(styles))
+            self._ecrire(self.dossier / STYLES_UNIVERS, _json(styles))
         return styles
 
     # --- PNJ --------------------------------------------------------------------
