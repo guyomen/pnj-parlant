@@ -34,10 +34,10 @@ Livraison : branche `audit-corrections`, un commit par lot, rien n'est poussé. 
 
 | Fait | Lot | Sujet | Modèle | Dépend de |
 |---|---|---|---|---|
-| [ ] | 0 | Dépôt et outillage | Sonnet | — |
-| [ ] | 1 | Erreurs 500 et pannes des moteurs | Sonnet | D2 |
-| [ ] | 3 | Intégrité des données sur disque | Sonnet | — |
-| [ ] | 4 | Bugs de l'interface | Opus | D5 |
+| [x] | 0 | Dépôt et outillage | Sonnet | — |
+| [x] | 1 | Erreurs 500 et pannes des moteurs | Sonnet | D2 |
+| [x] | 3 | Intégrité des données sur disque | Sonnet | — |
+| [x] | 4 | Bugs de l'interface | Opus | D5 |
 | [ ] | 2 | Contrôle d'accès et limites de taille | Opus | D1 |
 | [ ] | 6 | Latence et caches | Sonnet | lot 3 (6.4) |
 | [ ] | 7 | Tests manquants | Sonnet | lots 1 et 2 |
