@@ -1,6 +1,6 @@
 // Univers (scénario, lieux, PNJ de la banque) : chargement d'un exemple, d'un zip ou d'un dossier, export en zip.
 // Partagé par l'accueil (index.html) et la page de préparation (creation.html).
-import { lireReponse } from "./api.js";
+import { envoyer, lireReponse } from "./api.js";
 import { requete } from "./bandeau.js";
 
 export const URL_EXPORT = "/api/scenario/export";
@@ -157,17 +157,28 @@ export async function importerFichiers(fichiers, garder) {
   const form = new FormData();
   for (const f of fichiersImportables(fichiers)) form.append("fichiers", f, f.name);
   form.append("remplacer", garder ? "0" : "1");
-  return lireReponse(await requete("/api/scenario/import", { method: "POST", body: form }));
+  return lireReponse(await envoyer("/api/scenario/import", { method: "POST", body: form }));
 }
 
+// Import, exemple et export passent par envoyer : hors du PC du serveur, le mot de passe du MJ est demandé.
 export async function chargerExemple(id, garder) {
-  return lireReponse(await requete(`/api/exemples/${encodeURIComponent(id)}`, {
+  return lireReponse(await envoyer(`/api/exemples/${encodeURIComponent(id)}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remplacer: !garder }) }));
 }
 
-export function exporter() {
+// Nom du fichier de l'en-tête Content-Disposition (`attachment; filename=scenario-….zip`), sinon `defaut`
+export function nomTelecharge(disposition, defaut = "scenario.zip") {
+  return /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition || "")?.[1] || defaut;
+}
+
+// Télécharge le zip de l'univers (fetch et non lien : l'en-tête du mot de passe doit partir avec la requête)
+export async function exporter() {
+  const r = await envoyer(URL_EXPORT);
+  if (!r.ok) await lireReponse(r);  // lève l'erreur du serveur
+  const url = URL.createObjectURL(await r.blob());
   const a = document.createElement("a");
-  a.href = URL_EXPORT;
-  a.download = "";
+  a.href = url;
+  a.download = nomTelecharge(r.headers.get("Content-Disposition"));
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -386,7 +386,7 @@ import { adressePortrait, esc, segments, formatLine, interpelles, questionnes, m
          consignesRecreation, detecteurVoix, valeurReglage, groupeUtile, resumeModifs, decouperNdjson, partieValide,
          fichesRelues, VERSION_PARTIE } from "./js/scene.js";
 import { requete, signaler, verifierSante } from "./js/bandeau.js";
-import { api, lireReponse } from "./js/api.js";
+import { api, enTeteMdp, garderMdp, lireReponse, mdpMJ } from "./js/api.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
          importerFichiers, resumeImport, resumeUnivers } from "./js/univers.js";
 
@@ -1538,12 +1538,9 @@ construireNav();
 // --- Options : réglages du serveur (écrits dans config.toml, appliqués aussitôt) --------------------
 // /api/reglages : {groupes: [{id, titre, aide, si, reglages: [{cle, libelle, type, valeur, choix…}]}], protege, local}.
 // Les modifications s'accumulent (modifsReglages) jusqu'à « Enregistrer ». Mot de passe du MJ : gardé le temps
-// de l'onglet (sessionStorage), envoyé dans l'en-tête X-Mot-De-Passe-MJ.
-const CLE_MDP = "mdp-mj";
+// de l'onglet (sessionStorage, js/api.js : le même sert à modifier l'univers), envoyé dans l'en-tête X-Mot-De-Passe-MJ.
 let reglagesServeur = null;
 let modifsReglages = {};  // clé → nouvelle valeur ; secret : null = à effacer
-const mdpMJ = () => { try { return sessionStorage.getItem(CLE_MDP) || ""; } catch { return ""; } };
-const garderMdp = (m) => { try { if (m) sessionStorage.setItem(CLE_MDP, m); else sessionStorage.removeItem(CLE_MDP); } catch {} };
 const peutModifier = () => !!reglagesServeur && (reglagesServeur.protege ? !!mdpMJ() : reglagesServeur.local);
 const tousLesReglages = () => reglagesServeur?.groupes.flatMap(g => g.reglages) ?? [];
 const reglageDe = (cle) => tousLesReglages().find(r => r.cle === cle);
@@ -1686,7 +1683,7 @@ $("reglagesEnregistrer").onclick = async () => {
   let refuse = false;
   try {
     const r = await requete("/api/reglages", { method: "PUT", body: JSON.stringify({ changements }),
-      headers: { "Content-Type": "application/json", "X-Mot-De-Passe-MJ": mdpMJ() } });
+      headers: { "Content-Type": "application/json", ...enTeteMdp() } });
     refuse = r.status === 403;
     if (refuse) garderMdp("");
     const d = await lireReponse(r);

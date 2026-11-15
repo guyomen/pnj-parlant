@@ -28,6 +28,10 @@ Ouvrez ensuite http://localhost:5000 dans Chrome ou Edge.
 
 Le navigateur n'autorise le micro qu'en HTTPS ou sur `localhost`. Mettez donc `https = true` dans la section `[serveur]` de [`config.toml`](config.toml), relancez `pnj-parlant`, puis ouvrez `https://<ip-du-pc>:5000` et acceptez l'avertissement de certificat.
 
+Par défaut le serveur écoute sur toutes les interfaces (`hote = "0.0.0.0"`), pour les téléphones du Wi-Fi. Pour jouer seul sur le PC, `hote = "127.0.0.1"` suffit : aucun autre appareil ne peut alors l'atteindre.
+
+**Ce que peut faire un autre appareil que le PC du serveur** : jouer (parler aux PNJ, en créer pendant la partie, changer de lieu), mais pas modifier l'univers. Toute écriture (scénario, lieux, thèmes et styles, PNJ de la banque, portraits, import, export, univers d'exemple, « Nouvelle table », moteur de voix) demande le **mot de passe du MJ** (voir [Configuration](#configuration)) : la page le demande dans une petite fenêtre et le garde le temps de l'onglet. Sans mot de passe défini, l'univers ne se modifie que depuis le PC. Les secrets des PNJ et les notes du MJ (scénario et lieux) ne sont envoyés qu'avec le mot de passe : le téléphone d'un joueur ne les voit pas, et le serveur relit le secret du PNJ dans la banque au moment du dialogue. Après cinq mauvais mots de passe, l'appareil doit attendre (5 s, puis 10 s, 20 s… jusqu'à 5 minutes). Sur le PC lui-même, rien n'est demandé.
+
 ## Comment ça marche
 
 - `POST /api/npc/generate` : Haiku renvoie une fiche JSON (nom, métier, humeur, rumeurs, secret, salutation, timbre, débit). Humeur, trait et initiale du nom sont tirés au sort côté Python pour éviter les PNJ qui se ressemblent.
@@ -236,7 +240,9 @@ Tous les réglages sont dans [`config.toml`](config.toml) : clé API, modèle, `
 
 **Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, PNJ en scène, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
 
-Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
+Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le même mot de passe protège l'univers depuis les autres appareils (voir [Accès depuis une autre machine](#accès-depuis-une-autre-machine-ex-le-téléphone-dun-joueur)). Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
+
+Le serveur refuse les requêtes trop volumineuses (413) : 60 Mo pour un import d'univers (500 fichiers au plus, zip décompressés compris), 5 Mo pour un enregistrement du micro, 2 Mo pour le reste.
 
 `config.toml` est propre à chaque machine et ignoré par git (il contient la clé API). Le dépôt fournit le modèle [`config.toml.example`](config.toml.example) : copiez-le, puis renseignez `cle_api` (section `[claude]`). Si elle est vide, l'application lit la variable d'environnement `ANTHROPIC_API_KEY`. Pensez à reporter dans le modèle tout nouveau réglage.
 

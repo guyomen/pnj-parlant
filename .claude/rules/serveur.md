@@ -29,6 +29,31 @@ paths:
 (`Contexte.injectes` : jamais remplacés quand les réglages changent).
 Serveur sans état : l'historique vit dans le navigateur.
 
+## Accès à l'univers (décision D1) et tailles
+- Depuis le PC du serveur (`depuis_le_serveur()` : 127.0.0.1, ::1), rien n'est demandé. Ailleurs, toute écriture de
+  l'univers (décorateur `@mj` : PUT scénario, styles, lieux ; POST/PUT/DELETE banque ; POST/DELETE portrait ; import ;
+  export (il contient les secrets) ; exemples ; DELETE /api/univers ; PUT /api/voice-engine) demande le mot de passe
+  du MJ dans l'en-tête `X-Mot-De-Passe-MJ` (encodé par `encodeURIComponent`, décodé par `mot_de_passe_recu`).
+  Refus : 403 avec `mot_de_passe: true` si un mot de passe existe (la page peut le demander), sinon message « depuis
+  le PC du serveur ». Lectures et partie restent ouvertes (generate, talk, voice, tts, stt, config).
+- `droits(mdp, univers)` → ok / verrou / refus ; `univers` faux pour les réglages (mot de passe exigé même sur le PC
+  s'il existe : `reglages.autorise`). `est_mj()` : `GET /api/scenario`, `/api/lieux` et `/api/bank/<id>` retirent
+  `notes_mj` et `secret` (`masquer` : champ absent, pas vide). `GET /api/acces` → `{mj, protege, local}`.
+- Champ masqué absent d'un PUT = gardé : `secret` (PUT /api/bank/<id>), `notes_mj` (PUT /api/scenario, et par lieu
+  existant dans PUT /api/lieux). Une fiche lue sans mot de passe puis renvoyée n'efface rien.
+- `/api/npc/talk` relit le `secret` dans la banque par l'`id` du PNJ (la partie reçoit les fiches sans secret) ; un
+  PNJ inventé (sans fiche en banque) garde celui du navigateur. `/api/npc/generate` renvoie la fiche entière (PNJ
+  pas encore en banque, son secret ne vit que dans le navigateur).
+- Frein (`reglages.Frein`, `ctx.frein`, par adresse) : après 5 mauvais mots de passe, verrou de 5 s qui double à
+  chaque échec (5 min au plus ; 429, rien n'est comparé pendant le verrou) ; succès = compte effacé ; un mot de passe
+  absent ne compte pas ; un mauvais mot de passe attend aussi 1 s.
+- Écriture venue d'une autre page web (`Origin` d'un autre hôte, ou `null`) : 403 (`plafond`), car l'import
+  multipart et un POST sans corps ne passent pas par la pré-vérification CORS.
+- Tailles (`plafond`, 413 en JSON) : `MAX_CONTENT_LENGTH` = `IMPORT_MAX_OCTETS` (60 Mo) + marge multipart pour
+  l'import, qui vérifie aussi le nombre (`IMPORT_MAX_FICHIERS`, 500) et le cumul de tous les fichiers, zip
+  décompressés compris ; `STT_MAX_OCTETS` (5 Mo) pour /api/stt ; `CORPS_MAX` (2 Mo) pour le reste.
+- `[serveur] hote` : `0.0.0.0` par défaut (téléphones) ; `127.0.0.1` pour jouer seul (documenté).
+
 ## Moteurs de langage (moteurs.py)
 - `[moteurs] creation` et `dialogue` : `"claude"` (`[claude] modele`, `claude-haiku-5-5`), `"local"` (Ollama,
   `[local] modele`) ou `"lmstudio"` (`[lmstudio]` : API compatible OpenAI, `/v1/chat/completions` en SSE ; modèle vide
@@ -98,8 +123,9 @@ Serveur sans état : l'historique vit dans le navigateur.
   `cfg.fichier` (`Config.fichier`, None en tests = en mémoire), puis reconstruit à chaud ce qui a changé (Moteurs,
   voix via `tts_charges`, Reconnaissance, portraits, `parametres()` : historique, intervention, phrases_max, style).
 - Routes : `GET /api/reglages` → `{groupes, protege, local, fichier}` (suggestions `local.modele` = modèles
-  d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause) / 400 / 500
-  (écriture) / 200 `{..., redemarrage: [libellés]}` ; `POST /api/reglages/verifier {mot_de_passe}`.
+  d'Ollama s'il sert) ; `PUT {changements}` + en-tête `X-Mot-De-Passe-MJ` → 403 (après 1 s de pause si un mauvais
+  mot de passe a été envoyé) / 429 (frein) / 400 / 500 (écriture) / 200 `{..., redemarrage: [libellés]}` ;
+  `POST /api/reglages/verifier {mot_de_passe}` (même frein).
 
 ## Portraits (portraits.py, facultatif)
 - `[portraits] moteur` : `aucun` (défaut, `Aucun`), `local` (`Local` : SD-Turbo via diffusers, option `portraits` hors

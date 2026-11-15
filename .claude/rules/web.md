@@ -29,7 +29,12 @@ paths:
   appel ; fermées = « clé|message » en sessionStorage `alertes-fermees`). Logique pure dans scene.js
   (`ajouterAlerte`, `alertesSante`, testées). `js/api.js` (commun aux deux pages et à univers.js) : `api(path, body,
   method, {panne, signal, headers})` et `lireReponse(r, {panne})` (erreur du serveur en français ; `panne` : 5xx
-  aussi au bandeau) ; toute requête passe par `requete` (jamais « Failed to fetch »). bandeau.js n'utilise
+  aussi au bandeau) ; toute requête passe par `requete` (jamais « Failed to fetch »). Mot de passe du MJ (api.js) :
+  `mdpMJ`/`garderMdp` (sessionStorage `mdp-mj`, partagé avec la page Options), `enTeteMdp` (en-tête encodé),
+  `envoyer(path, opts)` (utilisé par `api`, l'import, les exemples et l'export de univers.js) : sur un 403 avec
+  `mot_de_passe`, oublie le mot de passe refusé, ouvre `demanderMotDePasse` (`<dialog class="dialogue-mdp">`, une
+  seule à la fois, remplaçable par `poserDialogueMdp` dans les tests) et renvoie la requête, jusqu'à « Annuler » ;
+  `verifierAcces({demander, message})` (/api/acces). Export : `fetch` + blob (`nomTelecharge`), plus de lien direct. bandeau.js n'utilise
   `document` que par `globalThis.document` (chargé sous Node par les tests). index.html : `apiStream` (lecteur
   relâché en `finally`, lignes découpées par `decouperNdjson` de scene.js, ligne illisible = erreur en français) ; `alerte(message,
   niveau, cle)` pour les erreurs des actions (création, banque, réplique, transcription, import, micro, `tts` en
@@ -37,6 +42,11 @@ paths:
   l'ouverture des options et après un changement de réglages. creation.html : `api` = celui de js/api.js avec
   `panne` (erreurs 5xx aussi au bandeau, en plus du message près de l'action) ; diagnostic au chargement ; données
   du serveur dans `innerHTML` toujours par `esc()`, identifiants dans les sélecteurs par `CSS.escape()`.
+  Accès (décision D1) : au chargement, `verifierAcces` (mot de passe demandé s'il existe) avant de lire scénario,
+  lieux et banque ; refus ou « Annuler » = alerte `acces` « Lecture seule » (retirée après une écriture acceptée).
+  Champs réservés au MJ absents de la réponse (`notes` du scénario, notes d'un lieu, `f-secret` d'une fiche de la
+  banque) : grisés par `masquerChamp` et jamais renvoyés (le serveur garde la valeur) ; révélés par la réponse d'un
+  enregistrement fait avec le mot de passe.
 - Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :

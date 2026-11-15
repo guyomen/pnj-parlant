@@ -223,6 +223,75 @@ test("api : erreurs du serveur en français, serveur injoignable", async () => {
   await assert.rejects(api.api("/e"), { name: "AbortError" });  // Stop / Échap : pas une panne
 });
 
+// Mot de passe du MJ : serveur simulé qui n'accepte que « dragée » (en-tête encodé), sessionStorage en mémoire
+function serveurProtege() {
+  const stock = {}, appels = [];
+  globalThis.sessionStorage = { getItem: (k) => stock[k] ?? null, setItem: (k, v) => { stock[k] = v; },
+                                removeItem: (k) => { delete stock[k]; } };
+  globalThis.fetch = async (url, opts = {}) => {
+    const mdp = opts.headers?.["X-Mot-De-Passe-MJ"];
+    appels.push([url, mdp, opts.body]);
+    const bon = mdp === encodeURIComponent("dragée");
+    const corps = url === "/api/acces" ? { mj: bon, protege: true, local: false }
+      : bon ? { ok: 1 } : { error: mdp ? "Mot de passe du MJ incorrect." : "Mot de passe du MJ demandé.", mot_de_passe: true };
+    const status = url === "/api/acces" || bon ? 200 : 403;
+    return { ok: status < 400, status, json: async () => corps };
+  };
+  return { stock, appels };
+}
+
+test("api : mot de passe du MJ demandé sur 403, gardé pour l'onglet, oublié s'il est refusé", async () => {
+  const { stock, appels } = serveurProtege();
+  const saisies = ["faux", "dragée"];
+  const questions = [];
+  api.poserDialogueMdp(async (message) => { questions.push(message); return saisies.shift() ?? null; });
+  try {
+    assert.deepEqual(await api.api("/api/bank", { nom: "Ysolde" }), { ok: 1 });
+    assert.deepEqual(appels.map(a => a[1]), [undefined, "faux", encodeURIComponent("dragée")]);
+    assert.ok(appels.every(a => a[2] === '{"nom":"Ysolde"}'));  // même corps à chaque essai
+    assert.match(questions[0], /demande le mot de passe du MJ/);
+    assert.match(questions[1], /incorrect/);
+    assert.equal(stock["mdp-mj"], "dragée");  // la même clé que la page Options
+    assert.deepEqual(await api.api("/api/univers", undefined, "DELETE"), { ok: 1 });  // gardé : pas de question
+    assert.equal(questions.length, 2);
+    stock["mdp-mj"] = "ancien";  // mot de passe changé sur le serveur : oublié, puis « Annuler »
+    await assert.rejects(api.api("/api/bank", {}), { message: "Mot de passe du MJ incorrect." });
+    assert.equal(stock["mdp-mj"], undefined);
+    assert.equal(questions.length, 3);
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
+test("api : un 403 sans demande de mot de passe est rendu tel quel", async () => {
+  const appels = fauxFetch({ "/x": { status: 403, corps: { error: "Depuis le PC seulement." } } });
+  let demande = false;
+  api.poserDialogueMdp(async () => { demande = true; return "x"; });
+  try {
+    await assert.rejects(api.api("/x", {}), { message: "Depuis le PC seulement." });
+    assert.equal(demande, false);
+    assert.equal(appels.length, 1);
+  } finally { api.poserDialogueMdp(async () => null); }
+});
+
+test("api : verifierAcces demande le mot de passe jusqu'à Annuler", async () => {
+  const { stock } = serveurProtege();
+  const saisies = ["dragée"];
+  api.poserDialogueMdp(async () => saisies.shift() ?? null);
+  try {
+    assert.deepEqual(await api.verifierAcces(), { mj: true, protege: true, local: false });
+    assert.equal(stock["mdp-mj"], "dragée");
+    stock["mdp-mj"] = "ancien";
+    assert.equal((await api.verifierAcces({ demander: false })).mj, false);
+    assert.equal(stock["mdp-mj"], undefined);  // refusé : oublié
+    assert.equal((await api.verifierAcces()).mj, false);  // « Annuler » : lecture seule
+  } finally { api.poserDialogueMdp(async () => null); delete globalThis.sessionStorage; }
+});
+
+test("univers : nom du zip exporté", () => {
+  assert.equal(univers.nomTelecharge('attachment; filename=scenario-2026-11-15-10h00.zip'), "scenario-2026-11-15-10h00.zip");
+  assert.equal(univers.nomTelecharge('attachment; filename="a b.zip"'), "a b.zip");
+  assert.equal(univers.nomTelecharge(null), "scenario.zip");
+});
+
 test("univers : thème gardé quand le serveur répond en erreur", async () => {
   const ecrits = {};
   globalThis.localStorage = { setItem: (k, v) => { ecrits[k] = v; } };

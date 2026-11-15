@@ -163,3 +163,15 @@ input.interrupteur:checked { background: var(--glass); }
 input.interrupteur:checked::after { transform: translateX(1.1rem); }
 input.interrupteur:disabled { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Fenêtre du mot de passe du MJ (js/api.js : hors du PC du serveur, pour modifier l'univers) */
+dialog.dialogue-mdp { background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+                      border-radius: var(--rayon); box-shadow: var(--ombre); padding: 1.25rem 1.5rem;
+                      width: min(26rem, calc(100vw - 2rem)); }
+dialog.dialogue-mdp::backdrop { background: color-mix(in srgb, var(--ink) 40%, transparent); }
+dialog.dialogue-mdp p { margin: 0 0 .9rem; line-height: 1.45; }
+dialog.dialogue-mdp label { display: flex; flex-direction: column; gap: .35rem; }
+dialog.dialogue-mdp input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+                            border-radius: 8px; padding: .5rem .65rem; }
+dialog.dialogue-mdp .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+textarea:disabled { opacity: .6; cursor: not-allowed; }

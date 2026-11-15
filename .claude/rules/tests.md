@@ -18,6 +18,11 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   `client`, `ctx`.
 - `test_sante.py` : `Contexte.problemes` / `/api/sante`, avec `serveur.paquet_installe` et
   `serveur.systeme.etat_ollama` remplacés (aucun réseau). Tests JS : `ajouterAlerte`, `alertesSante`.
+- `test_acces.py` (décision D1) : chaque route d'écriture depuis le PC, depuis une adresse distante sans mot de passe
+  défini, avec mot de passe (absent, faux, bon, accentué) ; masquage des secrets et notes ; champ masqué gardé ;
+  secret relu par /api/npc/talk ; `Origin` étranger ; `Frein` (horloge injectée) et verrou 429 ; tailles (413 : JSON,
+  /api/stt, nombre et cumul de l'import, constantes de `serveur` remplacées par `monkeypatch`). Tests JS : `envoyer`
+  (mot de passe demandé, gardé, oublié), `verifierAcces`, `nomTelecharge`.
 - `test_reglages.py` : catalogue (défauts dans les bornes), `valider`, `ecrire` (commentaires gardés), routes
   `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
   distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé). `test_moteurs.py` couvre LM Studio

@@ -126,8 +126,10 @@ appareil = "auto"          # "auto" (carte NVIDIA si disponible), "cuda" ou "cpu
 dossier = "pnj"            # PNJ enregistrés (un fichier JSON par personnage, modifiable à la main)
 
 [serveur]
-hote = "0.0.0.0"
+hote = "0.0.0.0"           # toutes les interfaces : les téléphones du Wi-Fi peuvent jouer ; "127.0.0.1" pour jouer seul sur ce PC
 port = 5000
 https = false              # true : HTTPS auto-signé, nécessaire pour le micro depuis une autre machine
-mot_de_passe_mj = ""       # protège les réglages modifiables dans la page Options ; vide = depuis ce PC seulement
+mot_de_passe_mj = ""       # protège les réglages de la page Options et, depuis un autre appareil que ce PC, toute
+                           # modification de l'univers (scénario, lieux, PNJ, import) et la lecture des secrets des PNJ
+                           # et des notes du MJ ; vide = tout cela depuis ce PC seulement
 # La page Options réécrit ce fichier (commentaires et mise en forme gardés) quand on y change un réglage.

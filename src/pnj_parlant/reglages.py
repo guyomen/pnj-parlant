@@ -15,6 +15,8 @@ import hmac
 import math
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 MOTEURS = [["claude", "Claude (API Anthropic, réseau)"], ["local", "Ollama (local)"],
@@ -111,7 +113,8 @@ CATALOGUE = [
            "Nécessaire pour le micro depuis un téléphone (certificat auto-signé à accepter).", redemarrage=True),
          R("serveur.port", "Port", "entier", 5000, min=1024, max=65535, redemarrage=True),
          R("serveur.mot_de_passe_mj", "Mot de passe du MJ", "secret", "",
-           "Protège ces réglages ; sans lui, ils ne se modifient que depuis le PC du serveur."),
+           "Protège ces réglages, et l’univers (scénario, lieux, PNJ, import) depuis un autre appareil ; sans lui, "
+           "ils ne se modifient que depuis le PC du serveur."),
      ]},
 ]
 REGLAGES = {r["cle"]: r for g in CATALOGUE for r in g["reglages"]}
@@ -230,6 +233,40 @@ def autorise(reglages, mot_de_passe, local):
     if attendu:
         return hmac.compare_digest(str(mot_de_passe or "").encode(), attendu.encode())
     return local
+
+
+class Frein:
+    """Frein aux essais de mot de passe, par adresse : le serveur répond à plusieurs requêtes à la fois, une pause
+    par requête ne suffit donc pas. Après SEUIL échecs, chaque nouvel échec verrouille l'adresse pendant un délai
+    qui double (5 s, 10 s, 20 s… jusqu'à 5 min) ; pendant le verrou, aucun mot de passe n'est même comparé.
+    Un succès efface le compte ; une adresse oubliée depuis une heure aussi."""
+    SEUIL, DELAI, DELAI_MAX, OUBLI = 5, 5, 300, 3600
+
+    def __init__(self, horloge=time.monotonic):
+        self.horloge = horloge
+        self.essais = {}  # adresse → {echecs, jusqua (fin du verrou), dernier (dernier échec)}
+        self.verrou = threading.Lock()
+
+    def attente(self, adresse):
+        """Secondes de verrou restantes pour cette adresse (0 si elle peut essayer)."""
+        with self.verrou:
+            e = self.essais.get(adresse)
+            return max(0.0, e["jusqua"] - self.horloge()) if e else 0.0
+
+    def echec(self, adresse):
+        with self.verrou:
+            maintenant = self.horloge()
+            self.essais = {a: e for a, e in self.essais.items() if maintenant - e["dernier"] < self.OUBLI}
+            e = self.essais.setdefault(adresse, {"echecs": 0, "jusqua": 0.0, "dernier": maintenant})
+            e["echecs"] += 1
+            e["dernier"] = maintenant
+            if e["echecs"] >= self.SEUIL:
+                rang = min(e["echecs"] - self.SEUIL, 10)
+                e["jusqua"] = maintenant + min(self.DELAI_MAX, self.DELAI * 2 ** rang)
+
+    def succes(self, adresse):
+        with self.verrou:
+            self.essais.pop(adresse, None)
 
 
 def a_redemarrer(changements, avant):

@@ -202,7 +202,7 @@
         <label for="monde">Univers <small>— connu de tous les PNJ, transmis pendant les dialogues</small></label>
         <textarea id="monde" rows="14" placeholder="Ex. : La ville de Brumecôte, port de pêche sur la côte nord. Le bourgmestre Aldric Ventemer. La guilde des Saleurs contrôle le commerce du poisson. Depuis un mois, les bateaux disparaissent en mer…"></textarea>
         <label for="notes">Notes du MJ <small>— servent à créer les PNJ, jamais transmises pendant les dialogues</small></label>
-        <textarea id="notes" rows="8" placeholder="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…"></textarea>
+        <textarea id="notes" rows="8" data-aide="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…" placeholder="Ex. : Le bourgmestre est de mèche avec les contrebandiers. La sorcière de l’îlot est innocente…"></textarea>
         <div class="actions">
           <button id="saveScenarioBtn">Enregistrer le scénario</button>
           <span class="status" id="scenarioStatus"></span>
@@ -369,7 +369,7 @@
           <label for="f-connaissances">Ce qu’il sait et peut révéler <small>— une information par ligne</small></label>
           <textarea id="f-connaissances" rows="4"></textarea>
           <label for="f-secret">Secret <small>— révélé seulement si le joueur gagne sa confiance</small></label>
-          <textarea id="f-secret" rows="2"></textarea>
+          <textarea id="f-secret" rows="2" data-aide=""></textarea>
           <label for="f-salutation">Première réplique</label><textarea id="f-salutation" rows="2"></textarea>
           <h3 class="sous-titre">Voix</h3>
           <div class="grid2">
@@ -400,8 +400,8 @@
 
 <script type="module">
 import { adressePortrait, esc, parLieu } from "./js/scene.js";
-import { requete, verifierSante } from "./js/bandeau.js";
-import { api as appel } from "./js/api.js";
+import { requete, retirer, signaler, verifierSante } from "./js/bandeau.js";
+import { api as appel, verifierAcces } from "./js/api.js";
 import { COULEURS, THEMES, THEME_DEFAUT, alertesContraste, appliquerTheme, confirmationImport, exporter, identifiant,
          importerFichiers, poserThemesPerso, resumeImport, tousLesThemes } from "./js/univers.js";
 const $ = (id) => document.getElementById(id);
@@ -411,8 +411,20 @@ let current = {};     // PNJ en cours d'édition (id présent = déjà dans la b
 let dirty = false;    // modifications non enregistrées
 
 // Serveur injoignable (requete) ou en panne (5xx : moteur indisponible, portrait impossible…) : signalé dans le
-// bandeau sous la barre du haut, en plus du message près de l'action (js/api.js)
-const api = (path, body, method) => appel(path, body, method, { panne: true });
+// bandeau sous la barre du haut, en plus du message près de l'action (js/api.js). Hors du PC du serveur, une
+// écriture demande le mot de passe du MJ (js/api.js) ; une fois acceptée, l'alerte « lecture seule » disparaît.
+async function api(path, body, method) {
+  const data = await appel(path, body, method, { panne: true });
+  if ((method ?? (body === undefined ? "GET" : "POST")) !== "GET") retirer("acces");
+  return data;
+}
+// Champs réservés au MJ (secret d'un PNJ, notes du MJ du scénario et d'un lieu) : absents d'une réponse lue sans
+// mot de passe. Le champ est alors grisé et jamais renvoyé : le serveur garde ce qu'il a (décision D1).
+const MASQUE = "Masqué : mot de passe du MJ demandé sur cet appareil (rechargez la page pour le saisir).";
+function masquerChamp(champ, masque) {
+  champ.disabled = masque;
+  champ.placeholder = masque ? MASQUE : champ.dataset.aide ?? champ.placeholder;
+}
 
 // --- Parties de la page : scénario (« #scenario »), lieux (« #lieux »), PNJ (« #pnj ») ---------
 function afficherSection() {
@@ -442,6 +454,7 @@ function fillForm(npc) {
   if (!npc.genre) $("f-genre").value = "neutre";
   if (!npc.timbre) $("f-timbre").value = "moyen";
   if (!npc.debit) $("f-debit").value = "normal";
+  masquerChamp($("f-secret"), !!npc.id && !("secret" in npc));  // fiche de la banque lue sans mot de passe
   $("mode").textContent = npc.id ? `Modification de ${npc.nom}` : (npc.nom ? "Proposition (non enregistrée)" : "Nouveau PNJ");
   $("demande").open = !npc.nom;  // la demande au modèle sert pour une fiche vierge
   $("portraitStatus").textContent = "";
@@ -456,6 +469,7 @@ function readForm() {
   const npc = { ...current };
   for (const k of FIELDS) npc[k] = $(`f-${k}`).value.trim();
   npc.connaissances = npc.connaissances.split("\n").map(s => s.trim()).filter(Boolean);
+  if ($("f-secret").disabled) delete npc.secret;  // non lu : le serveur garde celui de la banque
   return npc;
 }
 
@@ -553,7 +567,16 @@ $("f-nom").addEventListener("input", () => { $("portraitVide").textContent = ini
 let scenarioCharge = { monde: "", notes_mj: "", theme: THEME_DEFAUT, style_portrait: "" };
 const scenarioModifie = () => $("monde").value !== scenarioCharge.monde || $("notes").value !== scenarioCharge.notes_mj;
 // Enregistre `changements` par-dessus la version enregistrée (pas la saisie en cours du texte)
-const enregistrerScenario = (changements) => api("/api/scenario", { ...scenarioCharge, ...changements }, "PUT");
+async function enregistrerScenario(changements) {
+  const corps = { ...scenarioCharge, ...changements };
+  if ($("notes").disabled) delete corps.notes_mj;  // notes non lues (sans mot de passe) : gardées par le serveur
+  const s = await api("/api/scenario", corps, "PUT");
+  if ($("notes").disabled) {  // enregistré avec le mot de passe : les notes arrivent avec la réponse
+    $("notes").value = s.notes_mj ?? "";
+    masquerChamp($("notes"), !("notes_mj" in s));
+  }
+  return s;
+}
 
 // --- Apparence : thèmes et styles de portrait (prédéfinis, modifiés ou créés pour l'univers) -------------
 // /api/styles : {themes: {id: thème de l'univers}, portraits: [{id, nom, resume, prompt, origine}]} ; PUT remplace
@@ -808,6 +831,7 @@ async function loadScenario() {
   const s = await api("/api/scenario").catch(() => ({}));
   $("monde").value = s.monde || "";
   $("notes").value = s.notes_mj || "";
+  masquerChamp($("notes"), !("notes_mj" in s));
   scenarioCharge = { monde: $("monde").value, notes_mj: $("notes").value, theme: afficherTheme(s.theme),
                      style_portrait: s.style_portrait || "" };
   afficherStyle(scenarioCharge.style_portrait);
@@ -825,13 +849,14 @@ async function saveScenario() {
 }
 
 // --- Partager l'univers (export zip, import zip ou dossier) ----------------------
-$("exportUniversBtn").onclick = () => {
+$("exportUniversBtn").onclick = async () => {
   if (scenarioModifie() || lieuxDirty) {
     $("universStatus").textContent = "Enregistrez d’abord le scénario et les lieux : l’export prend la version enregistrée.";
     return;
   }
-  exporter();
   $("universStatus").textContent = "";
+  try { await exporter(); retirer("acces"); }  // export : secrets compris, donc mot de passe du MJ hors du PC
+  catch (e) { $("universStatus").textContent = e.message; }
 };
 $("importZipBtn").onclick = () => $("importZip").click();
 $("importDossierBtn").onclick = () => $("importDossier").click();
@@ -878,7 +903,8 @@ function renderLieux() {
       <label for="lieu-${i}-description">Description <small>— lue par le narrateur, connue des PNJ</small></label>
       <textarea id="lieu-${i}-description" rows="3" data-i="${i}" data-champ="description" placeholder="Ex. : Une salle basse et enfumée, des tonneaux en guise de tables.">${esc(l.description)}</textarea>
       <label for="lieu-${i}-notes">Notes du MJ <small>— secrets du lieu</small></label>
-      <textarea id="lieu-${i}-notes" rows="2" data-i="${i}" data-champ="notes_mj" placeholder="Ex. : Une trappe sous le comptoir mène aux égouts.">${esc(l.notes_mj)}</textarea>
+      <textarea id="lieu-${i}-notes" rows="2" data-i="${i}" data-champ="notes_mj" ${"notes_mj" in l
+        ? `placeholder="Ex. : Une trappe sous le comptoir mène aux égouts."` : `disabled placeholder="${esc(MASQUE)}"`}>${esc(l.notes_mj ?? "")}</textarea>
       <p class="habitants">
         <span>${habitants.length ? `PNJ : ${esc(habitants.join(", "))}` : l.id ? "Aucun PNJ ici." : "Lieu pas encore enregistré."}</span>
         ${l.id ? `<button class="ghost petit" data-creer="${esc(l.id)}">Créer un PNJ ici</button>` : ""}
@@ -1058,9 +1084,22 @@ api("/api/config").then(c => {
   majPortrait();
   renderBank();
 }).catch(() => {});
-chargerStyles().then(loadScenario);
 verifierSante();
-loadLieux().then(refreshBank);
+// Droits de cet appareil d'abord (mot de passe du MJ demandé s'il en faut un) : les secrets des PNJ et les notes du
+// MJ ne sont envoyés qu'avec lui. Annuler = lecture seule, champs réservés au MJ grisés.
+verifierAcces({ message: "Préparer l’univers depuis cet appareil demande le mot de passe du MJ." })
+  .then((acces) => {
+    if (acces.mj) return;
+    signaler(acces.protege
+      ? "Lecture seule : secrets des PNJ et notes du MJ masqués sur cet appareil. Le mot de passe du MJ sera demandé au premier enregistrement."
+      : "Lecture seule : sans mot de passe du MJ (à définir dans les options, sur le PC du serveur), l’univers ne se modifie que depuis ce PC.",
+      { cle: "acces", niveau: "avertissement" });
+  })
+  .catch((e) => signaler(e.message, { cle: "acces" }))
+  .finally(() => {
+    chargerStyles().then(loadScenario);
+    loadLieux().then(refreshBank);
+  });
 </script>
 </body>
 </html>

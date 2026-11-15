@@ -10,6 +10,10 @@ Routes :
     GET  /api/sante                   ce qui ne marche pas alors que le serveur tourne (bandeau des pages)
     GET|PUT /api/reglages             réglages du serveur de la page Options (écrits dans config.toml, à chaud)
     POST /api/reglages/verifier       vérifie le mot de passe du MJ
+    GET  /api/acces                   droits de cet appareil sur l'univers {mj, protege, local}
+
+Hors du PC du serveur, les écritures de l'univers (@mj) demandent le mot de passe du MJ (en-tête
+X-Mot-De-Passe-MJ), et les secrets des PNJ et les notes du MJ sont retirés des réponses (décision D1).
     POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes, lieu}
     POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu} (NDJSON, phrase par phrase)
     GET|PUT /api/lieux                lieux du scénario
@@ -28,10 +32,12 @@ Routes :
 """
 import argparse
 import copy
+import functools
 import importlib.util
 import io
 import json
 import logging
+import math
 import mimetypes
 import os
 import secrets
@@ -39,12 +45,14 @@ import signal
 import threading
 import time
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from flask import Flask, Response, jsonify, request, send_file
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from . import config as configuration
 from . import dialogue, fiches, reglages, systeme, texte, voix
-from .banque import IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier, normaliser_fiche
+from .banque import IMPORT_MAX_FICHIERS, IMPORT_MAX_OCTETS, NPC_ID, Banque, lire_zip, nom_de_fichier, normaliser_fiche
 from .moteurs import MoteurIndisponible, Moteurs
 from .portraits import STYLE, PortraitIndisponible, prompt_du_style, prompt_portrait, styles
 from .portraits import charger as charger_portraits
@@ -54,6 +62,12 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 EXEMPLES = Path(__file__).parent / "exemples"  # un dossier par univers d'exemple, au format de la banque
 INFOS = "_infos.json"                          # {nom, resume} : présentation de l'exemple, jamais importée
+EN_TETE_MDP = "X-Mot-De-Passe-MJ"              # mot de passe du MJ, encodé par encodeURIComponent (js/api.js)
+# Tailles maximales des requêtes (413 au-delà) : l'import (fichiers et zip, IMPORT_MAX_OCTETS au total, plus
+# l'enveloppe multipart) fixe le plafond global ; /api/stt et les corps JSON ont le leur.
+MARGE_MULTIPART = 1_000_000
+STT_MAX_OCTETS = 5_000_000   # quelques minutes d'audio webm/opus : une question dure moins d'une minute
+CORPS_MAX = 2_000_000        # JSON : scénario (20 000 caractères), 60 lieux, fiches, historique de la scène
 
 
 def exemples(dossier=EXEMPLES):
@@ -115,6 +129,17 @@ def fiche_recue(npc):
     return propre
 
 
+def masquer(donnee, *champs):
+    """Copie sans les champs réservés au MJ (secret d'un PNJ, notes_mj du scénario et des lieux), pour un appareil
+    sans mot de passe du MJ (décision D1). Le champ est retiré, pas vidé : renvoyé tel quel, il ne change rien."""
+    return {k: v for k, v in donnee.items() if k not in champs}
+
+
+def mot_de_passe_recu(valeur):
+    """Mot de passe de l'en-tête X-Mot-De-Passe-MJ (encodé par le navigateur : un en-tête n'admet pas d'accents)."""
+    return unquote(valeur) if valeur else valeur
+
+
 def entier_borne(valeur, defaut, minimum, maximum=None):
     """`valeur` convertie en entier et bornée ; `defaut` si elle n'est pas un nombre (config.toml édité à la main)."""
     try:
@@ -138,6 +163,7 @@ class Contexte:
         self.portraits = portraits or charger_portraits(cfg.section("portraits"))  # aucun, local ou en_ligne
         self.banque = Banque(cfg.chemin(cfg.section("banque").get("dossier", "pnj")))
         self.verrou_reglages = threading.RLock()  # un seul changement de réglages ou de moteur de voix à la fois
+        self.frein = reglages.Frein()  # essais de mot de passe du MJ, par adresse
         self.parametres()
 
     def parametres(self):
@@ -287,15 +313,33 @@ def create_app(cfg, **moteurs):
     """Application Flask. `moteurs` : moteurs=, tts=, reconnaissance=, portraits= pour remplacer ceux de
     config.toml."""
     app = Flask(__name__, static_folder=str(STATIC), static_url_path="")
+    app.config["MAX_CONTENT_LENGTH"] = IMPORT_MAX_OCTETS + MARGE_MULTIPART  # plafond global : celui de l'import
     ctx = Contexte(cfg, **moteurs)
     app.extensions["pnj"] = ctx
 
-    def erreur(message, code):
-        return jsonify({"error": message}), code
+    def erreur(message, code, **autres):
+        return jsonify({"error": message, **autres}), code
 
     @app.errorhandler(EntreeInvalide)
     def entree_invalide(e):
         return erreur(str(e), 400)
+
+    @app.before_request
+    def plafond():
+        """Taille maximale du corps selon la route (413 au-delà, avant toute lecture en mémoire), et refus des
+        écritures envoyées par une autre page web : un import multipart ou un POST sans corps ne demandent pas de
+        pré-vérification CORS, et depuis le PC du serveur aucun mot de passe ne les arrêterait."""
+        origine = request.headers.get("Origin")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and origine and urlsplit(origine).netloc != request.host:
+            return erreur("Requête venue d’une autre page refusée.", 403)
+        if request.path == "/api/stt":
+            request.max_content_length = STT_MAX_OCTETS
+        elif request.path != "/api/scenario/import":
+            request.max_content_length = CORPS_MAX
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def trop_volumineux(e):
+        return erreur("Requête trop volumineuse.", 413)
 
     @app.get("/")
     def index():
@@ -335,13 +379,79 @@ def create_app(cfg, **moteurs):
                 "protege": bool(reglages.lire(ctx.cfg.reglages, "serveur.mot_de_passe_mj")),
                 "local": depuis_le_serveur(), "fichier": ctx.cfg.fichier.name if ctx.cfg.fichier else None}
 
-    def refus():
-        """Réponse 403, après une pause qui freine les essais de mot de passe."""
-        time.sleep(1)
-        if reglages.lire(ctx.cfg.reglages, "serveur.mot_de_passe_mj"):
-            return erreur("Mot de passe du MJ incorrect.", 403)
+    # --- Mot de passe du MJ : réglages (page Options) et univers (décision D1) ------------
+    def protege():
+        return bool(reglages.lire(ctx.cfg.reglages, "serveur.mot_de_passe_mj"))
+
+    def mdp_en_tete():
+        return mot_de_passe_recu(request.headers.get(EN_TETE_MDP))
+
+    def droits(mdp, univers):
+        """(état, attente) : "ok", "verrou" (adresse freinée : `attente` secondes) ou "refus". `univers` : routes
+        du scénario, des lieux, des PNJ… où le PC du serveur passe toujours (D1) ; sinon (réglages), le mot de
+        passe est exigé même sur le PC s'il existe. Un mauvais mot de passe compte dans le frein (ctx.frein)."""
+        local = depuis_le_serveur()
+        if univers and local:
+            return "ok", 0
+        adresse = request.remote_addr or ""
+        attente = ctx.frein.attente(adresse)
+        if attente:
+            return "verrou", attente
+        if reglages.autorise(ctx.cfg.reglages, mdp, local):
+            if protege():
+                ctx.frein.succes(adresse)
+            return "ok", 0
+        if protege() and mdp:
+            ctx.frein.echec(adresse)
+        return "refus", 0
+
+    def est_mj():
+        """Cet appareil voit les secrets des PNJ et les notes du MJ (PC du serveur, ou bon mot de passe)."""
+        return droits(mdp_en_tete(), True)[0] == "ok"
+
+    def garde(mdp, univers):
+        """None si la requête est permise, sinon la réponse de refus (403, ou 429 pendant un verrou)."""
+        etat, attente = droits(mdp, univers)
+        if etat == "ok":
+            return None
+        if etat == "verrou":
+            return trop_d_essais(attente)
+        return refus(mdp, univers)
+
+    def trop_d_essais(attente):
+        return erreur(f"Trop d’essais de mot de passe : réessayez dans {math.ceil(attente)} s.", 429)
+
+    def refus(mdp, univers=False):
+        """Réponse 403 ; un mauvais mot de passe attend aussi une seconde. Pour l'univers, `mot_de_passe` dit à
+        la page qu'elle peut le demander (js/api.js)."""
+        if mdp:
+            time.sleep(1)
+        if protege():
+            if not univers:
+                return erreur("Mot de passe du MJ incorrect.", 403)
+            message = ("Mot de passe du MJ incorrect." if mdp else
+                       "Mot de passe du MJ demandé : depuis cet appareil, l’univers ne se modifie qu’avec lui.")
+            return erreur(message, 403, mot_de_passe=True)
+        if univers:
+            return erreur("L’univers ne se modifie que depuis le PC du serveur (ou définissez un mot de passe du MJ "
+                          "dans les options, sur ce PC, pour le modifier depuis un autre appareil).", 403)
         return erreur("Ces réglages ne se modifient que depuis le PC du serveur (ou définissez un mot de passe "
                       "du MJ pour les modifier depuis un autre appareil).", 403)
+
+    def mj(vue):
+        """Route d'écriture de l'univers : libre depuis le PC du serveur, mot de passe du MJ ailleurs (D1)."""
+        @functools.wraps(vue)
+        def gardee(*args, **kwargs):
+            return garde(mdp_en_tete(), True) or vue(*args, **kwargs)
+        return gardee
+
+    @app.get("/api/acces")
+    def acces():
+        """Droits de cet appareil sur l'univers (mot de passe éventuel dans l'en-tête) : {mj, protege, local}."""
+        etat, attente = droits(mdp_en_tete(), True)
+        if etat == "verrou":
+            return trop_d_essais(attente)
+        return jsonify({"mj": etat == "ok", "protege": protege(), "local": depuis_le_serveur()})
 
     @app.get("/api/sante")
     def sante():
@@ -356,16 +466,15 @@ def create_app(cfg, **moteurs):
     @app.post("/api/reglages/verifier")
     def reglages_verifier():
         mdp = corps().get("mot_de_passe")
-        if not reglages.autorise(ctx.cfg.reglages, mdp, depuis_le_serveur()):
-            return refus()
-        return jsonify({"ok": True})
+        return garde(mdp if isinstance(mdp, str) else None, False) or jsonify({"ok": True})
 
     @app.put("/api/reglages")
     def reglages_put():
         """{changements: {clé: valeur}} ; mot de passe du MJ dans l'en-tête X-Mot-De-Passe-MJ. Écrit config.toml et
         applique aussitôt ; renvoie les réglages et `redemarrage` (libellés qui attendent un redémarrage)."""
-        if not reglages.autorise(ctx.cfg.reglages, request.headers.get("X-Mot-De-Passe-MJ"), depuis_le_serveur()):
-            return refus()
+        refuse = garde(mdp_en_tete(), False)
+        if refuse:
+            return refuse
         try:
             changements = corps().get("changements")
             redemarrage = ctx.appliquer_reglages(reglages.valider(changements))
@@ -390,17 +499,24 @@ def create_app(cfg, **moteurs):
     # --- Scénario et banque de PNJ ------------------------------------------------
     @app.get("/api/scenario")
     def scenario_get():
-        return jsonify(ctx.banque.scenario())
+        scenario = ctx.banque.scenario()
+        return jsonify(scenario if est_mj() else masquer(scenario, "notes_mj"))
 
     @app.put("/api/scenario")
+    @mj
     def scenario_put():
-        return jsonify(ctx.banque.enregistrer_scenario(corps()))
+        """Remplace le scénario ; `notes_mj` absent (page chargée sans mot de passe) = notes gardées."""
+        data = corps()
+        if "notes_mj" not in data:
+            data = {**data, "notes_mj": ctx.banque.scenario()["notes_mj"]}
+        return jsonify(ctx.banque.enregistrer_scenario(data))
 
     @app.get("/api/styles")
     def styles_get():
         return jsonify(ctx.styles())
 
     @app.put("/api/styles")
+    @mj
     def styles_put():
         """Remplace les thèmes et styles de l'univers : {themes: {id: ...}, portraits: {id: ...}}."""
         try:
@@ -410,18 +526,23 @@ def create_app(cfg, **moteurs):
         return jsonify(ctx.styles())
 
     @app.get("/api/scenario/export")
+    @mj
     def scenario_export():
         nom = time.strftime("scenario-%Y-%m-%d-%Hh%M.zip")
         return send_file(io.BytesIO(ctx.banque.exporter_zip()), mimetype="application/zip",
                          as_attachment=True, download_name=nom)
 
     @app.post("/api/scenario/import")
+    @mj
     def scenario_import():
         """Champ « fichiers » : une archive zip, ou les fichiers .json d'un dossier ; « remplacer » : "0" pour
         garder les PNJ actuels (voir Banque.importer)."""
         fichiers = {}
+        envoyes = request.files.getlist("fichiers")
+        if len(envoyes) > IMPORT_MAX_FICHIERS:
+            return erreur(f"Trop de fichiers pour un scénario ({IMPORT_MAX_FICHIERS} au plus).", 413)
         try:
-            for f in request.files.getlist("fichiers"):
+            for f in envoyes:
                 octets = f.read(IMPORT_MAX_OCTETS + 1)
                 if len(octets) > IMPORT_MAX_OCTETS:
                     return erreur(f"« {f.filename} » est trop volumineux pour un scénario.", 413)
@@ -429,11 +550,15 @@ def create_app(cfg, **moteurs):
                     fichiers.update(lire_zip(octets))
                 else:
                     fichiers[nom_de_fichier(f.filename)] = octets
+                # cumul (zip décompressés compris) et nombre, sur tous les fichiers envoyés
+                if len(fichiers) > IMPORT_MAX_FICHIERS or sum(map(len, fichiers.values())) > IMPORT_MAX_OCTETS:
+                    return erreur("Scénario trop volumineux : trop de fichiers ou de données au total.", 413)
             return jsonify(ctx.banque.importer(fichiers, remplacer=request.form.get("remplacer", "1") != "0"))
         except ValueError as e:
             return erreur(str(e), 400)
 
     @app.delete("/api/univers")
+    @mj
     def univers_vider():
         """Nouvelle table : supprime le scénario, les lieux et tous les PNJ de la banque."""
         return jsonify({"pnj": ctx.banque.vider()})
@@ -443,6 +568,7 @@ def create_app(cfg, **moteurs):
         return jsonify(exemples())
 
     @app.post("/api/exemples/<exemple_id>")
+    @mj
     def exemple_charger(exemple_id):
         """Copie l'univers d'exemple dans la banque ; {remplacer: false} garde les PNJ actuels."""
         dossier = EXEMPLES / exemple_id
@@ -454,12 +580,18 @@ def create_app(cfg, **moteurs):
 
     @app.get("/api/lieux")
     def lieux_get():
-        return jsonify(ctx.banque.lieux())
+        lieux = ctx.banque.lieux()
+        return jsonify(lieux if est_mj() else [masquer(lieu, "notes_mj") for lieu in lieux])
 
     @app.put("/api/lieux")
+    @mj
     def lieux_put():
-        """Remplace la liste des lieux : [{id (absent pour un nouveau lieu), nom, description, notes_mj}]."""
-        return jsonify(ctx.banque.enregistrer_lieux(corps(list)))
+        """Remplace la liste des lieux : [{id (absent pour un nouveau lieu), nom, description, notes_mj}] ;
+        `notes_mj` absent d'un lieu existant (page chargée sans mot de passe) = ses notes gardées."""
+        notes = {lieu["id"]: lieu.get("notes_mj", "") for lieu in ctx.banque.lieux()}
+        liste = [{**lieu, "notes_mj": notes.get(lieu.get("id"), "") if isinstance(lieu.get("id"), str) else ""}
+                 if isinstance(lieu, dict) and "notes_mj" not in lieu else lieu for lieu in corps(list)]
+        return jsonify(ctx.banque.enregistrer_lieux(liste))
 
     def fiche_complete(npc):
         return all(isinstance(npc.get(c), str) and npc[c].strip() for c in ("nom", "salutation"))
@@ -473,9 +605,11 @@ def create_app(cfg, **moteurs):
         npc = ctx.banque.lire(npc_id)
         if npc is None:
             return erreur("PNJ introuvable.", 404)
-        return jsonify(voix.verifier(ctx.tts, npc))
+        npc = voix.verifier(ctx.tts, npc)
+        return jsonify(npc if est_mj() else masquer(npc, "secret"))
 
     @app.post("/api/bank")
+    @mj
     def bank_save():
         npc = corps()
         if not fiche_complete(npc):
@@ -483,15 +617,21 @@ def create_app(cfg, **moteurs):
         return jsonify({"id": ctx.enregistrer_pnj(npc)})
 
     @app.put("/api/bank/<npc_id>")
+    @mj
     def bank_update(npc_id):
+        """Remplace la fiche ; `secret` absent (fiche lue sans mot de passe) = secret de la banque gardé."""
         npc = corps()
-        if not ctx.banque.existe(npc_id):
+        enregistree = ctx.banque.lire(npc_id)
+        if enregistree is None:
             return erreur("PNJ introuvable.", 404)
         if not fiche_complete(npc):
             return erreur("Fiche de PNJ incomplète.", 400)
+        if "secret" not in npc:
+            npc = {**npc, "secret": enregistree.get("secret", "")}
         return jsonify({"id": ctx.enregistrer_pnj(npc, npc_id)})
 
     @app.delete("/api/bank/<npc_id>")
+    @mj
     def bank_delete(npc_id):
         if not ctx.banque.supprimer(npc_id):
             return erreur("PNJ introuvable.", 404)
@@ -509,6 +649,7 @@ def create_app(cfg, **moteurs):
                          max_age=86400 if request.args.get("v") else 0)
 
     @app.post("/api/bank/<npc_id>/portrait")
+    @mj
     def portrait_generer(npc_id):
         """Génère et enregistre le portrait d'un PNJ de la banque. Corps facultatif : la fiche en cours
         d'édition (apparence modifiée mais pas encore enregistrée). Renvoie {portrait: version, prompt}."""
@@ -528,6 +669,7 @@ def create_app(cfg, **moteurs):
         return jsonify({"portrait": ctx.banque.version_portrait(npc_id), "prompt": prompt})
 
     @app.delete("/api/bank/<npc_id>/portrait")
+    @mj
     def portrait_supprimer(npc_id):
         if not ctx.banque.supprimer_portrait(npc_id):
             return erreur("Pas de portrait.", 404)
@@ -559,6 +701,7 @@ def create_app(cfg, **moteurs):
         return jsonify({"actuel": ctx.tts.nom, "moteurs": list(voix.MOTEURS)})
 
     @app.put("/api/voice-engine")
+    @mj
     def voice_engine_set():
         """Change de moteur de synthèse pour tout le serveur, sans toucher à config.toml."""
         try:
@@ -597,6 +740,9 @@ def create_app(cfg, **moteurs):
         if not isinstance(npc, dict):
             return erreur("Requête invalide : « npc » doit être une fiche de PNJ.", 400)
         npc = fiche_recue(npc)
+        enregistree = ctx.banque.lire(npc.get("id"))  # PNJ de la banque : son secret, que le navigateur n'a pas
+        if enregistree is not None:
+            npc["secret"] = chaine(enregistree.get("secret"))
         autres = data.get("presents") if isinstance(data.get("presents"), list) else []
         presents = [fiche_recue(p) for p in autres if isinstance(p, dict)]
         presents = [p for p in presents if p["nom"]][:ctx.pnj_max - 1]  # le PNJ qui parle compte dans la scène
@@ -641,7 +787,10 @@ def create_app(cfg, **moteurs):
         if not audio:
             return erreur("Aucun enregistrement reçu.", 400)
         indice = request.form.get("indice", "").strip()[:200] or None
-        return jsonify({"text": ctx.reconnaissance.transcrire(audio.read(), indice)})
+        octets = audio.read(STT_MAX_OCTETS + 1)
+        if len(octets) > STT_MAX_OCTETS:
+            return erreur("Enregistrement trop long.", 413)
+        return jsonify({"text": ctx.reconnaissance.transcrire(octets, indice)})
 
     return app
 

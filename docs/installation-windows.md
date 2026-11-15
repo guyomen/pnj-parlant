@@ -86,7 +86,7 @@ Sans uv, installez Python 3.13 (`winget install Python.Python.3.13`, ou [python.
    - Facultatif, `moteur` (section `[portraits]`) : `"en_ligne"` pour donner un portrait aux PNJ pendant la préparation (avec le réseau, rien à installer), ou `"local"` pour les générer sur le PC (installez d'abord l'option : `uv sync --extra tout --extra portraits`). Voir le [README](../README.md#portraits-des-pnj-facultatif).
 3. Enregistrez et fermez.
 
-Ensuite, la plupart des réglages se changent aussi dans l'application : page **Options**, partie « Le serveur » (moteurs, modèle, voix, reconnaissance, portraits…), sans rouvrir le fichier ni relancer. Pour les modifier depuis un autre appareil que le PC, définissez-y un **mot de passe du MJ**. Si vous préférez LM Studio à Ollama (sans Docker), voir le [README](../README.md#modèle-local-pour-les-dialogues-sans-réseau).
+Ensuite, la plupart des réglages se changent aussi dans l'application : page **Options**, partie « Le serveur » (moteurs, modèle, voix, reconnaissance, portraits…), sans rouvrir le fichier ni relancer. Pour les modifier depuis un autre appareil que le PC, définissez-y un **mot de passe du MJ** : il sert aussi à préparer l'univers depuis un autre appareil. Si vous préférez LM Studio à Ollama (sans Docker), voir le [README](../README.md#modèle-local-pour-les-dialogues-sans-réseau).
 
 `config.toml` contient votre clé : ne le partagez pas. C'est `config.toml.example` qui se partage.
 
@@ -179,6 +179,10 @@ Le navigateur n'autorise le micro qu'en HTTPS (ou sur `localhost`). Pour les aut
 4. Sur les téléphones, ouvrez `https://192.168.1.20:5000` et acceptez l'avertissement de sécurité : il est normal avec un certificat créé sur le PC.
 
 Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un routeur ou une box suffit, même sans connexion.
+
+Les téléphones peuvent jouer, mais pas modifier l'univers (scénario, lieux, PNJ, import, « Nouvelle table ») ni lire les secrets des PNJ et les notes du MJ. Pour préparer l'univers depuis un autre appareil (une tablette, par exemple), définissez un **mot de passe du MJ** dans la page Options du PC : l'appareil le demandera dans une petite fenêtre. Sur le PC lui-même, rien n'est demandé.
+
+Pour jouer seul sur le PC, sans téléphones, vous pouvez mettre `hote = "127.0.0.1"` dans la section `[serveur]` de `config.toml` : le serveur n'est alors plus joignable depuis le réseau (et Windows ne demande pas d'autorisation).
 
 ## 6. Avant de partir sans réseau
 

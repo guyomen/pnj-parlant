@@ -48,7 +48,8 @@ Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` /
 ## Détails chargés à la demande
 Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
 - `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage,
-  réglages à chaud (`/api/reglages`, mot de passe du MJ).
+  réglages à chaud (`/api/reglages`, mot de passe du MJ), accès à l'univers hors du PC (`@mj`, secrets masqués,
+  frein aux essais) et tailles maximales des requêtes.
 - `web.md` : vues (accueil, partie, options : réglages du navigateur et du serveur), barre du haut, thèmes graphiques et onglet Apparence (thèmes et
   styles de portrait éditables par univers), conversation gardée, dialogue,
   lieux, univers, micro.
