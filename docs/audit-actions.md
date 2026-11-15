@@ -38,11 +38,11 @@ Livraison : branche `audit-corrections`, un commit par lot, rien n'est poussé. 
 | [x] | 1 | Erreurs 500 et pannes des moteurs | Sonnet | D2 |
 | [x] | 3 | Intégrité des données sur disque | Sonnet | — |
 | [x] | 4 | Bugs de l'interface | Opus | D5 |
-| [ ] | 2 | Contrôle d'accès et limites de taille | Opus | D1 |
-| [ ] | 6 | Latence et caches | Sonnet | lot 3 (6.4) |
-| [ ] | 7 | Tests manquants | Sonnet | lots 1 et 2 |
-| [ ] | 5 | Accessibilité, thèmes, mobile | Sonnet | — |
-| [ ] | 9 | Documentation, lanceur, dépendances | Sonnet | D3, D4 |
+| [x] | 2 | Contrôle d'accès et limites de taille | Opus | D1 |
+| [x] | 6 | Latence et caches | Sonnet | lot 3 (6.4) |
+| [x] | 7 | Tests manquants | Sonnet | lots 1 et 2 |
+| [x] | 5 | Accessibilité, thèmes, mobile | Sonnet | — |
+| [x] | 9 | Documentation, lanceur, dépendances | Sonnet | D3, D4 |
 | [ ] | 8 | Remaniement (serveur.py, JS en ligne) | Opus | tous les autres |
 
 ---

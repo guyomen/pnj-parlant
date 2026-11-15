@@ -5,94 +5,110 @@ Plan complet : [audit-code.md](audit-code.md) ; décisions et prompts : [audit-a
 
 ## Fait
 
-| Lot | Commit | Modèle | Résultat |
+| Étape | Commit | Modèle | Résultat |
 |---|---|---|---|
-| — | 73eb399 | — | Documents d'audit |
+| Documents d'audit | 73eb399 | — | |
 | 0 — Dépôt et outillage | e32e141 | Sonnet | ruff, pytest-cov, CI GitHub, `.gitignore`, `.gitattributes`, `package.json`, config e2e suivie |
-| 1 — Erreurs 500 et moteurs | 3d65f06 | Sonnet | 1.1 à 1.15 ; `pnj_max` réglable (3 par défaut, D2) ; 112 tests dans `tests/test_robustesse.py` |
+| 1 — Erreurs 500 et moteurs | 3d65f06 | Sonnet | 1.1 à 1.15 ; `pnj_max` réglable (3 par défaut, D2) |
 | 3 — Données sur disque | 00543c7 | Sonnet | Écritures atomiques, verrou, import sûr, `normaliser_fiche` |
 | 4 — Bugs de l'interface | 2243dc7 | Opus | 4.1 à 4.13, D5, `js/api.js` commun, e2e réparé |
+| 2 — Contrôle d'accès | ca0e6ec | Opus | D1 : `@mj` sur les écritures, secrets masqués, frein aux essais, limites de taille, fenêtre de mot de passe |
+| 6 — Latence et caches | 2d0fa94 | Sonnet | LM Studio sans aller-retour, caches de 15 s, catalogue Piper et fichiers de la banque en cache |
+| 7 — Tests manquants | a597f91 | Sonnet | Couverture de 85 à 97 %, `tests/faux.py`, e2e plus robuste (journaux, ports libres) |
+| 5 — Accessibilité, thèmes, mobile | 1567afe | Sonnet | Contrôle des contrastes élargi, champs thémés, cibles tactiles, `100dvh`, barre « Parler » collée |
+| 9 — Documentation, lanceur, dépendances | d5f35a1 | Sonnet | D3 et D4 (GPL-3.0, OFL), `cryptography` au lieu de `pyopenssl`, versions bornées, `lancer.bat` |
+| Demande du MJ : modèle dans la vue Partie | 1f523be | Opus | Liste « Modèle de l'IA » dans la colonne de droite (Ollama ou LM Studio), à chaud, avec mot de passe hors du PC |
 
-Vérifié en fin de session sur la branche : **pytest 329 réussis, node 27 réussis, ruff sans alerte.**
+Vérifié sur la branche après le dernier commit : **pytest 559 réussis, node 49 réussis, ruff sans alerte.**
+Au total depuis `master` : 71 fichiers, +6 987 / −717 lignes.
 
-## Reste à faire
-
-Dans cet ordre (le lot 2 avait démarré quand la session a été arrêtée, mais n'avait rien modifié) :
-
-| Lot | Sujet | Modèle | Remarque |
-|---|---|---|---|
-| 2 | Contrôle d'accès et limites de taille | Opus | Décision D1 prise ; voir la consigne ci-dessous |
-| 6 | Latence et caches | Sonnet | |
-| 7 | Tests manquants | Sonnet | Une partie est déjà couverte par `test_robustesse.py` : ne pas dupliquer |
-| 5 | Accessibilité, thèmes, mobile | Sonnet | |
-| 9 | Documentation, lanceur, dépendances | Sonnet | Inclut D3 côté doc (README et guide Windows disent encore « la création passe par Claude ») et la licence GPL-3.0 (D4) |
-| 8 | Remaniement | Opus | Reporté à une session à part, après relecture du reste |
-
-Point important pour le lot 2 : `/api/npc/talk` doit relire le `secret` du PNJ dans la banque (par son id)
-au lieu de dépendre de la fiche envoyée par le navigateur, sinon un PNJ perdrait son secret chez les joueurs
-une fois les secrets masqués.
-
-### Reliquats des lots faits (laissés volontairement)
-
-- **1.6** : le dialogue Claude garde 1 reprise (le SDK ne permet `max_retries=0` que par appel, ce qui casse
-  les tests qui remplacent `client.messages.create`).
-- **4.12** : premières syllabes perdues en coupure automatique du micro, non corrigé (risque d'écho envoyé
-  à Whisper) : à vérifier à l'oreille avant de décider.
-- **4.12** : `sauverPartie` tourne encore à chaque `setBusy(false)` (coût négligeable, relève du lot 8).
-- **4.9** : le `fetch` de `/api/tts` dans `prepareSegment` ne passe pas par `requete` (il a son repli).
-- **4.5** : après un changement d'univers fait sur un autre appareil, un téléphone restaure encore les PNJ
-  de l'ancien univers ; il faudrait un identifiant d'univers côté serveur.
-- Fichiers temporaires `.tmp-xxxx` d'une écriture interrompue par un plantage : pas de nettoyage au démarrage.
-
-### Demande du MJ (hors audit)
-
-- **Choix du modèle local depuis la vue Partie** : rendre le choix du modèle (IA locale) accessible dans la
-  colonne de droite de la vue Partie, avec « Nouveau PNJ » et « Banque de PNJ », pour en changer en cours de
-  partie sans passer par la page Options. À faire après le lot 2 : ce changement passe par `/api/reglages`
-  et doit respecter le mot de passe du MJ quand on n'est pas sur le PC.
-
-## À vérifier par vous
-
-**Sur l'autre machine (e2e) :**
+**e2e** : passé sur la machine avec Ollama après les lots 0, 1, 3 et 4. À **relancer** : les lots 7 et
+« modèle dans la vue Partie » ont modifié `tests/e2e/` (ports par variables d'environnement, nouvelles
+vérifications), et le lot 2 change le chargement de `creation.html` et l'export.
 ```bash
 python tests/e2e/lancer.py
 ```
-Le lot 4 l'a fait passer ici (44/44, trois fois) après avoir corrigé `tests/e2e/faux_ollama.py` (il
-n'envoyait pas `done: true`, que le serveur exige depuis le lot 1) et ajouté une attente dans le parcours.
 
-**À la main dans le navigateur :**
-- Avec `pnj_max = 4` ou plus : le message d'information apparaît à l'ajout du 4ᵉ PNJ.
-- Double clic sur « Parler » en reconnaissance locale (faster-whisper) ; Échap pendant « Je transcris… ».
-- Sur téléphone : message « Le navigateur a bloqué le son ».
-- Page Options en réseau : mauvais mot de passe puis Enregistrer, les champs se verrouillent en gardant les
-  modifications.
-- Import ou changement d'univers depuis l'accueil pendant une partie : la confirmation apparaît.
+## Reste à faire
 
-**Choix faits par les agents, à valider :**
-- D5 : le nom d'un PNJ restauré reste celui de la sauvegarde (le journal le cite) ; une voix changée dans la
-  banque est reprise sauf si elle se confond avec celle d'un PNJ déjà en scène ; une fiche supprimée de la
-  banque reste dans la partie telle quelle.
-- `normaliser_fiche` : genre, timbre et débit hors énumération sont retirés (la voix est réattribuée) ;
-  plafonds nom 80, métier 120, humeur 120, secret 1 500, textes longs 600, 30 connaissances de 600 caractères.
-- Sous Windows, `os.replace` est refusé quand un lecteur a le fichier ouvert : `_ecrire` et `_lire`
-  réessaient 20 fois toutes les 10 ms.
+- **Lot 8 — Remaniement** (Opus) : découpage de `serveur.py` en Blueprints, extraction du JS en ligne
+  d'`index.html` et de `creation.html`. À faire dans une session à part, après relecture et fusion du reste.
+  Prompt dans [audit-actions.md](audit-actions.md).
+
+### Reliquats laissés volontairement
+
+- **1.6** : le dialogue Claude garde 1 reprise (le SDK ne permet `max_retries=0` que par appel).
+- **4.12** : premières syllabes perdues en coupure automatique du micro (risque d'écho envoyé à Whisper) : à
+  juger à l'oreille avant de décider.
+- **4.12** : `sauverPartie` tourne encore à chaque `setBusy(false)` (relève du lot 8).
+- **4.9** : le `fetch` de `/api/tts` dans `prepareSegment` ne passe pas par `requete` (il a son repli).
+- **4.5** : après un changement d'univers fait sur un autre appareil, un téléphone restaure encore les PNJ
+  de l'ancien univers ; il faudrait un identifiant d'univers côté serveur.
+- **5.6** : le bandeau d'alertes (`role="alert"`) est encore réécrit en entier à chaque nouvelle alerte.
+- **6.5** : la synthèse Piper n'est pas sérialisée entre fils ; ajouter un verrou par voix si un son se
+  corrompt avec deux PNJ de même voix.
+- **9.2** : l'adresse d'Ollama reste en dur dans `lancer.bat`.
+- **9.4** : pas de source PyTorch CUDA dans `pyproject.toml` (procédure documentée seulement) ; le
+  préchargement CUDA de `stt.py` ne couvre que Linux.
+- Fichiers `.tmp-xxxx` d'une écriture interrompue par un plantage : pas de nettoyage au démarrage.
+- `authors` absent de `pyproject.toml`.
+
+## À vérifier par vous
+
+**Décisions à confirmer :**
+- Licence écrite `GPL-3.0-or-later` (« ou ultérieure ») ; D4 disait GPL-3.0 : passer à `GPL-3.0-only` si
+  vous préférez.
+- `static/fonts/OFL.txt` : les lignes de copyright (Alegreya Sans, IM Fell English) ont été écrites de
+  mémoire : à comparer aux fichiers OFL de Google Fonts.
+- Index PyTorch CUDA `cu128` dans la doc : à adapter au pilote du poste.
+
+**Conséquences du lot 2 (D1), à valider à l'usage :**
+- Sans mot de passe défini, un téléphone ne peut plus enregistrer un PNJ inventé, importer, charger un
+  exemple ni lancer « Nouvelle table » depuis l'accueil.
+- Après 5 mauvais mots de passe, l'appareil est bloqué 5 s, puis le double à chaque échec (5 min au plus).
+- `PUT /api/voice-engine` reste libre sur le PC, alors que `voix.moteur` dans les Options demande le mot de
+  passe même sur le PC s'il est défini (conséquence de « depuis le PC, rien ne change »).
+- Le mot de passe est envoyé encodé (`encodeURIComponent`) : les mots de passe accentués marchent
+  désormais.
+- Plafonds : 5 Mo pour l'audio, 2 Mo pour le JSON, 60 Mo et 500 fichiers pour l'import.
+
+**Choix faits par les agents :**
+- D5 : un PNJ restauré garde le nom de la sauvegarde ; une voix changée en banque est reprise sauf conflit
+  avec un PNJ déjà en scène ; une fiche supprimée de la banque reste dans la partie.
+- `normaliser_fiche` : plafonds nom 80, métier 120, humeur 120, secret 1 500, textes longs 600,
+  30 connaissances.
+- Modèle dans la vue Partie : avec Ollama, `local.modele` sert aussi à la création des fiches (une
+  infobulle le dit) ; hors du PC sans mot de passe, la liste est grisée, pas cachée.
+- Caches de 15 s : après `ollama pull`, la liste des modèles et le bandeau mettent jusqu'à 15 s à suivre.
+- Thèmes clairs : verdigris éclairci, textes en cire un peu plus sombres, repères ● et ◆ devant les noms
+  du 2ᵉ et du 3ᵉ PNJ : à regarder à l'œil.
+
+**Sur le poste Windows (192.168.1.21:5000), après relance du serveur** (le code Python a changé, et
+`uv sync --extra tout` est nécessaire : dépendances modifiées) :
+- Depuis un téléphone, avec un mot de passe défini : fenêtre de mot de passe en préparation, changement de
+  modèle dans la vue Partie, lecture seule après « Annuler ».
+- Sur téléphone : bouton « Parler » toujours visible, cibles tactiles, avertissement du micro en HTTP,
+  message « Le navigateur a bloqué le son ».
+- Double clic sur « Parler » en reconnaissance locale ; Échap pendant « Je transcris… ».
+- Import ou changement d'univers pendant une partie : la confirmation apparaît.
+
+**`lancer.bat`** (non exécuté) : 1) sans `.venv` et sans réseau, l'installation échoue, affiche la commande
+manuelle et supprime `.venv` ; 2) avec réseau, `.venv` est recréé ; 3) `.venv` complet : démarrage normal ;
+4) `.venv` en Python < 3.11 : message et arrêt ; 5) Ollama installé mais arrêté : il démarre (attente de
+15 s au plus) ; 6) carte AMD bien détectée.
 
 **Divers :**
-- La CI GitHub (`.github/workflows/tests.yml`) est écrite mais n'a jamais tourné.
-- `package.json` déclare Node ≥ 20, alors que la CI et la doc visent Node 22.
-- Le SDK `anthropic` installé repose sur `httpx2` : `moteurs.py` importe `httpx2 as httpx`, avec repli sur
-  `httpx`. À garder en tête si une autre version du SDK est fixée (lot 9).
-- Fins de ligne mélangées dans la copie de travail (JS et HTML en LF, quelques `.md` et `.mjs` en CRLF) ;
-  le dépôt est en LF grâce à `.gitattributes`.
+- La CI GitHub (`.github/workflows/tests.yml`) n'a jamais tourné : elle partira au premier push.
+- Le hook de documentation (`.claude/settings.json`) choisit maintenant `python3` ou `python` : à vérifier
+  sur la machine Linux.
+- Healthcheck Docker (`ollama list`) ajouté mais non exécuté.
 - Format exact des erreurs de flux de LM Studio à confirmer sur un vrai serveur.
+- Les nouveaux tests importent leurs faux objets depuis `tests/faux.py` (plus `from conftest`).
 
-## Comment reprendre
+## Avant de fusionner dans `master`
 
-Option 1, une session par lot : ouvrir une session Claude Code sur la branche `audit-corrections` et coller
-le prompt du lot depuis [audit-actions.md](audit-actions.md) (les décisions y sont déjà notées).
-
-Option 2, multi-agent : demander « reprends la session multi-agent de l'audit à partir du lot 2 » ; le script
-de la session précédente enchaîne les lots 2, 6, 7, 5 et 9 avec le bon modèle et un commit par lot.
-
-Avant de fusionner dans `master` : relire les commits un par un (`git log -p master..audit-corrections`),
-lancer l'e2e sur l'autre machine, puis fusionner.
+1. `uv sync --extra tout --extra dev` (dépendances modifiées au lot 9).
+2. `pytest && node --test tests/js/`, puis l'e2e sur la machine avec Ollama.
+3. Relire les commits un par un : `git log -p master..audit-corrections`.
+4. Les vérifications à la main ci-dessus sur le poste Windows et un téléphone.
+5. Fusionner, puis lancer le lot 8 dans une nouvelle session.
