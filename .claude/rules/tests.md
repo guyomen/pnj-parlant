@@ -13,8 +13,8 @@ node --test tests/js/        # fonctions pures de static/js/scene.js (Node 22+)
 python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran (NAVIGATEUR=... pour le choisir)
 ```
 
-- `conftest.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance`, `FauxPortraits` (`PNG`, `erreur`, `actif`) ;
-  fixtures `cfg` (config dans tmp_path), `moteurs`, `tts`, `portraits`, `app` (`create_app` avec les faux),
+- `faux.py` : `FauxMoteurs`, `FauxTTS`, `FausseReconnaissance`, `FauxPortraits` (`PNG`, `erreur`, `actif`), `FICHE`,
+  `VOIX` ; les tests les importent par `from faux import ...` (jamais `from conftest`). `conftest.py` : fixtures `cfg` (config dans tmp_path), `moteurs`, `tts`, `portraits`, `app` (`create_app` avec les faux),
   `client`, `ctx`.
 - `test_sante.py` : `Contexte.problemes` / `/api/sante`, avec `serveur.paquet_installe` et
   `serveur.systeme.etat_ollama` remplacés (aucun réseau). Tests JS : `ajouterAlerte`, `alertesSante`.
@@ -25,8 +25,16 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   (mot de passe demandé, gardé, oublié), `verifierAcces`, `nomTelecharge`.
 - `test_reglages.py` : catalogue (défauts dans les bornes), `valider`, `ecrire` (commentaires gardés), routes
   `/api/reglages` (secret jamais renvoyé, application à chaud, refus sans rien écrire, mot de passe du MJ, appareil
-  distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé). `test_moteurs.py` couvre LM Studio
+  distant via `environ_base={"REMOTE_ADDR": …}`, `time.sleep` remplacé par une fixture autouse). `test_moteurs.py` couvre LM Studio
   (`urlopen` simulé, `etat_lmstudio`).
+- Lot 7 (couverture des modules Python : 85 % → 97 %) : `test_reglages_a_chaud.py` (moteurs NON injectés :
+  `serveur.Moteurs`, `serveur.voix.charger`, `serveur.Reconnaissance` remplacés ; modèle Claude, moteur de voix sans
+  voix, reconnaissance, `OSError` à l'écriture, tomlkit absent), `test_stt_systeme.py` (stt.py, `/api/stt`,
+  systeme.py, `/api/etat`, `/api/voice-engine`, accès depuis `::1`), `test_moteurs_local.py` (Ollama hors flux, 404,
+  modèles installés, Claude, LM Studio hors flux), `test_moteurs_voix.py` (Piper, Pocket, Edge, `portraits.Local`
+  avec faux paquets dans `sys.modules`), `test_lancement.py` (`serveur.main`, `generer.main`, `dependances.main`,
+  `python -m pnj_parlant.config` : codes 0, 1, 2 lus par lancer.bat). Tests JS : `tests/js/bandeau.test.mjs` (fichier
+  à part : bandeau.js se charge avec un faux `document`).
 - `test_cache.py` : caches du lot 6 (modèles Ollama et LM Studio, `/api/sante`, catalogue Piper, scénario/lieux/styles
   de la banque), délai simulé par `time.monotonic` remplacé, invalidation par réglages, date de fichier et écriture.
 - `test_styles.py` : `valider_styles` (refus, injection CSS impossible), `prompt_du_style`, stockage, export/import,
@@ -47,7 +55,10 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   est versionné (fausse clé `sk-ant-factice`) ; `/config.toml` et `/pnj/` de la racine sont ignorés.
 - e2e : `lancer.py` copie `tests/e2e/donnees/` (config.toml : moteurs locaux, voix Piper absente, reconnaissance
   « navigateur ») dans un dossier temporaire, lance `faux_ollama.py` (port 5918), le vrai serveur (5917) et
-  `parcours_lieux.mjs`, qui pilote le navigateur par le protocole DevTools (port 9333).
+  `parcours_lieux.mjs`, qui pilote le navigateur par le protocole DevTools (port 9333). Ports réglables par
+  `PNJ_E2E_PORT_OLLAMA`, `PNJ_E2E_PORT_SERVEUR`, `PNJ_E2E_PORT_DEVTOOLS` (lancer.py les écrit aussi dans le
+  config.toml copié). Sorties du serveur et du faux Ollama gardées dans des journaux, affichés en cas d'échec ;
+  `attendre()` vérifie `poll()` des processus ; un port déjà occupé arrête le test avant de le lancer.
   - Les simulations (`speechSynthesis` instantanée ou bloquée avec `window.__lent`, reconnaissance qui « entend »
     `window.__dicte`) sont évaluées après le chargement : `Page.addScriptToEvaluateOnNewDocument` ne prend pas en
     Edge sans écran.

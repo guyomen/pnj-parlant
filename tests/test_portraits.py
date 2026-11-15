@@ -6,7 +6,7 @@ import urllib.request
 import zipfile
 
 import pytest
-from conftest import PNG
+from faux import PNG
 
 from pnj_parlant import portraits
 from pnj_parlant.banque import Banque
@@ -229,7 +229,7 @@ def test_portrait_au_style_du_scenario(client, portraits, cfg):
 
 
 def test_style_par_defaut_de_config(tmp_path, moteurs, tts, portraits):
-    from conftest import FausseReconnaissance
+    from faux import FausseReconnaissance
 
     from pnj_parlant.config import Config
     from pnj_parlant.serveur import create_app

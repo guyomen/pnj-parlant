@@ -1,6 +1,7 @@
 """Faux Ollama pour tests/e2e : répond en citant le PNJ et le lieu trouvés dans ses consignes, et les note.
 Crée aussi des fiches de PNJ (toujours la même)."""
 import json
+import os
 import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,4 +33,4 @@ class Gestion(BaseHTTPRequestHandler):
         lignes.append(b'{"done": true}\n')  # sans elle, le serveur juge la réplique coupée net
         self.repondre(b"".join(lignes), "application/x-ndjson")
 
-ThreadingHTTPServer(("127.0.0.1", 5918), Gestion).serve_forever()
+ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("PNJ_E2E_PORT_OLLAMA", "5918"))), Gestion).serve_forever()

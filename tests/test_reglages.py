@@ -3,7 +3,7 @@ commentaires), application à chaud, mot de passe du MJ."""
 import tomllib
 
 import pytest
-from conftest import FausseReconnaissance
+from faux import FausseReconnaissance
 
 from pnj_parlant import reglages
 from pnj_parlant.config import Config
@@ -23,6 +23,12 @@ modele = "claude-haiku-5-5"
 historique = 12       # messages gardés
 """
 DISTANT = {"REMOTE_ADDR": "192.168.1.30"}  # le téléphone d'un joueur
+
+
+@pytest.fixture(autouse=True)
+def sans_pause(monkeypatch):
+    """Un mauvais mot de passe fait attendre 1 s (serveur.time.sleep) : pas dans les tests."""
+    monkeypatch.setattr("pnj_parlant.serveur.time.sleep", lambda s: None)
 
 
 @pytest.fixture
@@ -139,8 +145,7 @@ def test_refus_ne_change_rien(web, fichier):
     assert fichier.read_text(encoding="utf-8") == avant
 
 
-def test_mot_de_passe_du_mj(web, monkeypatch):
-    monkeypatch.setattr("pnj_parlant.serveur.time.sleep", lambda s: None)
+def test_mot_de_passe_du_mj(web):
     assert web.put("/api/reglages", json={"changements": {"serveur.mot_de_passe_mj": "dragon"}}).status_code == 200
     d = web.get("/api/reglages", environ_base=DISTANT).get_json()
     assert d["protege"] is True and d["local"] is False

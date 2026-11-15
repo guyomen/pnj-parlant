@@ -8,7 +8,7 @@ import json
 from urllib.parse import quote
 
 import pytest
-from conftest import FICHE, PNG, FausseReconnaissance
+from faux import FICHE, PNG, FausseReconnaissance
 
 from pnj_parlant import reglages, serveur
 from pnj_parlant.serveur import create_app, masquer, mot_de_passe_recu
@@ -285,3 +285,12 @@ class TestTailles:
         r = importer("d", "e")
         assert r.status_code == 413 and "au total" in r.get_json()["error"]
         assert not any(n["nom"] in ("d", "e") for n in ctx.banque.liste())
+
+    def test_import_un_fichier_trop_volumineux(self, client, ctx, monkeypatch):
+        monkeypatch.setattr(serveur, "IMPORT_MAX_OCTETS", 100)
+        gros = json.dumps({**FICHE, "nom": "gros"}).encode()
+        assert len(gros) > 100
+        r = client.post("/api/scenario/import", data={"fichiers": [(io.BytesIO(gros), "gros.json")]},
+                        content_type="multipart/form-data")
+        assert r.status_code == 413 and "gros.json" in r.get_json()["error"] and "volumineux" in r.get_json()["error"]
+        assert not any(n["nom"] == "gros" for n in ctx.banque.liste())

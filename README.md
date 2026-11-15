@@ -279,7 +279,8 @@ lancer.bat                  lanceur Windows (double-clic)
 ```
 
 Les tests n'ont besoin ni de réseau, ni de modèle, ni de carte graphique : de faux moteurs remplacent
-le modèle de langage, la synthèse et la reconnaissance vocales et le générateur de portraits (voir `tests/conftest.py`).
+le modèle de langage, la synthèse et la reconnaissance vocales et le générateur de portraits (voir `tests/faux.py`, importé par les tests avec `from faux import ...`).
+La couverture des modules Python est d'environ 97 %.
 
 ```bash
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
@@ -287,6 +288,7 @@ pytest --cov                # tests Python, avec couverture
 ruff check .                # style et erreurs courantes (config dans pyproject.toml)
 node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
+                            # ports : PNJ_E2E_PORT_SERVEUR (5917), PNJ_E2E_PORT_OLLAMA (5918), PNJ_E2E_PORT_DEVTOOLS (9333)
 ```
 
 ## Pistes pour la suite

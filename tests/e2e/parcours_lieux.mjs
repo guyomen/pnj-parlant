@@ -2,13 +2,16 @@
 import { spawn } from "node:child_process";
 
 const [edge, profil, conversation] = process.argv.slice(2);
-const navigateur = spawn(edge, ["--headless=new", "--disable-gpu", "--no-first-run", "--remote-debugging-port=9333",
+// Ports : variables d'environnement posées par lancer.py (valeurs par défaut identiques)
+const PORT_SERVEUR = process.env.PNJ_E2E_PORT_SERVEUR || "5917";
+const PORT_DEVTOOLS = process.env.PNJ_E2E_PORT_DEVTOOLS || "9333";
+const navigateur = spawn(edge, ["--headless=new", "--disable-gpu", "--no-first-run", `--remote-debugging-port=${PORT_DEVTOOLS}`,
                                 `--user-data-dir=${profil}`, "about:blank"], { stdio: "ignore" });
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
 let cible;
 for (let i = 0; i < 50 && !cible; i++) {
   await pause(200);
-  try { cible = (await (await fetch("http://127.0.0.1:9333/json/list")).json()).find(t => t.type === "page"); } catch {}
+  try { cible = (await (await fetch(`http://127.0.0.1:${PORT_DEVTOOLS}/json/list`)).json()).find(t => t.type === "page"); } catch {}
 }
 const ws = new WebSocket(cible.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
@@ -38,7 +41,7 @@ const simulations = `
       this.onend && this.onend();
     }, 20);
   };`;
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/#jeu" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/#jeu` });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await js(simulations);  // après le chargement : le script d'initialisation de page ne prend pas en Edge sans écran
 verifier("menu des lieux rempli (aucun + 2 lieux)", await quand(`document.querySelectorAll("#lieuSel option").length === 3`));
@@ -180,7 +183,7 @@ await js(`document.getElementById("reglagesEnregistrer").click()`);
 verifier("options : réglage du serveur enregistré et appliqué", barreVisible && await quand(`document.getElementById("reglagesMessage").textContent.startsWith("Enregistré dans config.toml") && document.getElementById("barreReglages").hidden`) && await js(`fetch("/api/reglages").then(r => r.json()).then(d => d.groupes.flatMap(g => g.reglages).find(r => r.cle === "dialogue.phrases_max").valeur === 4)`));
 
 // Préparation : trois parties (scénario, lieux, PNJ) ; « Créer un PNJ ici » ouvre la demande avec ce lieu
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/creation.html#lieux" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/creation.html#lieux` });
 await quand(`document.readyState === "complete"`);
 verifier("préparation : partie Lieux seule affichée, comptes sur les onglets", await quand(`document.body.dataset.section === "lieux" && document.querySelectorAll(".lieu-fiche").length === 3 && document.getElementById("section-scenario").offsetParent === null && document.getElementById("nbLieux").textContent === "3" && document.getElementById("nbPnj").textContent === "5"`));
 await js(`document.querySelector("[data-creer]").click()`);
@@ -204,7 +207,7 @@ verifier("apparence : thème créé, choisi et appliqué", await quand(`document
 
 // Accueil : « Nouvelle table » supprime l'univers et la conversation
 await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
-await cdp("Page.navigate", { url: "http://127.0.0.1:5917/" });
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/` });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await quand(`!document.getElementById("accReprendreBtn").hidden`);
 await js(`window.confirm = () => true; document.getElementById("nouvelleTableBtn").click()`);

@@ -1,7 +1,7 @@
 import random
 
 import pytest
-from conftest import FauxTTS
+from faux import FauxTTS
 
 from pnj_parlant import voix
 
