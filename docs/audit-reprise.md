@@ -44,6 +44,13 @@ une fois les secrets masqués.
   de l'ancien univers ; il faudrait un identifiant d'univers côté serveur.
 - Fichiers temporaires `.tmp-xxxx` d'une écriture interrompue par un plantage : pas de nettoyage au démarrage.
 
+### Demande du MJ (hors audit)
+
+- **Choix du modèle local depuis la vue Partie** : rendre le choix du modèle (IA locale) accessible dans la
+  colonne de droite de la vue Partie, avec « Nouveau PNJ » et « Banque de PNJ », pour en changer en cours de
+  partie sans passer par la page Options. À faire après le lot 2 : ce changement passe par `/api/reglages`
+  et doit respecter le mot de passe du MJ quand on n'est pas sur le PC.
+
 ## À vérifier par vous
 
 **Sur l'autre machine (e2e) :**
