@@ -22,6 +22,13 @@ function fauxFlux(morceaux, { status = 200, corps } = {}) {
   return etat;
 }
 
+// apiStream relâche le lecteur sans attendre la fin de l'annulation : elle atteint la source (à travers le
+// TextDecoderStream) quelques tours plus tard selon la version de Node
+async function annulee(etat) {
+  for (let i = 0; i < 50 && !etat.annule; i++) await new Promise(r => setTimeout(r, 2));
+  return etat.annule;
+}
+
 test("apiStream : objets rendus ligne par ligne, même coupés au milieu", async () => {
   const etat = fauxFlux(['{"phrase": "Bonjour', ' voyageur."}\n{"phr', 'ase": "Entr', "ez.\"}\n", '{"usage": {"input_tokens": 3}}']);
   const recus = [];
@@ -54,13 +61,13 @@ test("apiStream : une erreur levée par onItem arrête la lecture et relâche le
   await assert.rejects(apiStream("/x", {}, (o) => { recus.push(o); if (o.error) throw new Error(o.error); }),
                        { message: "Panne." });
   assert.deepEqual(recus, [{ error: "Panne." }]);
-  assert.equal(etat.annule, true);  // la connexion se ferme
+  assert.equal(await annulee(etat), true);  // la connexion se ferme
 });
 
 test("apiStream : ligne illisible = erreur en français, lecteur relâché", async () => {
   const etat = fauxFlux(["pas du json\n", '{"phrase": "x"}\n']);
   await assert.rejects(apiStream("/x", {}, () => {}), (e) => !/JSON|Unexpected/.test(e.message));
-  assert.equal(etat.annule, true);
+  assert.equal(await annulee(etat), true);
 });
 
 test("apiStream : signal transmis à fetch (Stop / Échap)", async () => {

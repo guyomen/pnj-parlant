@@ -70,7 +70,7 @@ Voir README.md (Linux) et docs/installation-windows.md (Windows, cartes NVIDIA o
 uv sync --extra tout --extra dev     # .venv en Python 3.13, versions figées dans uv.lock
 cp config.toml.example config.toml   # cle_api, ou variable ANTHROPIC_API_KEY
 pnj-parlant                          # ou python -m pnj_parlant ; port dans [serveur] port (5000)
-pytest && node --test tests/js/      # tests, sans réseau ni modèle ; e2e : python tests/e2e/lancer.py
+pytest && npm test                   # tests, sans réseau ni modèle ; e2e : python tests/e2e/lancer.py
 ```
 
 ## Conventions

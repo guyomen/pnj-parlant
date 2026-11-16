@@ -299,7 +299,7 @@ La couverture des modules Python est d'environ 97 %.
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest --cov                # tests Python, avec couverture
 ruff check .                # style et erreurs courantes (config dans pyproject.toml)
-node --test tests/js/       # modules de static/js/ (ou : npm test ; Node 22 ou plus récent, comme la CI)
+npm test                    # modules de static/js/ : node --test "tests/js/*.test.mjs" (Node 22 ou plus récent, comme la CI)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
                             # ports : PNJ_E2E_PORT_SERVEUR (5917), PNJ_E2E_PORT_OLLAMA (5918), PNJ_E2E_PORT_DEVTOOLS (9333)
 ```

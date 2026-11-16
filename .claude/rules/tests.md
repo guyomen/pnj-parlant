@@ -9,7 +9,8 @@ Aucun ne demande réseau, modèle ni carte graphique.
 
 ```bash
 pytest                       # Python ; pytest est dans l'option dev (uv sync --extra tout --extra dev)
-node --test tests/js/        # modules sans DOM de static/js/ (Node 22+)
+npm test                     # node --test "tests/js/*.test.mjs" : modules sans DOM de static/js/ (Node 22+ ;
+                             # pas « node --test tests/js/ » : Node 22 prend le dossier pour un fichier)
 python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran (NAVIGATEUR=... pour le choisir)
 ```
 
@@ -58,7 +59,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   `decouperNdjson`, `partieValide`, `fichesRelues`, `api`, `cssThemes` (couleurs piégées). package.json minimal
   (`npm test`, version de Node).
 - Outillage : `ruff check .` (config dans pyproject.toml, doit rester vert), `pytest --cov` ; CI GitHub Actions
-  `.github/workflows/tests.yml` (Linux et Windows, Python 3.11 et 3.13, Node 22). `tests/e2e/donnees/config.toml`
+  `.github/workflows/tests.yml` (Linux et Windows, Python 3.11 et 3.13, Node 22 ; `UV_PYTHON` = version de la matrice,
+  sinon `uv run` suit `.python-version` et recrée le .venv sans ruff ni pytest). `tests/e2e/donnees/config.toml`
   est versionné (fausse clé `sk-ant-factice`) ; `/config.toml` et `/pnj/` de la racine sont ignorés.
 - e2e : `lancer.py` copie `tests/e2e/donnees/` (config.toml : moteurs locaux, voix Piper absente, reconnaissance
   « navigateur ») dans un dossier temporaire, lance `faux_ollama.py` (port 5918), le vrai serveur (5917) et
