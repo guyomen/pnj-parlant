@@ -23,4 +23,4 @@ Modules :
     generer    remplissage de la banque en lot
 """
 
-__version__ = "1.0.0"  # même valeur que dans pyproject.toml (vérifié par les tests)
+__version__ = "1.1.0"  # même valeur que dans pyproject.toml (vérifié par les tests)
