@@ -42,6 +42,11 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_styles.py` : `valider_styles` (refus, injection CSS impossible), `prompt_du_style`, stockage, export/import,
   « Nouvelle table », routes `/api/styles`. Tests JS : palettes de `THEMES` = style.css et lisibles, `cssThemes`,
   `tousLesThemes`, `contraste`, `identifiant`.
+- `test_aventuriers.py` : fiche (`normaliser`, bornes, deux systèmes), `jets` (modificateurs, maîtrise, expertise,
+  capacités, dé bonus), `portrait_pour_le_pnj` (sans chiffre, nom à ne pas utiliser), consignes et scène (voyageuse,
+  règle des jets, cas de base inchangé), stockage, export/import, « Nouvelle table », routes (`@mj` : appareil distant
+  sans mot de passe → 403), /api/npc/talk avec aventurier. Tests JS : `aventurier.test.mjs` (`lancer` avec hasard
+  injecté, `appreciation`, textes et élision, `menuJets`, `apercuBonus` = mêmes bonus que le serveur).
 - `test_portraits.py` : description (modèle de langage ou repli), moteurs (Pollinations simulé par `urlopen`),
   stockage, export/import, routes. Aucun test ne charge diffusers ni ne contacte Pollinations.
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
@@ -80,7 +85,9 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     hasard), un rechargement (conversation reprise, fiche modifiée sur le serveur relue), les options (onglet actif, barre du haut immobile, sous-options
     grisées, réglage du serveur enregistré dans le config.toml temporaire), la liste « Modèle de l'IA » de la partie
     (`faux_ollama.py` liste `faux` et `autre` dans /api/tags ; changé puis remis), la page de
-    préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence) et finit
+    préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence, aventurier
+    D&D créé dans l'onglet Aventuriers avec bonus affichés), la partie avec cet aventurier (« Vous jouez », jet de
+    Persuasion, fiche et jet sans chiffre vus dans le corps de /api/npc/talk par un `fetch` espionné) et finit
     par « Nouvelle table » (destructive :
     toujours en dernier, suivie seulement d'une sauvegarde abîmée, écrite au `pagehide`, effacée au rechargement).
     `window.confirm` est remplacé par `() => true` avant les clics qui demandent confirmation.

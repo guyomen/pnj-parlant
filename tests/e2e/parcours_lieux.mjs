@@ -216,13 +216,48 @@ await js(`(() => {
 })()`);
 verifier("apparence : thème créé, choisi et appliqué", await quand(`document.documentElement.dataset.theme === "forge-noire" && document.querySelectorAll(".theme-carte").length === 6 && document.getElementById("editeurTheme").hidden && getComputedStyle(document.body).getPropertyValue("--glass").trim() === "#a4400f" && localStorage.getItem("theme-css")?.includes("forge-noire")`));
 
+// Aventuriers : un aventurier D&D créé dans la préparation (bonus affichés en direct), puis joué dans la partie,
+// avec un jet de dé qui entre dans la scène (sans chiffre) ; la fiche part avec chaque réplique
+await js(`location.hash = "aventuriers"`);
+await quand(`document.body.dataset.section === "aventuriers" && document.querySelectorAll("#av-systeme option").length === 3`);
+await js(`(() => {
+  const saisir = (el, v, type = "input") => { el.value = v; el.dispatchEvent(new Event(type, { bubbles: true })); };
+  saisir(document.getElementById("av-nom"), "Aldric");
+  saisir(document.getElementById("av-apparence"), "Grand, armure cabossée.");
+  saisir(document.getElementById("av-systeme"), "dnd5", "change");
+  saisir(document.querySelector('[data-carac="cha"]'), "16");
+  saisir(document.querySelector('[data-maitrise="persuasion"]'), "1", "change");
+})()`);
+const ongletsModifies = `[...document.querySelectorAll(".sections a.a-enregistrer")].map(a => a.dataset.section)`;
+const bonusAffiche = await quand(`document.querySelector('[data-bonus-comp="persuasion"]')?.value === "+5" && ${ongletsModifies}.includes("aventuriers")`);
+await js(`document.getElementById("avEnregistrerBtn").click()`);
+verifier("aventuriers : fiche D&D créée, bonus affichés, enregistrée", bonusAffiche && await quand(`document.getElementById("nbAventuriers").textContent === "1" && document.getElementById("avTitre").textContent === "Aldric" && !${ongletsModifies}.includes("aventuriers")`));
+
+await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
+await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/#jeu` });
+await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
+verifier("partie : aventurier proposé, dés cachés tant qu'on n'en joue pas", await quand(`!document.getElementById("aventurierBloc").hidden && document.querySelectorAll("#aventurierSel option").length === 2 && document.getElementById("desBloc").hidden`));
+await js(`(() => { const s = document.getElementById("aventurierSel"); s.value = s.options[1].value; s.dispatchEvent(new Event("change")); })()`);
+await quand(`!document.getElementById("desBloc").hidden && !document.getElementById("jetBtn").disabled`);
+await js(`(() => {
+  window.__talks = [];
+  const f = window.fetch;
+  window.fetch = (u, o) => { if (String(u).includes("/api/npc/talk")) window.__talks.push(JSON.parse(o.body)); return f(u, o); };
+  const s = document.getElementById("jetSel"); s.value = "comp:persuasion"; s.dispatchEvent(new Event("change"));
+  document.getElementById("jetBtn").click();
+})()`);
+const jetAffiche = await quand(`[...document.querySelectorAll("#log .line.jet")].at(-1)?.querySelector(".text").textContent.startsWith("(Jet de Persuasion : ")`);
+await js(`(() => { document.getElementById("ask").value = "Je suis un ami, crois-moi."; document.getElementById("sendBtn").click(); })()`);
+verifier("partie : aventurier joué, jet de dé et fiche envoyés au PNJ", jetAffiche && await quand(`window.__talks.some(c => c.aventurier?.nom === "Aldric" && !("jets" in c.aventurier) && c.history.some(m => m.speaker === null && /^\\(Jet de Persuasion : [^0-9]+\\.\\)$/.test(m.content)))`) && await quand(`localStorage.getItem("pnj-aventurier")?.startsWith("aldric-")`));
+await quand(`!document.getElementById("ask").disabled`);
+
 // Accueil : « Nouvelle table » supprime l'univers et la conversation
 await js(`window.onbeforeunload = null; window.addEventListener("beforeunload", e => e.stopImmediatePropagation(), true)`);
 await cdp("Page.navigate", { url: `http://127.0.0.1:${PORT_SERVEUR}/` });
 await quand(`!!document.getElementById("micBtn") && document.readyState === "complete"`);
 await quand(`!document.getElementById("accReprendreBtn").hidden`);
 await js(`window.confirm = () => true; document.getElementById("nouvelleTableBtn").click()`);
-verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && !localStorage.getItem("theme-css") && document.querySelectorAll("#log .line").length === 0`));
+verifier("nouvelle table : univers, conversation et thème remis à zéro", await quand(`document.getElementById("universActuel").textContent.startsWith("Aucun univers") && document.getElementById("accReprendreBtn").hidden && document.getElementById("accHasardBtn").disabled && localStorage.getItem("pnj-partie") === null && document.documentElement.dataset.theme === "vert-de-gris" && !localStorage.getItem("theme-css") && document.querySelectorAll("#log .line").length === 0 && document.getElementById("aventurierBloc").hidden`));
 
 // Sauvegarde abîmée (JSON valide, forme inattendue) : effacée au chargement, la page démarre sans partie
 // (écrite au pagehide, après la sauvegarde de la page qui, sans partie, efface la clé)

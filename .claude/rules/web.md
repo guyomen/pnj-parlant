@@ -14,7 +14,8 @@ paths:
 - Logique sans DOM, chacune testée dans `tests/js/<module>.test.mjs` (scene.js et univers.js : `scene.test.mjs`) :
   `scene.js` (texte, scène, export, réglages, alertes), `partie.js` (état de la partie et transitions),
   `tours.js` (qui parle, hasard injecté), `controles.js` (`etatControles`), `micro.js`, `api.js` (requêtes, `apiStream`),
-  `fiche.js` et `apparence.js` (page de préparation), `univers.js`. `bandeau.js` : DOM par `globalThis.document`.
+  `fiche.js` et `apparence.js` (page de préparation), `univers.js`, `aventurier.js` (aventurier joué, jets de dés,
+  aperçu des bonus). `bandeau.js` : DOM par `globalThis.document`.
 - `js/tete.js` : script classique (ni module, ni `defer`), chargé dans le `<head>` des deux pages avant `style.css` :
   pose `theme` et `theme-css` gardés avant l'affichage (pas de flash ; test `tete.test.mjs` dans un contexte `vm`).
 - Toute nouvelle fonction testable sans DOM va dans le module de son domaine, avec son test dans `tests/js/`.
@@ -27,12 +28,16 @@ paths:
 - « Nouvelle table » (`nouvelleTableBtn`) : `confirm(confirmationNouvelleTable)`, `DELETE /api/univers`, puis remise
   à zéro de la partie (npcs, history, rencontres, positions, lieu, journal, tokens, `CLE_PARTIE`) et rechargement
   des lieux, de la banque et du thème.
-- `creation.html` (`js/creation.js`) : même principe d'une seule page, quatre parties selon l'adresse (`afficherSection`,
+- `creation.html` (`js/creation.js`) : même principe d'une seule page, cinq parties selon l'adresse (`afficherSection`,
   `body[data-section]`, `nav.sections`) : Scénario `#scenario` (univers, notes du MJ, export/import), Apparence
   `#apparence` (thèmes et styles de portrait, voir plus bas), Lieux `#lieux` (une `.carte.lieu-fiche` par lieu, PNJ qui y vivent, « Créer un PNJ ici » →
   `#pnj` avec `reqLieu`), PNJ `#pnj` (banque groupée par lieu via `parLieu`, `details#demande` ouvert pour une
-  fiche vierge, fiche par rubriques, barre d'enregistrement collante). `majModifs()` met un point
-  (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche),
+  fiche vierge, fiche par rubriques, barre d'enregistrement collante), Aventuriers `#aventuriers` (liste `#avListe`,
+  fiche `av-*` : identité, portrait `#avPortraitBloc` comme celui d'un PNJ, système de jeu de /api/systemes,
+  `#avStats` construit par `renderStats` : caractéristiques, compétences D&D (maîtrise/expertise) ou capacités COF,
+  bonus en aperçu `majBonus` → `apercuBonus` ; `lireAv` lit la fiche ; changer de système repart des valeurs par
+  défaut). `majModifs()` met un point
+  (`.a-enregistrer`) sur l'onglet modifié : `scenarioModifie()`, `lieuxDirty`, `dirty` (fiche), `avDirty`,
   `apparenceModifiee()` (éditeur ouvert et modifié) ; recalculé après
   chaque `input`/`change`/`click` et après chaque chargement ou enregistrement.
 - Bandeau d'alertes (`js/bandeau.js`, élément `#bandeau` juste sous la barre du haut des deux pages, styles dans
@@ -171,6 +176,18 @@ paths:
 - Gardes : `generate`/`loadFromBank` ne font rien si `busy` ; `debutParole` fait taire une parole en cours ;
   `jouerTours`, `saluer`, `changerLieu` en `try/finally` (contrôles toujours réactivés) ; `send`/`discuter` appelés
   avec `.catch` ; question dictée refusée (`envoyerDictee`) laissée dans le champ.
+
+## Aventurier joué et jets de dés (facultatifs)
+- `#aventurierBloc` (« Vous jouez », en tête de la colonne de la scène) : caché si l'univers n'a pas d'aventurier ;
+  `chargerAventuriers()` (/api/aventuriers + /api/systemes, au chargement, après un import et « Nouvelle table ») ;
+  choix gardé dans localStorage `pnj-aventurier` (aventurier supprimé = anonyme), hors de `partie`.
+  `tourDe` envoie `aventurier: ficheAventurier(aventurier)` (sans jets ni portrait).
+- `#desBloc` (« Jet : » sous la longueur) : visible seulement avec un aventurier et l'option `optDes` (activée par
+  défaut) ; `menuJets` (d20 sans bonus, puis groupes), `#jetMode` (`MODES` : normal, avantage, désavantage ; une
+  caractéristique supérieure de COF propose l'avantage). `lancerDe()` : `lancer` (hasard injectable), ligne
+  `.line.pj.jet` du journal = `affichageJet` + `<small class="detail">` (`detailJet`, perdu à la reprise), et
+  `history` reçoit `texteJet` (« (Jet de Persuasion : bon résultat.) », sans chiffre, élision « d’ ») ; le PNJ
+  réagit à sa prochaine réplique. `etatControles` : `jetBtn` (action en cours ou scène vide), `aventurierSel`.
 
 ## Dialogue côté navigateur
 - Répond le PNJ cité (`interpelles` : nom ou métier), sinon `dernier` ; un PNJ questionné par un autre répond juste

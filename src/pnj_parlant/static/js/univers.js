@@ -141,7 +141,9 @@ const pluriel = (n, mot, s = "s") => `${n} ${mot}${n > 1 ? s : ""}`;
 // Message après un import : r = réponse de /api/scenario/import ou /api/exemples/<id>
 export function resumeImport(r) {
   const parties = [pluriel(r.lieux, "lieu", "x"), pluriel(r.pnj, "PNJ", "")];
-  let texte = `Univers chargé : ${parties.join(" et ")}${r.scenario ? "" : ", sans texte d’univers"}.`;
+  if (r.aventuriers) parties.push(pluriel(r.aventuriers, "aventurier", "s"));  // facultatifs : cités s'il y en a
+  const liste = parties.length > 2 ? `${parties.slice(0, -1).join(", ")} et ${parties.at(-1)}` : parties.join(" et ");
+  let texte = `Univers chargé : ${liste}${r.scenario ? "" : ", sans texte d’univers"}.`;
   if (r.ignores?.length) texte += ` Fichiers ignorés : ${r.ignores.join(", ")}.`;
   return texte;
 }

@@ -119,7 +119,7 @@ def test_export_puis_import_dans_une_autre_banque(banque, tmp_path):
     assert noms == ["_lieux.json", "_scenario.json", "brom-0001.json"]
     autre = Banque(tmp_path / "autre")
     r = autre.importer(lire_zip(archive))
-    assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
+    assert r == {"scenario": True, "lieux": 1, "pnj": 1, "aventuriers": 0, "ignores": []}
     assert autre.scenario() == banque.scenario() and autre.lieux() == banque.lieux()
     assert autre.lire("brom-0001")["nom"] == "Brom"
 

@@ -2,7 +2,8 @@
 Création d'un PNJ et répliques des PNJ (ouvertes à tous les appareils : c'est la partie).
 
     POST /api/npc/generate            crée une fiche de PNJ {role, nom, genre, consignes, lieu}
-    POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu} (NDJSON, phrase par phrase)
+    POST /api/npc/talk                réplique d'un PNJ {npc, presents, history, lieu, longueur, aventurier}
+                                      (NDJSON, phrase par phrase ; aventurier : fiche du personnage joué, facultatif)
 """
 import json
 import logging
@@ -10,6 +11,7 @@ import logging
 from flask import Blueprint, Response, jsonify
 
 from .. import dialogue
+from ..aventuriers import normaliser
 from ..moteurs import MoteurIndisponible
 from .entrees import chaine, contexte, corps, erreur, fiche_recue
 
@@ -55,18 +57,22 @@ def talk():
                    "long": max(ctx.phrases_max * 2, 6)}[longueur]
     lieux = ctx.banque.lieux()
     lieu = next((x for x in lieux if x["id"] == data.get("lieu")), None)  # lieu de la scène
-    system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, phrases_max, lieu, lieux)
+    # personnage joué (facultatif) : la fiche du navigateur, rien de secret
+    aventurier = normaliser(data["aventurier"]) if isinstance(data.get("aventurier"), dict) else None
+    aventurier = aventurier if aventurier and aventurier["nom"] else None
+    system = dialogue.consignes(npc, ctx.banque.scenario()["monde"], presents, phrases_max, lieu, lieux,
+                                aventurier, dialogue.a_des_jets(history))
     try:
         usage = {}
-        morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents),
-                                        dialogue.arrets(npc["nom"], presents), on_usage=usage.update,
+        morceaux = ctx.moteurs.replique(system, dialogue.messages(npc["nom"], history, presents, aventurier),
+                                        dialogue.arrets(npc["nom"], presents, aventurier), on_usage=usage.update,
                                         longueur=longueur)
     except MoteurIndisponible as e:
         return erreur(str(e), 503)
 
     def lignes():
         try:
-            for phrase in dialogue.repliques(morceaux, npc["nom"], presents, phrases_max):
+            for phrase in dialogue.repliques(morceaux, npc["nom"], presents, phrases_max, aventurier):
                 yield json.dumps({"phrase": phrase}, ensure_ascii=False) + "\n"
         except MoteurIndisponible as e:
             yield json.dumps({"error": str(e)}, ensure_ascii=False) + "\n"

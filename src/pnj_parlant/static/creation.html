@@ -8,10 +8,29 @@
 <link href="fonts/fonts.css" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
 <style>
-  /* Trois parties (« #scenario », « #lieux », « #pnj ») dans une seule page : rien n'est perdu en passant
-     de l'une à l'autre ; un point signale une partie qui a des modifications non enregistrées. */
+  /* Cinq parties (« #scenario », « #lieux », « #pnj », « #aventuriers », « #apparence ») dans une seule page : rien
+     n'est perdu en passant de l'une à l'autre ; un point signale une partie qui a des modifications non enregistrées. */
   body:not([data-section=scenario]) #section-scenario, body:not([data-section=lieux]) #section-lieux,
-  body:not([data-section=pnj]) #section-pnj, body:not([data-section=apparence]) #section-apparence { display: none; }
+  body:not([data-section=pnj]) #section-pnj, body:not([data-section=apparence]) #section-apparence,
+  body:not([data-section=aventuriers]) #section-aventuriers { display: none; }
+  /* Aventuriers : caractéristiques, compétences (D&D) et capacités (COF), en grilles */
+  .stats { display: grid; gap: .5rem 1.25rem; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); margin-top: .6rem; }
+  .stats.competences { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+  label.stat { display: flex; align-items: center; gap: .5rem; margin: 0; font-weight: 400; }
+  .stat > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .stat > span small { color: var(--muted); }
+  .stat input[type=number] { width: 4.2rem; flex: none; }
+  .stat select { width: 7.5rem; flex: none; padding: .25rem .4rem; }
+  .stat output { min-width: 2.4rem; text-align: right; color: var(--glass); font-weight: 500; }
+  .stat-sup { display: flex; align-items: center; gap: .3rem; margin: 0; font-weight: 400; color: var(--muted); font-size: .85rem; }
+  .capacite { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; }
+  .capacite input[type=text] { flex: 1 1 10rem; min-width: 0; }
+  .capacite input[type=number] { width: 4.2rem; }
+  .capacite output { min-width: 2.4rem; color: var(--glass); font-weight: 500; }
+  .sheet #avStats .sous-titre { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.4rem; }
+  .sous-titre small { font: 400 .9rem var(--body); color: var(--muted); }
+  #avPortraitVide { font: 400 4rem var(--display); color: var(--line); }
+  #avPortraitVide[hidden] { display: none; }
   .sections { display: flex; gap: .25rem; margin: -.5rem 0 1.5rem; border-bottom: 1px solid var(--line);
               overflow-x: auto; scrollbar-width: none; }
   .sections a { display: flex; align-items: center; gap: .45rem; padding: .55rem 1.1rem; white-space: nowrap;
@@ -183,6 +202,7 @@
     <a href="#scenario" data-section="scenario">Scénario <i class="modif" title="Modifications non enregistrées"><span class="sr-only">(modifications non enregistrées)</span></i></a>
     <a href="#lieux" data-section="lieux">Lieux <span class="nb" id="nbLieux"></span><i class="modif" title="Modifications non enregistrées"><span class="sr-only">(modifications non enregistrées)</span></i></a>
     <a href="#pnj" data-section="pnj">PNJ <span class="nb" id="nbPnj"></span><i class="modif" title="Modifications non enregistrées"><span class="sr-only">(modifications non enregistrées)</span></i></a>
+    <a href="#aventuriers" data-section="aventuriers">Aventuriers <span class="nb" id="nbAventuriers"></span><i class="modif" title="Modifications non enregistrées"><span class="sr-only">(modifications non enregistrées)</span></i></a>
     <a href="#apparence" data-section="apparence">Apparence <i class="modif" title="Modifications non enregistrées"><span class="sr-only">(modifications non enregistrées)</span></i></a>
   </nav>
 
@@ -204,7 +224,7 @@
       <div class="pile">
         <section class="carte">
           <h2>Partager l’univers</h2>
-          <p class="hint">Scénario, apparence (thèmes et styles), lieux, PNJ de la banque et leurs portraits, dans un seul fichier zip.</p>
+          <p class="hint">Scénario, apparence (thèmes et styles), lieux, PNJ de la banque, aventuriers et leurs portraits, dans un seul fichier zip.</p>
           <div class="actions">
             <button id="exportUniversBtn">Exporter l’univers</button>
           </div>
@@ -387,6 +407,56 @@
           </div>
         </section>
       </div>
+    </div>
+  </section>
+
+  <!-- Aventuriers : les personnages des joueurs (facultatifs) -->
+  <section id="section-aventuriers" aria-label="Aventuriers">
+    <div class="colonnes-pnj">
+      <aside class="carte liste-pnj" aria-label="Aventuriers de l’univers">
+        <div class="tete">
+          <h2>Aventuriers</h2>
+          <button class="petit" id="avNouveauBtn">Nouvel aventurier</button>
+        </div>
+        <p class="hint">Les personnages des joueurs, facultatifs. Dans la partie, chacun choisit le sien (« Vous jouez ») ; sans aventurier, le joueur reste « le voyageur ».</p>
+        <ul class="bank-list" id="avListe"></ul>
+      </aside>
+
+      <section class="carte sheet" aria-labelledby="avTitre">
+        <h2 id="avTitre">Nouvel aventurier</h2>
+        <h3 class="sous-titre">Identité</h3>
+        <div class="identite">
+          <div class="grid2">
+            <div><label for="av-nom">Nom</label><input type="text" id="av-nom" maxlength="80"></div>
+            <div><label for="av-classe">Classe, profil, peuple <small>(facultatif)</small></label>
+              <input type="text" id="av-classe" maxlength="120" placeholder="Ex. paladin humain"></div>
+            <div><label for="av-genre">Genre</label>
+              <select id="av-genre"><option value="">Non précisé</option><option value="feminin">Féminin</option>
+                <option value="masculin">Masculin</option><option value="neutre">Neutre</option></select></div>
+          </div>
+          <figure class="portrait" id="avPortraitBloc" hidden>
+            <div class="cadre"><img id="avPortraitImg" alt="" hidden><span id="avPortraitVide" aria-hidden="true">?</span></div>
+            <figcaption>
+              <button class="petit" id="avPortraitBtn">Générer le portrait</button>
+              <button class="ghost petit" id="avPortraitSuppr" hidden>Retirer</button>
+              <small id="avPortraitStatus"></small>
+            </figcaption>
+          </figure>
+        </div>
+        <label for="av-apparence">Apparence <small>— ce que voient les PNJ, et la base de son portrait</small></label>
+        <textarea id="av-apparence" rows="2" maxlength="600" placeholder="Ex. : Grand, cheveux blonds en bataille, armure cabossée, un sourire franc."></textarea>
+        <h3 class="sous-titre">Caractéristiques</h3>
+        <p class="hint">Facultatives. Les PNJ ne voient jamais les chiffres : seulement ce qui se remarque (une force impressionnante, un charisme saisissant, un talent pour convaincre). Elles donnent aussi les bonus des jets de dés de la partie.</p>
+        <div class="grid2">
+          <div><label for="av-systeme">Système de jeu</label><select id="av-systeme"><option value="">Aucun</option></select></div>
+          <div id="avNiveauBloc" hidden><label for="av-niveau">Niveau</label><input type="number" id="av-niveau" min="1" max="20" value="1"></div>
+        </div>
+        <div id="avStats"></div>
+        <div class="actions collante">
+          <button id="avEnregistrerBtn">Enregistrer l’aventurier</button>
+          <span class="status" id="avStatus"></span>
+        </div>
+      </section>
     </div>
   </section>
 </main>

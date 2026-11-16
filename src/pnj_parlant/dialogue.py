@@ -7,8 +7,13 @@ Le serveur ne garde rien : le navigateur envoie toute la scène à chaque répli
 salutations comprises. Chaque PNJ y voit ses répliques comme les siennes (rôle « assistant ») et celles
 des autres comme des paroles entendues (rôle « user »), précédées du nom de leur auteur quand ils sont
 plusieurs.
+
+Le joueur peut jouer un aventurier (aventuriers.py, facultatif) : le PNJ voit alors son apparence et ce qui se
+remarque de ses caractéristiques, et dit « la voyageuse » pour une aventurière. Ses jets de dés arrivent dans la
+scène comme une réplique du joueur entre parenthèses : « (Jet de Persuasion : bon résultat.) ».
 """
 from . import texte
+from .aventuriers import mots, portrait_pour_le_pnj
 from .fiches import liste_des_lieux
 
 VOYAGEUR = "Voyageur"
@@ -18,7 +23,7 @@ PHRASES_MAX = 3  # par réplique, réglable dans [dialogue] phrases_max de confi
 PNJ_MAX = 3      # PNJ en scène (celui qui parle compris), réglable dans [dialogue] pnj_max de config.toml
 
 
-def situation(npc, lieu=None, lieux=()):
+def situation(npc, lieu=None, lieux=(), joueur="le voyageur"):
     """Où se trouve le PNJ, et s'il est loin de son lieu habituel (il accompagne le voyageur)."""
     if not lieu:
         return ""
@@ -27,14 +32,18 @@ def situation(npc, lieu=None, lieux=()):
         texte_lieu += f" {lieu['description']}"
     habituel = next((lieu for lieu in lieux if lieu["id"] == npc.get("lieu")), None)
     if habituel and habituel["id"] != lieu["id"]:
-        texte_lieu += f"\nCe n'est pas ton lieu habituel ({habituel['nom']}) : tu accompagnes le voyageur."
+        texte_lieu += f"\nCe n'est pas ton lieu habituel ({habituel['nom']}) : tu accompagnes {joueur}."
     return texte_lieu + "\n"
 
 
-def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, lieux=()):
+def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, lieux=(), aventurier=None,
+              des=False):
     """Prompt système du PNJ : sa fiche, l'univers et les lieux connus de tous, le lieu où il se trouve,
-    les autres PNJ présents. Jamais les notes du MJ (elles peuvent contenir l'intrigue), ni celles des
+    les autres PNJ présents, l'aventurier joué (fiche normalisée, facultatif) et la règle des jets de dés quand la
+    scène en contient (`des`). Jamais les notes du MJ (elles peuvent contenir l'intrigue), ni celles des
     lieux, ni le secret des autres PNJ."""
+    m = mots(aventurier)
+    joueur = m["le"]
     infos = "\n".join(f"- {c}" for c in npc.get("connaissances", []))
     connus = f"Les lieux que tout habitant connaît :\n{liste_des_lieux(lieux)}\n" if lieux else ""
     longueur = ("une phrase courte" if phrases_max == 1 else
@@ -44,10 +53,10 @@ def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, li
     if presents:
         autres = "\n".join(f"- {p.get('nom')}, {p.get('metier')}. {p.get('apparence', '')}" for p in presents)
         scene = f"""
-- Tu n'es pas seul avec le voyageur. Sont aussi présents :
+- Tu n'es pas seul avec {joueur}. Sont aussi présents :
 {autres}
-  Tu entends leurs paroles précédées de leur nom (« {presents[0].get('nom')} : … ») et celles du voyageur
-  précédées de « {VOYAGEUR} : ». Tu peux t'adresser à eux, les taquiner ou les contredire, selon ta personnalité.
+  Tu entends leurs paroles précédées de leur nom (« {presents[0].get('nom')} : … ») et celles de {joueur}
+  précédées de « {m['etiquette']} : ». Tu peux t'adresser à eux, les taquiner ou les contredire, selon ta personnalité.
   Mais tu n'écris que TA réplique : jamais celle d'un autre, jamais un nom suivi de deux-points.
   Si tu poses une question à quelqu'un, arrête-toi là : il répondra lui-même."""
     univers = (f"""Ce que tout habitant sait du monde :
@@ -55,20 +64,37 @@ def consignes(npc, monde="", presents=(), phrases_max=PHRASES_MAX, lieu=None, li
 {monde}
 </univers>
 """ if monde else "")
+    vis_a_vis = portrait_pour_le_pnj(aventurier)
+    vis_a_vis = f"\n{vis_a_vis}\n" if vis_a_vis else ""
+    regle_des = "\n" + REGLE_DES.format(joueur=joueur) if des else ""
     return f"""{univers}{connus}Tu es {npc.get('nom')}, {npc.get('metier')}, dans un monde médiéval-fantastique.
 Apparence : {npc.get('apparence')}
 Personnalité : {npc.get('personnalite')} Humeur du jour : {npc.get('humeur')}.
 Ce que tu sais et peux révéler :
 {infos}
-Ton secret (ne le révèle que si le voyageur gagne vraiment ta confiance ou te paie bien) : {npc.get('secret')}
-{situation(npc, lieu, lieux)}
+Ton secret (ne le révèle que si {joueur} gagne vraiment ta confiance ou te paie bien) : {npc.get('secret')}
+{situation(npc, lieu, lieux, joueur)}{vis_a_vis}
 Règles :
 - Tes réponses sont LUES À VOIX HAUTE : {longueur}, langage parlé.
 - Aucun markdown, aucun emoji, aucune action entre astérisques.
 - Reste toujours dans ton personnage. Tu ne sais rien du monde réel moderne.
 - Ne cite aucun lieu, personnage, faction ou événement absent de l'univers, des lieux ci-dessus ou de ta fiche.
   Si on te demande quelque chose que tu ignores, dis-le à ta manière ou reste vague, sans inventer de nom propre.
-- Si c'est ton métier, tu peux proposer des marchandises avec des prix en pièces d'or ou d'argent.{scene}"""
+- Si c'est ton métier, tu peux proposer des marchandises avec des prix en pièces d'or ou d'argent.{regle_des}{scene}"""
+
+
+# Jets de dés du joueur (js/aventurier.js) : ils décident de l'issue de ce qu'il tente
+REGLE_DES = """- Une ligne entre parenthèses qui commence par « Jet de » ou « Jet d' » est un jet de dé de {joueur} :
+  il décide de l'issue de ce qui est tenté juste avant ou juste après. Plus le résultat est bon, plus c'est réussi : un
+  résultat moyen suffit pour une petite faveur, pas pour ton secret ; un échec critique se retourne contre
+  son auteur. Joue l'issue sans jamais parler du dé ni d'un chiffre."""
+MARQUE_JET = ("(Jet de ", "(Jet d'", "(Jet d’")  # « Jet de Force », « Jet d'Agilité »
+
+
+def a_des_jets(history):
+    """Vrai si la scène contient un jet de dé du joueur : la règle des jets s'ajoute alors aux consignes."""
+    return any(m.get("speaker") is None and str(m.get("content") or "").lstrip().startswith(MARQUE_JET)
+               for m in history)
 
 
 def nettoyer_historique(history, maximum):
@@ -78,13 +104,15 @@ def nettoyer_historique(history, maximum):
     return [m for m in history if isinstance(m, dict) and str(m.get("content") or "").strip()][-max(1, maximum):]
 
 
-def messages(nom, history, presents=()):
+def messages(nom, history, presents=(), aventurier=None):
     """La scène vue par le PNJ `nom`, au format des API de dialogue (rôles user / assistant alternés,
-    en commençant par « user »)."""
+    en commençant par « user »). Le joueur y est « Voyageur », ou « Voyageuse » pour une aventurière : le nom
+    de son aventurier, le PNJ ne l'apprend que s'il se présente."""
+    joueur = mots(aventurier)
     # À plusieurs (ou si un PNJ vient de quitter la scène), chacun doit savoir qui a parlé
     groupe = bool(presents) or any(m.get("speaker") not in (None, nom) for m in history)
     # L'API attend un premier message « user » : on met en scène l'arrivée du joueur.
-    resultat = [{"role": "user", "content": "(Un voyageur s'approche.)"}]
+    resultat = [{"role": "user", "content": f"({joueur['un'].capitalize()} s'approche.)"}]
     for m in history:
         contenu = str(m["content"]).strip()[:1000]
         if m.get("speaker") == nom:
@@ -92,13 +120,13 @@ def messages(nom, history, presents=()):
         else:
             role = "user"
             if groupe:
-                contenu = f"{m.get('speaker') or VOYAGEUR} : {contenu}"
+                contenu = f"{m.get('speaker') or joueur['etiquette']} : {contenu}"
         if resultat[-1]["role"] == role:  # fusionne les messages consécutifs du même rôle
             resultat[-1]["content"] += "\n" + contenu
         else:
             resultat.append({"role": role, "content": contenu})
     if resultat[-1]["role"] == "assistant":  # le PNJ reprend la parole après lui-même
-        resultat.append({"role": "user", "content": "(Le voyageur attend la suite.)"})
+        resultat.append({"role": "user", "content": f"({joueur['le'].capitalize()} attend la suite.)"})
     if groupe:  # rappel juste avant la réponse : c'est là qu'un petit modèle y fait le plus attention
         resultat[-1]["content"] += f"\n({RAPPEL.format(nom=nom)})"
     return resultat
@@ -106,25 +134,31 @@ def messages(nom, history, presents=()):
 
 RAPPEL = "Réponds seulement en tant que {nom}, sans écrire de nom suivi de deux-points."
 # Étiquettes qui, en début de phrase, annoncent que le modèle fait parler quelqu'un d'autre
-AUTRES_LOCUTEURS = [VOYAGEUR, "Le voyageur", "Nom"]
+AUTRES_LOCUTEURS = [VOYAGEUR, "Voyageuse", "Le voyageur", "La voyageuse", "Nom"]
 
 
-def arrets(nom, presents=()):
+def _autres(nom, presents, aventurier):
+    """Étiquettes des autres locuteurs que le PNJ `nom` : PNJ présents, joueur (et le nom de son aventurier)."""
+    joueur = (aventurier or {}).get("nom")
+    return [p["nom"] for p in presents] + AUTRES_LOCUTEURS + ([joueur] if joueur and joueur != nom else [])
+
+
+def arrets(nom, presents=(), aventurier=None):
     """Séquences d'arrêt pour le modèle (option `stop` d'Ollama, `stop_sequences` de Claude) : la génération
     s'arrête net dès que le modèle annonce un autre locuteur (« Léonard : », « Voyageur: », « Nom : »),
     sans attendre qu'il ait écrit toute la réplique de l'autre. Le filtre de repliques() reste le filet de
     sécurité pour les variantes que ces textes exacts ne couvrent pas."""
     miennes = {e.lower() for e in texte.etiquettes([nom])}
-    autres = [e for e in texte.etiquettes([p["nom"] for p in presents] + AUTRES_LOCUTEURS)
+    autres = [e for e in texte.etiquettes(_autres(nom, presents, aventurier))
               if e.lower() not in miennes]  # deux PNJ peuvent partager un prénom
     return [f"{e}{deux_points}" for e in autres for deux_points in (" :", ":")]
 
 
-def repliques(morceaux, nom, presents=(), phrases_max=PHRASES_MAX):
+def repliques(morceaux, nom, presents=(), phrases_max=PHRASES_MAX, aventurier=None):
     """Phrases de la réponse du PNJ `nom`, nettoyées et prêtes à être lues, au fil de l'écriture du modèle.
     S'arrête si le modèle se met à écrire la réplique d'un autre (« Brom : … », « Voyageur : … »), ou après
     `phrases_max` phrases : un petit modèle ne respecte pas toujours la longueur demandée."""
-    autres = [p["nom"] for p in presents] + AUTRES_LOCUTEURS
+    autres = _autres(nom, presents, aventurier)
     try:
         sien = texte.sans_autres_locuteurs(morceaux, nom, autres)  # sans les répliques des autres
         for phrase in texte.phrases(texte.limiter_phrases(sien, phrases_max)):

@@ -62,8 +62,15 @@ class TestArrets:
         assert "Jean le Forgeron :" in arrets and "Jean :" not in arrets
 
     def test_seul_avec_le_voyageur(self):
-        assert dialogue.arrets("Ysolde") == [
-            "Le voyageur :", "Le voyageur:", "Voyageur :", "Voyageur:", "Nom :", "Nom:"]
+        assert set(dialogue.arrets("Ysolde")) == {
+            "Le voyageur :", "Le voyageur:", "Voyageur :", "Voyageur:", "La voyageuse :", "La voyageuse:",
+            "Voyageuse :", "Voyageuse:", "Nom :", "Nom:"}
+
+    def test_nom_de_l_aventurier(self):
+        """Le modèle qui écrit la réplique du joueur sous le nom de son aventurier est arrêté aussi."""
+        arrets = dialogue.arrets("Ysolde", aventurier={"nom": "Aldric"})
+        assert "Aldric :" in arrets and "Aldric:" in arrets
+        assert "Ysolde :" not in dialogue.arrets("Ysolde", aventurier={"nom": "Ysolde"})
 
 
 def test_nettoyer_historique_garde_les_derniers_messages_valides():

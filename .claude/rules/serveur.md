@@ -7,6 +7,7 @@ paths:
   - "src/pnj_parlant/fiches.py"
   - "src/pnj_parlant/moteurs.py"
   - "src/pnj_parlant/banque.py"
+  - "src/pnj_parlant/aventuriers.py"
   - "src/pnj_parlant/portraits.py"
   - "src/pnj_parlant/reglages.py"
   - "src/pnj_parlant/config.py"
@@ -19,6 +20,7 @@ paths:
   - "tests/test_fiches.py"
   - "tests/test_moteurs.py"
   - "tests/test_banque.py"
+  - "tests/test_aventuriers.py"
   - "tests/test_portraits.py"
   - "tests/test_reglages.py"
   - "tests/test_sante.py"
@@ -36,7 +38,8 @@ Serveur sans état : l'historique vit dans le navigateur.
   page `/`, `routes.enregistrer(app)`), lancement (`main`, `certificat`, `arreter`).
 - `routes/` : un Blueprint par domaine, au niveau du module (`bp`), liste dans `routes/__init__.py` (`BLUEPRINTS`) :
   `options` (config, etat, sante, acces, reglages), `univers` (scenario, styles, lieux, export, import, univers,
-  exemples ; `exemples()`, `EXEMPLES`), `pnj` (bank), `portraits`, `voix` (voice, voices, voice-engine, tts, stt),
+  exemples ; `exemples()`, `EXEMPLES`), `pnj` (bank), `portraits`, `aventuriers` (systemes, aventuriers et leur
+  portrait), `voix` (voice, voices, voice-engine, tts, stt),
   `dialogue` (npc/generate, npc/talk). Chaque route lit le contexte par `entrees.contexte()`
   (`current_app.extensions["pnj"]`).
 - `routes/entrees.py` : `contexte`, `erreur`, `EntreeInvalide`, `corps`, `chaine`, `fiche_recue`, `masquer`,
@@ -52,7 +55,8 @@ Serveur sans état : l'historique vit dans le navigateur.
 
 ## Accès à l'univers (décision D1) et tailles
 - Depuis le PC du serveur (`depuis_le_serveur()` de routes/acces.py : 127.0.0.1, ::1), rien n'est demandé. Ailleurs, toute écriture de
-  l'univers (décorateur `@mj` : PUT scénario, styles, lieux ; POST/PUT/DELETE banque ; POST/DELETE portrait ; import ;
+  l'univers (décorateur `@mj` : PUT scénario, styles, lieux ; POST/PUT/DELETE banque et aventuriers ; POST/DELETE
+  portrait (PNJ et aventurier) ; import ;
   export (il contient les secrets) ; exemples ; DELETE /api/univers ; PUT /api/voice-engine) demande le mot de passe
   du MJ dans l'en-tête `X-Mot-De-Passe-MJ` (encodé par `encodeURIComponent`, décodé par `mot_de_passe_recu`).
   Refus : 403 avec `mot_de_passe: true` si un mot de passe existe (la page peut le demander), sinon message « depuis
@@ -145,7 +149,30 @@ Serveur sans état : l'historique vit dans le navigateur.
   `GET /api/voices`, `GET|PUT /api/voice-engine` (page de création ; voir la règle voix).
 - `POST /api/tts {text, voice, narrateur, eviter}` : 503 en cas d'échec → le navigateur utilise `speechSynthesis`.
 - `POST /api/stt` (audio webm/opus + `indice`) : 404 si la reconnaissance locale est indisponible.
-- `POST /api/npc/talk {npc, presents, history, lieu, longueur}` : détaillé ci-dessous.
+- `POST /api/npc/talk {npc, presents, history, lieu, longueur, aventurier}` : détaillé ci-dessous.
+
+## Aventuriers (aventuriers.py, routes/aventuriers.py, facultatifs)
+- Personnages des joueurs ; sans eux (ou sans `aventurier` dans /api/npc/talk), tout reste comme avant : le joueur est
+  « le voyageur » (test `test_dialogue_sans_aventurier_inchange`).
+- Fiche `normaliser(av)` : `nom`, `classe` (texte libre), `apparence`, `genre`, `systeme` ("" | `dnd5` | `cof2`),
+  `niveau`, `caracteristiques`, `maitrises` (D&D : 1 maîtrise, 2 expertise), `superieures` et `capacites`
+  `[{nom, carac, bonus}]` (COF) ; valeurs bornées par `SYSTEMES`, champs inconnus retirés (id, portrait, jets).
+  D&D 5e : scores, modificateur `(s - 10) // 2`, `bonus_de_maitrise(niveau)`, 18 compétences ; COF 2e (guide officiel
+  du système) : 7 caractéristiques (AGI CON FOR PER CHA INT VOL) = bonus direct au d20, supérieure = dé bonus.
+- `jets(av)` → `[{id (car:/comp:/cap:), nom, groupe, carac, bonus, avantage}]` : bonus calculés au serveur (le
+  navigateur ne fait que lancer le dé ; `apercuBonus` de js/aventurier.js n'est qu'un aperçu dans la fiche).
+- `portrait_pour_le_pnj(av)` : ce que perçoit le PNJ, jamais de chiffre : apparence, classe, allure (`ALLURE`,
+  modificateur ≤ -1 ou ≥ 3), talents sociaux (compétences `sociales` de D&D et capacités de COF : doué ≥ 5,
+  remarquable ≥ 8, piètre < 0), et son nom avec consigne de ne s'en servir qu'une fois présenté. `mots(av)` :
+  « Voyageur / le voyageur / un voyageur », au féminin pour une aventurière.
+- Stockage (banque.py) : `pnj/_aventurier-<id>.json` + portrait `_aventurier-<id>.png` (préfixe `AVENTURIER` : le
+  « _ » les tient hors de `liste()`, et une ancienne version les ignore à l'import) ; `aventuriers()`,
+  `lire_aventurier`, `ecrire_aventurier`, `ajouter_aventurier` (`AVENTURIERS_MAX` = 50), `supprimer_aventurier` ;
+  méthodes de portrait avec `prefixe=AVENTURIER`. Exportés, importés (fichier renommé → nouvel id, portrait qui
+  suit sa fiche, `remplacer` supprime les absents, résultat `aventuriers`), supprimés par `vider`.
+- Routes : `GET /api/systemes` (catalogue pour le formulaire), `GET|POST /api/aventuriers` (liste avec `jets`),
+  `GET|PUT|DELETE /api/aventuriers/<id>`, `GET|POST|DELETE /api/aventuriers/<id>/portrait` (prompt d'après genre,
+  classe en guise de métier, apparence). Écritures sous `@mj`, lectures ouvertes (rien de secret).
 
 ## Réglages à chaud (reglages.py, page Options)
 - `CATALOGUE` : groupes (`id`, `titre`, `aide`, `si` = moteur de langage qui rend le groupe utile) de réglages
@@ -205,6 +232,10 @@ Serveur sans état : l'historique vit dans le navigateur.
   « Léonard : », « Voyageur: »… → `stop` d'Ollama, `stop_sequences` de Claude), puis en filet de sécurité
   `texte.sans_autres_locuteurs`, qui coupe le flux dès qu'une étiquette suit une fin de phrase ; la connexion au
   modèle est alors fermée.
+- `aventurier` (fiche du navigateur, passée par `normaliser` ; ignorée sans nom) : `consignes(…, aventurier, des)`
+  ajoute `portrait_pour_le_pnj` et dit « la voyageuse » si besoin ; `messages` et `arrets`/`repliques` (le nom de
+  l'aventurier devient une étiquette d'un autre locuteur) le reçoivent aussi. Jets de dés : une ligne du joueur
+  `(Jet de … : appréciation.)` ou `(Jet d'…)` dans `history` ; `a_des_jets(history)` ajoute `REGLE_DES` aux consignes.
 - `longueur` : `short` (1 phrase), `normal` (`[dialogue] phrases_max`, 3), `long` (×2, 6 au moins) ;
   `texte.limiter_phrases` coupe au-delà (les descriptions entre parenthèses ne comptent pas).
 - Réponse NDJSON : une ligne `{"phrase": ...}` par phrase complète, `{"usage": {input_tokens, output_tokens}}`,

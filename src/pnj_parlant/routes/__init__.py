@@ -6,12 +6,13 @@ les écritures de l'univers passent par le décorateur `acces.mj` (mot de passe 
     univers     /api/scenario (+ export, import), /api/styles, /api/lieux, /api/univers, /api/exemples
     pnj         /api/bank, /api/bank/<id>
     portraits   /api/bank/<id>/portrait
+    aventuriers /api/systemes, /api/aventuriers, /api/aventuriers/<id> (+ portrait)
     voix        /api/voice, /api/voices, /api/voice-engine, /api/tts, /api/stt
     dialogue    /api/npc/generate, /api/npc/talk
 """
-from . import dialogue, options, pnj, portraits, univers, voix
+from . import aventuriers, dialogue, options, pnj, portraits, univers, voix
 
-BLUEPRINTS = [m.bp for m in (options, univers, pnj, portraits, voix, dialogue)]
+BLUEPRINTS = [m.bp for m in (options, univers, pnj, portraits, aventuriers, voix, dialogue)]
 
 
 def enregistrer(app):

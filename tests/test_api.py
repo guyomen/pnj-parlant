@@ -32,6 +32,10 @@ class TestPages:
             ("/api/bank/<npc_id>", "GET"), ("/api/bank/<npc_id>", "PUT"), ("/api/bank/<npc_id>", "DELETE"),
             ("/api/bank/<npc_id>/portrait", "GET"), ("/api/bank/<npc_id>/portrait", "POST"),
             ("/api/bank/<npc_id>/portrait", "DELETE"),
+            ("/api/systemes", "GET"), ("/api/aventuriers", "GET"), ("/api/aventuriers", "POST"),
+            ("/api/aventuriers/<av_id>", "GET"), ("/api/aventuriers/<av_id>", "PUT"),
+            ("/api/aventuriers/<av_id>", "DELETE"), ("/api/aventuriers/<av_id>/portrait", "GET"),
+            ("/api/aventuriers/<av_id>/portrait", "POST"), ("/api/aventuriers/<av_id>/portrait", "DELETE"),
             ("/api/voice", "POST"), ("/api/voices", "GET"), ("/api/voice-engine", "GET"),
             ("/api/voice-engine", "PUT"), ("/api/tts", "POST"), ("/api/stt", "POST"),
         }
@@ -47,6 +51,8 @@ class TestPages:
             ("/api/scenario/import", "POST"), ("/api/univers", "DELETE"), ("/api/exemples/<exemple_id>", "POST"),
             ("/api/bank", "POST"), ("/api/bank/<npc_id>", "PUT"), ("/api/bank/<npc_id>", "DELETE"),
             ("/api/bank/<npc_id>/portrait", "POST"), ("/api/bank/<npc_id>/portrait", "DELETE"),
+            ("/api/aventuriers", "POST"), ("/api/aventuriers/<av_id>", "PUT"), ("/api/aventuriers/<av_id>", "DELETE"),
+            ("/api/aventuriers/<av_id>/portrait", "POST"), ("/api/aventuriers/<av_id>/portrait", "DELETE"),
             ("/api/voice-engine", "PUT"),
         }
 
@@ -132,7 +138,7 @@ class TestUnivers:
         client.delete(f"/api/bank/{ysolde}")
         r = client.post("/api/scenario/import", data={"fichiers": (io.BytesIO(archive), "univers.zip")},
                         content_type="multipart/form-data").get_json()
-        assert r == {"scenario": True, "lieux": 1, "pnj": 1, "ignores": []}
+        assert r == {"scenario": True, "lieux": 1, "pnj": 1, "aventuriers": 0, "ignores": []}
         assert client.get(f"/api/bank/{ysolde}").get_json()["nom"] == "Ysolde"
 
     def test_import_des_fichiers_d_un_dossier_en_gardant_les_pnj(self, client):

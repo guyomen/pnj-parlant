@@ -24,6 +24,8 @@ export function etatControles(e) {
       entreeBtn: b || !scene || plein,
       discuterBtn: b,
       modeleSel: b || !e.modeleModifiable,
+      jetBtn: b || !scene,  // un jet de dé s'adresse aux PNJ de la scène
+      aventurierSel: b,
     },
     cache: {
       addBtn: !e.multi,

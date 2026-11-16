@@ -20,7 +20,9 @@ src/pnj_parlant/
   serveur.py         # Flask : Contexte (moteurs, banque, réglages à chaud, santé), create_app(cfg, moteurs=, tts=,
                      # reconnaissance=) (plafonds, erreurs JSON) + main() (Ctrl+C, HTTPS)
   routes/            # API, un Blueprint par domaine (ctx = entrees.contexte()) : options, univers, pnj, portraits,
-                     # voix, dialogue ; acces.py (mot de passe du MJ, @mj), entrees.py (corps(), erreur(), tailles)
+                     # aventuriers, voix, dialogue ; acces.py (mot de passe du MJ, @mj), entrees.py (corps(), erreur(), tailles)
+  aventuriers.py     # personnages des joueurs (facultatifs) : systèmes D&D 5e / COF 2e, fiche, bonus des jets,
+                     # ce qu'en perçoit le PNJ (sans chiffres)
   config.py          # config.toml du dossier courant, PNJ_CONFIG ou --config
   dependances.py     # dépendances absentes du .venv (lancer.bat)
   fiches.py          # création des fiches (prompt, schéma JSON, tirages au sort)
@@ -30,13 +32,15 @@ src/pnj_parlant/
   reglages.py        # réglages de la page Options : catalogue, validation, écriture de config.toml (tomlkit)
   voix.py, stt.py    # synthèse (Pocket TTS, Piper, Edge) ; reconnaissance (faster-whisper)
   portraits.py       # portraits des PNJ (facultatif) : SD-Turbo local (diffusers) ou Pollinations en ligne
-  banque.py          # banque de PNJ, scénario et lieux (JSON dans pnj/)
+  banque.py          # banque de PNJ, scénario, lieux et aventuriers (JSON dans pnj/)
   systeme.py         # état GPU et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
-  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, apparence), style.css (thèmes)
+  static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, aventuriers, apparence),
+                     # style.css (thèmes)
                      # js/ : jeu.js + options.js (index.html), creation.js : DOM, relient la page aux modules testés
                      # sans navigateur : scene.js, partie.js (état de la partie), tours.js (qui parle), controles.js,
-                     # micro.js, fiche.js, apparence.js, univers.js (univers, thèmes), api.js (requêtes, NDJSON),
+                     # micro.js, fiche.js, apparence.js, univers.js (univers, thèmes), aventurier.js (jets de dés),
+                     # api.js (requêtes, NDJSON),
                      # bandeau.js (alertes) ; tete.js (script classique du <head> : thème sans flash)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)

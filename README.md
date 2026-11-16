@@ -48,7 +48,7 @@ L'**accueil** (http://localhost:5000) propose trois entrées :
 - **Discuter avec un PNJ** : un PNJ de l'univers au hasard, ou un PNJ inventé par le modèle d'après un métier.
 - **Créer son univers** : la page de préparation (voir plus bas).
 
-**Nouvelle table**, à côté du résumé de l'univers, repart de zéro : le texte de l'univers, son thème, les lieux, les PNJ de la banque et la conversation en cours sont supprimés (après confirmation ; exportez d'abord l'univers pour le garder).
+**Nouvelle table**, à côté du résumé de l'univers, repart de zéro : le texte de l'univers, son thème, les lieux, les PNJ de la banque, les aventuriers et la conversation en cours sont supprimés (après confirmation ; exportez d'abord l'univers pour le garder).
 
 **Bandeau d'alertes** : sous la barre du haut, sur toutes les pages, un bandeau signale ce qui ne marche pas alors que le serveur tourne, avec la marche à suivre : paquet absent (tomlkit, moteur de voix, faster-whisper, option portraits), voix ou modèle Whisper manquants, Ollama ou LM Studio arrêtés, modèle local absent, clé API Claude manquante. Il affiche aussi les erreurs en cours de route : serveur injoignable, moteur indisponible pendant une réplique ou une création, micro refusé, synthèse vocale du serveur en échec (la voix du navigateur prend le relais). Les mêmes problèmes s'affichent dans la console au démarrage. Chaque message se ferme d'un clic (×) ; un problème fermé ne revient pas avant la fermeture de l'onglet, sauf si son message change.
 
@@ -56,6 +56,8 @@ La barre du haut, la même sur toutes les pages, mène à l'accueil, à la **par
 
 Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisissez un PNJ de la banque et cliquez sur **Jouer**. Parlez-lui avec **Parler** (ou la barre d'espace, dans la partie), ou tapez votre question.
 
+- **Vous jouez** (en haut de la colonne de gauche, seulement si l'univers a des [aventuriers](#aventuriers-et-jets-de-dés-facultatifs)) : choisissez votre personnage, ou restez « un voyageur anonyme ». Le choix est gardé dans ce navigateur : chaque joueur choisit le sien sur son appareil.
+- **Jet** (avec un aventurier, option « Jets de dés ») : choisissez une caractéristique, une compétence ou une capacité, et éventuellement un dé bonus ou malus, puis **Lancer le dé**. Le résultat s'affiche dans la conversation et le PNJ en tient compte à sa prochaine réplique : dites ce que vous tentez (« Fais-moi confiance, je viens en ami »), avant ou après le jet.
 - **Stop** (ou Échap) fait taire le PNJ ; il ne se souvient que de ce qu'il a eu le temps de dire.
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
@@ -71,6 +73,7 @@ La page **Options** a trois parties (rubriques à gauche, en haut sur téléphon
 | Option de la partie | Effet |
 |---|---|
 | « Parler » interrompt le PNJ | Pendant qu'il parle, **Parler** lui coupe la parole et vous écoute aussitôt. Décochée : il faut attendre la fin ou cliquer sur Stop. |
+| Jets de dés | Activée par défaut, utile seulement quand vous jouez un aventurier : affiche la ligne **Jet** sous la conversation. |
 | Couper le PNJ dès que vous parlez | Désactivée par défaut. Le micro reste ouvert pendant que le PNJ parle : dès que vous parlez, il se tait et votre phrase devient la question. Prenez un casque : avec des haut-parleurs, la voix du PNJ peut le couper elle-même (surtout la voix de secours du navigateur). |
 | Plusieurs PNJ dans la scène | Jusqu'à 3 PNJ par défaut (**Ajouter à la scène**) ; `pnj_max` dans `[dialogue]` (ou la page Options) change cette limite, de 1 à 6. Au-delà de 3, les petits modèles locaux suivent mal une scène chargée (réponses plus lentes, PNJ qui se confondent) : un message le rappelle. Répond le PNJ que vous nommez (nom ou métier), sinon le dernier à avoir parlé ; un PNJ à qui un autre pose une question lui répond. **Laissez-les discuter** fait répondre un autre PNJ. |
 | Interventions spontanées | À plusieurs : un autre PNJ réagit parfois de lui-même (probabilité `intervention` dans `[dialogue]`). |
@@ -80,7 +83,7 @@ La page **Options** a trois parties (rubriques à gauche, en haut sur téléphon
 
 Ouvrez **http://localhost:5000/creation.html** (« Préparer l'univers » dans la barre du haut, ou « Créer son univers » sur l'accueil). La création passe par le moteur choisi dans `[moteurs] creation` (`"local"` par défaut, sur ce PC ; `"claude"` demande le réseau et une clé API) : si c'est Claude, faites-la avant de partir.
 
-La page a quatre onglets : **Scénario**, **Lieux**, **PNJ** (avec le nombre de lieux et de PNJ) et **Apparence**. Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
+La page a cinq onglets : **Scénario**, **Lieux**, **PNJ**, **Aventuriers** (avec le nombre de lieux, de PNJ et d'aventuriers) et **Apparence**. Rien n'est perdu en passant de l'un à l'autre ; un point rouge signale un onglet dont les modifications ne sont pas enregistrées.
 
 1. **Scénario** :
    - **Univers** : lieux, factions, personnages connus, événements. Connu de tous les PNJ, il est aussi transmis pendant les dialogues.
@@ -91,7 +94,24 @@ La page a quatre onglets : **Scénario**, **Lieux**, **PNJ** (avec le nombre de 
    - **Demander un PNJ au modèle** : métier, nom, genre (tous facultatifs) et son rôle dans le scénario. Claude propose une fiche qui ne cite que des noms présents dans le scénario ou vos consignes.
    - **La fiche**, par rubriques (identité, caractère, rôle dans le scénario, voix) : relisez-la, ajustez-la, écoutez sa voix (choisissez-en une autre si elle ne convient pas), puis **enregistrez-la dans la banque**. Cliquez sur un PNJ de la banque pour le modifier, sur ✕ pour le supprimer ; **Nouveau PNJ** repart d'une fiche vierge.
 
+4. **Aventuriers** : les personnages des joueurs, facultatifs (voir plus bas).
+
 Sur la page de jeu, choisissez un PNJ dans la banque et cliquez sur **Jouer** (voir [Jouer](#jouer)).
+
+### Aventuriers et jets de dés (facultatifs)
+
+Sans aventurier, rien ne change : le joueur est « le voyageur », et on peut discuter avec un PNJ au hasard dès l'accueil. L'onglet **Aventuriers** de la page de préparation décrit les personnages des joueurs :
+
+- **Nom**, **classe, profil, peuple** (texte libre, ex. « paladin humain »), **genre** et **apparence** : le PNJ voit l'apparence et l'allure, et parle de « la voyageuse » pour une aventurière. Il ne connaît le nom qu'une fois que l'aventurier s'est présenté. Un **portrait** se génère comme celui d'un PNJ (si un moteur de portraits est configuré).
+- **Système de jeu** (facultatif) :
+  - **Donjons & Dragons (5e édition)** : les six caractéristiques (scores, modificateur affiché à côté), le niveau (bonus de maîtrise) et les dix-huit compétences, chacune sans maîtrise, avec maîtrise ou avec expertise (maîtrise doublée).
+  - **Chroniques Oubliées Fantasy (2e édition)** : les sept caractéristiques (Agilité, Constitution, Force, Perception, Charisme, Intelligence, Volonté), dont la valeur est le bonus au d20 ; une caractéristique **supérieure** donne un dé bonus. Les **capacités** de vos voies (ex. « Baratin », Charisme, +5) deviennent des jets à part.
+
+Le PNJ ne voit jamais de chiffres : seulement ce qui se remarque (« d'une force impressionnante », « d'un charisme saisissant ») et les talents sociaux marquants (« doué en persuasion », « remarquable en intimidation », « piètre en tromperie »), dont il tient compte selon son caractère.
+
+En partie, le jet de dé est un d20 plus le bonus calculé par le serveur ; avec un dé bonus (avantage) on lance deux d20 et on garde le meilleur, avec un dé malus (désavantage) le pire. Le PNJ reçoit seulement une appréciation : réussite critique (20 naturel), excellent (20 et plus), bon (15 à 19), moyen (10 à 14), mauvais (5 à 9), très mauvais, ou échec critique (1 naturel). Le chiffre et le détail du dé s'affichent dans la conversation.
+
+Les aventuriers font partie de l'univers : ils sont exportés avec lui, et les créer ou les modifier depuis un autre appareil demande le mot de passe du MJ, comme le reste de la préparation.
 
 ### Lieux
 
@@ -107,7 +127,7 @@ En jeu, le menu **Lieu** indique où se passe la scène. Les PNJ qui s'y trouven
 case « Vous accompagne » est cochée ; on les retrouve là où on les a laissés. Chaque PNJ sait où il se trouve
 et connaît les lieux du scénario.
 
-Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, notes du MJ, thème et style de portrait choisis), `_lieux.json` pour les lieux, `_styles.json` pour les thèmes et styles créés ou modifiés pour l'univers, puis un fichier JSON par PNJ (et son portrait), lisibles et modifiables à la main.
+Tout est stocké dans `pnj/` : `_scenario.json` pour le scénario (univers, notes du MJ, thème et style de portrait choisis), `_lieux.json` pour les lieux, `_styles.json` pour les thèmes et styles créés ou modifiés pour l'univers, puis un fichier JSON par PNJ (et son portrait) et un par aventurier (`_aventurier-<id>.json`, et son portrait), lisibles et modifiables à la main.
 
 ### Apparence : thèmes et styles de portrait
 
@@ -120,7 +140,7 @@ Un thème ou un style prédéfini modifié peut être rétabli ; un thème ou un
 
 ### Partager un univers
 
-Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux et PNJ de la banque). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers » (si une conversation est en cours, il demande s'il faut l'effacer ; « Annuler » la garde). L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
+Dans l'onglet Scénario de la page de préparation, **Exporter l'univers** télécharge un zip (scénario, thème, lieux, PNJ de la banque et aventuriers). **Importer un zip** ou **Importer un dossier** (le même, décompressé) le recharge, ici ou sur un autre PC ; l'accueil fait de même avec « Charger un univers » (si une conversation est en cours, il demande s'il faut l'effacer ; « Annuler » la garde). L'import remplace l'univers, les lieux et les PNJ en place (exportez-les d'abord pour les garder), sauf si « Garder les PNJ actuels » est cochée : les PNJ importés s'ajoutent alors à la banque. L'import écrit d'abord les nouveaux fichiers et ne supprime les anciens PNJ qu'ensuite : une erreur de disque ne laisse pas la banque à moitié vide.
 
 ### Univers d'exemple : Pré-Novice
 
@@ -264,8 +284,10 @@ LICENSE                     GNU GPL 3.0 ou ultérieure
 src/pnj_parlant/
   serveur.py                application Flask : contexte (moteurs, banque, réglages à chaud), plafonds de taille, lancement
   routes/                   API, un Blueprint par domaine : options (config, état, réglages), univers (scénario, lieux,
-                            import/export), pnj (banque), portraits, voix (synthèse, reconnaissance), dialogue ;
-                            acces.py (mot de passe du MJ, @mj), entrees.py (corps JSON, erreurs, tailles)
+                            import/export), pnj (banque), portraits, aventuriers, voix (synthèse, reconnaissance),
+                            dialogue ; acces.py (mot de passe du MJ, @mj), entrees.py (corps JSON, erreurs, tailles)
+  aventuriers.py            personnages des joueurs : systèmes de jeu (D&D 5e, COF 2e), fiche, bonus des jets,
+                            ce qu'en perçoit le PNJ
   config.py                 lecture de config.toml (et son chemin, pour la page Options)
   dependances.py            dépendances manquantes dans .venv (lancer.bat)
   fiches.py                 création des fiches de PNJ
@@ -282,7 +304,8 @@ src/pnj_parlant/
   static/                   pages web : index.html (accueil, partie, options), creation.html, style.css ;
                             js/ : jeu.js, options.js, creation.js (relient chaque page à la logique), modules testés
                             sans navigateur (scene.js, partie.js, tours.js, controles.js, micro.js, fiche.js,
-                            apparence.js, univers.js, api.js, bandeau.js), tete.js (thème posé avant l'affichage) ;
+                            apparence.js, univers.js, aventurier.js, api.js, bandeau.js), tete.js (thème posé avant
+                            l'affichage) ;
                             fonts/ : Alegreya Sans et IM Fell English (SIL OFL 1.1, texte dans fonts/OFL.txt)
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)

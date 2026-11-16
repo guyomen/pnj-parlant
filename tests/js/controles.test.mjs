@@ -36,6 +36,13 @@ test("etatControles : « Parler » pendant que le PNJ parle seulement avec l'opt
   assert.equal(etat({}).desactive.micBtn, false);
 });
 
+test("etatControles : jet de dé seulement devant un PNJ, aventurier changé hors action", () => {
+  assert.equal(etat({}).desactive.jetBtn, false);
+  assert.equal(etat({ npcs: [] }).desactive.jetBtn, true);
+  assert.equal(etat({ npcs: [] }).desactive.aventurierSel, false);  // on choisit son aventurier avant la partie
+  assert.equal(etat({ busy: true }).desactive.aventurierSel, true);
+});
+
 test("etatControles : « Enregistrer » seulement s'il reste un PNJ hors de la banque", () => {
   assert.equal(etat({}).desactive.saveBtn, true);
   assert.equal(etat({ npcs: [YSOLDE, INVENTE] }).desactive.saveBtn, false);

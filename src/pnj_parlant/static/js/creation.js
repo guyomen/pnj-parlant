@@ -1,5 +1,6 @@
-// Page de préparation de l'univers (creation.html) : scénario, apparence, lieux, PNJ. La logique sans DOM est
-// dans js/fiche.js, js/apparence.js, js/univers.js et js/scene.js (testés) ; celui-ci relie la page à ces modules.
+// Page de préparation de l'univers (creation.html) : scénario, apparence, lieux, PNJ, aventuriers. La logique sans
+// DOM est dans js/fiche.js, js/apparence.js, js/univers.js, js/aventurier.js et js/scene.js (testés) ; celui-ci relie
+// la page à ces modules.
 import { adressePortrait, esc, parLieu } from "./scene.js";
 import { requete, retirer, signaler, verifierSante } from "./bandeau.js";
 import { api as appel, verifierAcces } from "./api.js";
@@ -9,6 +10,7 @@ import { CHAMPS_FICHE, corpsScenario, ficheDuFormulaire, initiale, secretMasque,
          voixDuGenre } from "./fiche.js";
 import { alertesPalettes, confirmationSuppression, editionDeTheme, libelleSuppression, mention, messageSuppression,
          palettesDuMode, portraitsPerso as persoDe, themeEdite as themeDuFormulaire } from "./apparence.js";
+import { apercuBonus, formaterBonus, portraitAventurier, resumeAventurier } from "./aventurier.js";
 const $ = (id) => document.getElementById(id);
 let current = {};     // PNJ en cours d'édition (id présent = déjà dans la banque)
 let dirty = false;    // modifications non enregistrées
@@ -31,7 +33,8 @@ function masquerChamp(champ, masque) {
 
 // --- Parties de la page : scénario (« #scenario »), lieux (« #lieux »), PNJ (« #pnj ») ---------
 function afficherSection() {
-  const section = { "#lieux": "lieux", "#pnj": "pnj", "#apparence": "apparence" }[location.hash] ?? "scenario";
+  const section = { "#lieux": "lieux", "#pnj": "pnj", "#aventuriers": "aventuriers", "#apparence": "apparence" }
+    [location.hash] ?? "scenario";
   document.body.dataset.section = section;
   for (const a of document.querySelectorAll(".sections a")) {
     if (a.dataset.section === section) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -42,7 +45,8 @@ afficherSection();
 
 // Un point sur l'onglet d'une partie qui a des modifications non enregistrées
 function majModifs() {
-  const modifs = { scenario: scenarioModifie(), lieux: lieuxDirty, pnj: dirty, apparence: apparenceModifiee() };
+  const modifs = { scenario: scenarioModifie(), lieux: lieuxDirty, pnj: dirty, apparence: apparenceModifiee(),
+                   aventuriers: avDirty };
   for (const a of document.querySelectorAll(".sections a")) a.classList.toggle("a-enregistrer", modifs[a.dataset.section]);
 }
 for (const type of ["input", "change", "click"]) document.addEventListener(type, () => queueMicrotask(majModifs));
@@ -450,8 +454,9 @@ for (const id of ["importZip", "importDossier"]) {
       const r = await importerFichiers(fichiers, $("garderPnj").checked);
       lieuxDirty = false;
       await chargerStyles();
-      await Promise.all([loadScenario(), loadLieux(), refreshBank()]);
+      await Promise.all([loadScenario(), loadLieux(), refreshBank(), chargerAventuriers()]);
       if (current.id && !bank.some(n => n.id === current.id)) delete current.id;  // fiche retirée de la banque
+      if (avCourant.id && !avListe.some(a => a.id === avCourant.id)) delete avCourant.id;
       $("universStatus").textContent = resumeImport(r);
     } catch (e) { $("universStatus").textContent = e.message; }
     majModifs();
@@ -581,6 +586,201 @@ $("bankList").onclick = async (e) => {
   } catch (err) { $("saveStatus").textContent = err.message; }
 };
 
+// --- Aventuriers (personnages des joueurs, facultatifs) ----------------------------------
+// Fiche : identité, apparence (vue par les PNJ), système de jeu facultatif (D&D 5e, COF 2e : /api/systemes) avec
+// caractéristiques, compétences (D&D) ou capacités (COF). Les bonus affichés sont un aperçu (apercuBonus) ;
+// ceux des jets de la partie viennent du serveur.
+let avListe = [];      // aventuriers enregistrés
+let avCourant = {};    // aventurier en cours d'édition (id présent = enregistré)
+let avDirty = false;
+let avPeinture = false; // portrait en cours de génération
+let systemes = {};
+
+async function chargerAventuriers() {
+  if (!Object.keys(systemes).length) {
+    systemes = await api("/api/systemes").catch(() => ({}));
+    $("av-systeme").innerHTML = `<option value="">Aucun (pas de caractéristiques)</option>`
+      + Object.entries(systemes).map(([id, s]) => `<option value="${esc(id)}">${esc(s.nom)}</option>`).join("");
+    $("av-systeme").value = systemes[avCourant.systeme] ? avCourant.systeme : "";
+    renderStats(avCourant);
+  }
+  avListe = await api("/api/aventuriers").catch(() => []);
+  renderAvListe();
+}
+
+const vignetteAv = (a) => a.portrait ? `<img class="mini" src="${portraitAventurier(a)}" alt="">`
+  : portraitsActifs ? `<span class="mini" aria-hidden="true">${esc(initiale(a.nom))}</span>` : "";
+function renderAvListe() {
+  $("nbAventuriers").textContent = avListe.length || "";
+  $("avListe").innerHTML = avListe.length ? avListe.map(a => `
+    <li class="${a.id === avCourant.id ? "current" : ""}">
+      <button class="who" data-edit="${esc(a.id)}">${vignetteAv(a)}<span class="txt">${esc(a.nom)}<small>${esc(resumeAventurier(a, systemes))}</small></span></button>
+      <button class="ghost suppr" data-del="${esc(a.id)}" aria-label="Supprimer ${esc(a.nom)}" title="Supprimer">✕</button>
+    </li>`).join("") : `<li class="vide">Aucun aventurier : les joueurs sont « le voyageur ».</li>`;
+}
+
+function remplirAv(av) {
+  avCourant = av;
+  for (const champ of ["nom", "classe", "genre", "apparence"]) $(`av-${champ}`).value = av[champ] ?? "";
+  $("av-systeme").value = systemes[av.systeme] ? av.systeme : "";
+  $("av-niveau").value = av.niveau ?? 1;
+  renderStats(av);
+  $("avTitre").textContent = av.id ? av.nom : "Nouvel aventurier";
+  $("avPortraitStatus").textContent = "";
+  majPortraitAv();
+  avDirty = false;
+  renderAvListe();
+  majModifs();
+}
+
+// Caractéristiques, puis compétences (D&D) ou capacités (COF), d'après le système choisi
+function renderStats(av) {
+  const sys = systemes[$("av-systeme").value];
+  $("avNiveauBloc").hidden = !sys;
+  if (!sys) { $("avStats").innerHTML = ""; return; }
+  const abrev = Object.fromEntries(sys.caracteristiques.map(c => [c.id, c.abrev]));
+  const caracs = sys.caracteristiques.map(c => `<div>
+    <label class="stat"><span>${esc(c.nom)}</span>
+      <input type="number" data-carac="${esc(c.id)}" min="${sys.min}" max="${sys.max}" aria-label="${esc(c.nom)}"
+             value="${esc(av.caracteristiques?.[c.id] ?? sys.defaut)}">
+      ${sys.scores ? `<output data-bonus-carac="${esc(c.id)}"></output>` : ""}</label>
+    ${sys.superieures ? `<label class="stat-sup"><input type="checkbox" data-sup="${esc(c.id)}"
+      ${av.superieures?.includes(c.id) ? "checked" : ""}> supérieure (dé bonus)</label>` : ""}</div>`).join("");
+  const maitrise = (id) => av.maitrises?.[id] ?? 0;
+  const competences = sys.competences.length ? `<h4 class="sous-titre">Compétences
+      <small>— bonus de maîtrise <output id="avMaitrise"></output></small></h4>
+    <div class="stats competences">${sys.competences.map(c => `<label class="stat"><span>${esc(c.nom)} <small>${esc(abrev[c.carac])}</small></span>
+      <select data-maitrise="${esc(c.id)}" aria-label="${esc(c.nom)}">
+        <option value="0">—</option><option value="1" ${maitrise(c.id) === 1 ? "selected" : ""}>Maîtrise</option>
+        <option value="2" ${maitrise(c.id) === 2 ? "selected" : ""}>Expertise</option></select>
+      <output data-bonus-comp="${esc(c.id)}"></output></label>`).join("")}</div>` : "";
+  const options = sys.caracteristiques.map(c => `<option value="${esc(c.id)}">${esc(c.abrev)}</option>`).join("");
+  const capacites = sys.capacites ? `<h4 class="sous-titre">Capacités</h4>
+    <p class="hint">Bonus de vos voies à certains tests, ex. « Baratin », Charisme, +5. Chacune devient un jet de la partie.</p>
+    ${(av.capacites ?? []).map((c, i) => `<div class="capacite">
+      <input type="text" data-cap-nom value="${esc(c.nom)}" maxlength="60" placeholder="Nom" aria-label="Nom de la capacité">
+      <select data-cap-carac aria-label="Caractéristique">${options.replace(`value="${esc(c.carac)}"`, `value="${esc(c.carac)}" selected`)}</select>
+      <input type="number" data-cap-bonus value="${esc(c.bonus ?? 0)}" min="-10" max="20" aria-label="Bonus">
+      <output data-bonus-cap="${i}"></output>
+      <button class="ghost petit" data-cap-suppr="${i}" aria-label="Retirer la capacité">✕</button></div>`).join("")}
+    <div class="actions"><button class="ghost petit" id="avAjoutCapacite">Ajouter une capacité</button></div>` : "";
+  $("avStats").innerHTML = `<div class="stats">${caracs}</div>${competences}${capacites}`;
+  majBonus();
+}
+
+// Fiche telle qu'elle est à l'écran
+function lireAv() {
+  const av = { nom: $("av-nom").value.trim(), classe: $("av-classe").value.trim(), apparence: $("av-apparence").value.trim(),
+               systeme: $("av-systeme").value };
+  if (avCourant.id) av.id = avCourant.id;
+  if ($("av-genre").value) av.genre = $("av-genre").value;
+  const sys = systemes[av.systeme];
+  if (!sys) return av;
+  const tous = (sel) => [...$("avStats").querySelectorAll(sel)];
+  av.niveau = Number($("av-niveau").value) || 1;
+  av.caracteristiques = Object.fromEntries(tous("[data-carac]").map(i =>
+    [i.dataset.carac, i.value === "" ? sys.defaut : Number(i.value)]));
+  av.maitrises = Object.fromEntries(tous("[data-maitrise]").filter(s => s.value !== "0").map(s => [s.dataset.maitrise, Number(s.value)]));
+  av.superieures = tous("[data-sup]:checked").map(c => c.dataset.sup);
+  av.capacites = tous(".capacite").map(r => ({ nom: r.querySelector("[data-cap-nom]").value.trim(),
+    carac: r.querySelector("[data-cap-carac]").value, bonus: Number(r.querySelector("[data-cap-bonus]").value) || 0 }));
+  return av;
+}
+
+// Bonus affichés à côté des valeurs (aperçu ; le serveur recalcule ceux des jets)
+function majBonus() {
+  const sys = systemes[$("av-systeme").value];
+  if (!sys) return;
+  const b = apercuBonus(lireAv(), sys);
+  for (const o of $("avStats").querySelectorAll("[data-bonus-carac]")) o.value = formaterBonus(b.caracs[o.dataset.bonusCarac]);
+  for (const o of $("avStats").querySelectorAll("[data-bonus-comp]")) o.value = formaterBonus(b.competences[o.dataset.bonusComp]);
+  for (const o of $("avStats").querySelectorAll("[data-bonus-cap]")) o.value = formaterBonus(b.capacites[Number(o.dataset.bonusCap)]);
+  if ($("avMaitrise")) $("avMaitrise").value = formaterBonus(b.maitrise);
+}
+
+const confirmerAbandonAv = () => !avDirty || confirm("Les modifications de l’aventurier en cours seront perdues. Continuer ?");
+
+async function enregistrerAv() {
+  const av = lireAv();
+  if (!av.nom) { $("avStatus").textContent = "Il faut au moins un nom."; return; }
+  try {
+    const { id } = av.id ? await api(`/api/aventuriers/${encodeURIComponent(av.id)}`, av, "PUT")
+                         : await api("/api/aventuriers", av);
+    await chargerAventuriers();
+    remplirAv(avListe.find(a => a.id === id) ?? await api(`/api/aventuriers/${encodeURIComponent(id)}`));
+    $("avStatus").textContent = `${av.nom} est enregistré.`;
+  } catch (e) { $("avStatus").textContent = e.message; }
+}
+
+// Portrait : comme celui d'un PNJ, seulement pour un aventurier enregistré
+function majPortraitAv() {
+  const adresse = portraitAventurier(avCourant), present = !!adresse;
+  $("avPortraitBloc").hidden = !portraitsActifs && !present;
+  $("avPortraitBloc").classList.toggle("en-cours", avPeinture);
+  $("avPortraitImg").hidden = !present;
+  if (present && !$("avPortraitImg").src.endsWith(adresse)) $("avPortraitImg").src = adresse;
+  $("avPortraitVide").hidden = present;
+  $("avPortraitVide").textContent = initiale($("av-nom").value);
+  $("avPortraitBtn").hidden = !portraitsActifs;
+  $("avPortraitBtn").textContent = present ? "Refaire" : "Générer le portrait";
+  $("avPortraitBtn").disabled = !avCourant.id || avPeinture;
+  $("avPortraitSuppr").hidden = !present || avPeinture;
+  if (!avCourant.id && portraitsActifs) $("avPortraitStatus").textContent = "Enregistrez l’aventurier pour lui faire un portrait.";
+}
+$("avPortraitBtn").onclick = async () => {
+  const id = avCourant.id;
+  avPeinture = true;
+  majPortraitAv();
+  $("avPortraitStatus").textContent = "Le portrait se peint… (en local, le tout premier télécharge le modèle : patience)";
+  try {
+    const r = await api(`/api/aventuriers/${encodeURIComponent(id)}/portrait`, lireAv());
+    if (avCourant.id === id) { avCourant.portrait = r.portrait; $("avPortraitImg").title = r.prompt; }
+    $("avPortraitStatus").textContent = "";
+    await chargerAventuriers();
+  } catch (e) { $("avPortraitStatus").textContent = e.message; }
+  avPeinture = false;
+  majPortraitAv();
+};
+$("avPortraitSuppr").onclick = async () => {
+  if (!confirm(`Retirer le portrait de ${avCourant.nom} ?`)) return;
+  try {
+    await api(`/api/aventuriers/${encodeURIComponent(avCourant.id)}/portrait`, undefined, "DELETE");
+    avCourant.portrait = 0;
+    await chargerAventuriers();
+  } catch (e) { $("avPortraitStatus").textContent = e.message; }
+  majPortraitAv();
+};
+
+$("avListe").onclick = async (e) => {
+  const edit = e.target.closest("[data-edit]")?.dataset.edit, del = e.target.closest("[data-del]")?.dataset.del;
+  try {
+    if (edit && confirmerAbandonAv()) remplirAv(await api(`/api/aventuriers/${encodeURIComponent(edit)}`));
+    if (del) {
+      const a = avListe.find(x => x.id === del);
+      if (!confirm(`Supprimer l’aventurier « ${a?.nom} » ?`)) return;
+      await api(`/api/aventuriers/${encodeURIComponent(del)}`, undefined, "DELETE");
+      if (avCourant.id === del) { delete avCourant.id; avCourant.portrait = 0; $("avTitre").textContent = "Non enregistré"; majPortraitAv(); }
+      await chargerAventuriers();
+    }
+  } catch (err) { $("avStatus").textContent = err.message; }
+};
+$("avStats").addEventListener("click", (e) => {
+  const suppr = e.target.closest("[data-cap-suppr]")?.dataset.capSuppr;
+  if (e.target.id !== "avAjoutCapacite" && suppr === undefined) return;
+  const av = lireAv();
+  if (suppr !== undefined) av.capacites.splice(Number(suppr), 1);
+  else av.capacites.push({ nom: "", carac: systemes[av.systeme].caracteristiques[0].id, bonus: 0 });
+  renderStats(av);
+  avDirty = true;
+  if (suppr === undefined) $("avStats").querySelector(".capacite:last-of-type [data-cap-nom]")?.focus();
+});
+$("av-systeme").onchange = () => renderStats({});  // autre système : valeurs par défaut (échelles différentes)
+$("section-aventuriers").addEventListener("input", () => { avDirty = true; majBonus(); });
+$("section-aventuriers").addEventListener("change", () => { avDirty = true; majBonus(); });
+$("av-nom").addEventListener("input", () => { $("avPortraitVide").textContent = initiale($("av-nom").value); });
+$("avNouveauBtn").onclick = () => { if (confirmerAbandonAv()) { remplirAv({}); $("avStatus").textContent = ""; } };
+$("avEnregistrerBtn").onclick = enregistrerAv;
+
 // --- Génération, enregistrement, voix ---------------------------------------
 async function generate() {
   if (!confirmDiscard()) return;
@@ -654,16 +854,19 @@ $("saveScenarioBtn").onclick = saveScenario;
 document.querySelector(".sheet").addEventListener("input", () => { dirty = true; });
 $("f-genre").addEventListener("change", otherVoice);  // une voix du nouveau genre
 window.addEventListener("beforeunload", (e) => {
-  if (dirty || lieuxDirty || scenarioModifie() || apparenceModifiee()) e.preventDefault();
+  if (dirty || lieuxDirty || avDirty || scenarioModifie() || apparenceModifiee()) e.preventDefault();
 });
 
 loadEngine();
 fillForm({});
+remplirAv({});
 api("/api/config").then(c => {
   portraitsActifs = !!c.portraits;
   $("stylesCarte").hidden = !portraitsActifs;
   majPortrait();
   renderBank();
+  majPortraitAv();
+  renderAvListe();
 }).catch(() => {});
 verifierSante();
 // Droits de cet appareil d'abord (mot de passe du MJ demandé s'il en faut un) : les secrets des PNJ et les notes du
@@ -680,4 +883,5 @@ verifierAcces({ message: "Préparer l’univers depuis cet appareil demande le m
   .finally(() => {
     chargerStyles().then(loadScenario);
     loadLieux().then(refreshBank);
+    chargerAventuriers();
   });

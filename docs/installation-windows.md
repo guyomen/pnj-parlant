@@ -180,7 +180,9 @@ Le navigateur n'autorise le micro qu'en HTTPS (ou sur `localhost`). Pour les aut
 
 Sans internet, les appareils doivent quand même être sur le même Wi-Fi : un routeur ou une box suffit, même sans connexion.
 
-Les téléphones peuvent jouer, mais pas modifier l'univers (scénario, lieux, PNJ, import, « Nouvelle table ») ni lire les secrets des PNJ et les notes du MJ. Pour préparer l'univers depuis un autre appareil (une tablette, par exemple), définissez un **mot de passe du MJ** dans la page Options du PC : l'appareil le demandera dans une petite fenêtre. Sur le PC lui-même, rien n'est demandé.
+Si l'univers a des **aventuriers** (les personnages des joueurs, créés dans la préparation : voir le [README](../README.md#aventuriers-et-jets-de-dés-facultatifs)), chaque joueur choisit le sien sur son téléphone, dans « Vous jouez » ; sinon, il est simplement « le voyageur ».
+
+Les téléphones peuvent jouer, mais pas modifier l'univers (scénario, lieux, PNJ, aventuriers, import, « Nouvelle table ») ni lire les secrets des PNJ et les notes du MJ. Pour préparer l'univers depuis un autre appareil (une tablette, par exemple), définissez un **mot de passe du MJ** dans la page Options du PC : l'appareil le demandera dans une petite fenêtre. Sur le PC lui-même, rien n'est demandé.
 
 Pour jouer seul sur le PC, sans téléphones, vous pouvez mettre `hote = "127.0.0.1"` dans la section `[serveur]` de `config.toml` : le serveur n'est alors plus joignable depuis le réseau (et Windows ne demande pas d'autorisation).
 

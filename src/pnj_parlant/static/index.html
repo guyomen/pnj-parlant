@@ -97,6 +97,25 @@
   .proposition[hidden] { display: none; }
   .proposition span { flex: 1; min-width: 12rem; }
 
+  /* Aventurier joué (facultatif : caché si l'univers n'en a pas) */
+  .aventurier { margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+  .aventurier[hidden] { display: none; }
+  .aventurier label { display: block; font: 400 1.3rem var(--display); margin-bottom: .4rem; }
+  .aventurier select { width: 100%; }
+  .aventurier-fiche { display: flex; gap: .75rem; align-items: flex-start; margin-top: .6rem; color: var(--muted); font-size: .95rem; }
+  .aventurier-fiche:empty { display: none; }
+  .aventurier-fiche p { margin: 0 0 .25rem; }
+  .aventurier-fiche .resume { color: var(--ink); }
+  .aventurier-fiche .mini { width: 3.5rem; height: 3.5rem; flex: none; border-radius: 50%; object-fit: cover;
+                            border: 1px solid var(--line); }
+  /* Jets de dés (option « Jets de dés ») */
+  .des { display: flex; align-items: center; gap: .4rem; margin-bottom: .75rem; flex-wrap: wrap; }
+  .des[hidden] { display: none; }
+  .des span { color: var(--muted); font-size: .9rem; }
+  .des select { flex: 1 1 10rem; min-width: 0; padding: .3rem .5rem; font-size: .9rem; }
+  .des button { padding: .3rem .7rem; font-size: .9rem; }
+  .line.jet .detail { display: block; color: var(--muted); font-size: .8rem; }
+
   /* Fiches des PNJ de la scène : la première en grand, les suivantes plus discrètes */
   .pnj-card.second { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   .npc .pnj-card.second h1 { font-size: 1.7rem; }
@@ -240,6 +259,11 @@
 </section>
 <main>
   <section class="npc">
+    <div class="aventurier" id="aventurierBloc" hidden>
+      <label for="aventurierSel">Vous jouez</label>
+      <select id="aventurierSel"></select>
+      <div class="aventurier-fiche" id="aventurierFiche"></div>
+    </div>
     <div class="lieu" id="lieuBloc" hidden>
       <label for="lieuSel">Lieu</label>
       <select id="lieuSel"></select>
@@ -267,6 +291,12 @@
       <button class="ghost" type="button" data-length="short" aria-pressed="false">Courte</button>
       <button class="ghost" type="button" data-length="normal" aria-pressed="true">Normale</button>
       <button class="ghost" type="button" data-length="long" aria-pressed="false">Détaillée</button>
+    </div>
+    <div class="des" id="desBloc" role="group" aria-label="Jet de dé">
+      <span>Jet :</span>
+      <select id="jetSel" aria-label="Caractéristique, compétence ou capacité"></select>
+      <select id="jetMode" aria-label="Dé bonus ou malus"></select>
+      <button class="ghost" type="button" id="jetBtn" title="Le résultat entre dans la scène : dites ce que vous tentez, le PNJ en tiendra compte">Lancer le dé</button>
     </div>
     <div class="controls">
       <button class="mic" id="micBtn" aria-pressed="false" disabled>Parler</button>
@@ -342,6 +372,11 @@
           <label class="texte" for="optCoupure"><strong>Couper le PNJ dès que vous parlez</strong>
             <small>Micro ouvert pendant qu’il parle. Casque conseillé : sinon sa propre voix peut le couper.</small></label>
           <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optCoupure"></div>
+        </div>
+        <div class="reglage bool">
+          <label class="texte" for="optDes"><strong>Jets de dés</strong>
+            <small>Quand vous jouez un aventurier : un d20 avec le bonus d’une caractéristique ou d’une compétence, dont le PNJ tient compte.</small></label>
+          <div class="controle"><input type="checkbox" role="switch" class="interrupteur" id="optDes"></div>
         </div>
         <div class="reglage bool">
           <label class="texte" for="optMulti"><strong>Plusieurs PNJ dans la scène</strong>

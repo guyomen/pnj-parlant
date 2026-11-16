@@ -14,6 +14,8 @@ import { api, apiStream, lireReponse } from "./api.js";
 import { initOptions, ouvrirOptions, refreshSys } from "./options.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
          importerFichiers, resumeImport, resumeUnivers } from "./univers.js";
+import { MODES, affichageJet, detailJet, ficheAventurier, jetChoisi, lancer, menuJets, portraitAventurier,
+         resumeAventurier, texteJet } from "./aventurier.js";
 
 const $ = (id) => document.getElementById(id);
 let cfg = { tts: null, intervention: 0.3 };  // /api/config : moteurs, voix, reconnaissance… (chargerConfig)
@@ -32,6 +34,10 @@ let lieux = [];        // lieux du scénario
 let banque = [];       // PNJ de la banque : [{id, nom, metier, lieu}]
 let proposition = null; // lieu où le joueur a proposé d'aller
 let ici = [];          // PNJ présents dans le lieu, hors scène (boutons « Aborder »)
+let aventuriers = [];  // personnages des joueurs de l'univers (/api/aventuriers, avec leurs jets)
+let aventurier = null; // celui que joue ce navigateur, null = « le voyageur » anonyme
+let systemes = {};     // systèmes de jeu (/api/systemes) : nom affiché sous l'aventurier
+const CLE_AVENTURIER = "pnj-aventurier";  // aventurier choisi, gardé dans ce navigateur
 
 const statut = (t) => { $("status").textContent = t || ""; };
 
@@ -70,7 +76,7 @@ const alerte = (message, niveau = "erreur", cle = message) => signaler(message, 
 // api, apiStream (js/api.js) : requête JSON ou NDJSON, serveur injoignable signalé dans le bandeau, erreurs en français
 
 // --- Options (mémorisées dans ce navigateur) ----------------------------------
-const OPTIONS = ["optInterrompre", "optCoupure", "optMulti", "optIntervention", "optEntree"];
+const OPTIONS = ["optInterrompre", "optCoupure", "optMulti", "optIntervention", "optEntree", "optDes"];
 const DESACTIVEES = ["optCoupure"];  // à essayer d'abord (écho des haut-parleurs) : désactivée par défaut
 
 function loadOptions() {
@@ -514,6 +520,67 @@ async function saveToBank() {
   } catch (e) { alerte(e.message); }
 }
 
+// --- Aventurier joué et jets de dés (facultatifs, js/aventurier.js) ------------------
+// Les aventuriers se préparent avec l'univers ; chaque navigateur choisit le sien (gardé en localStorage).
+// Sans aventurier dans l'univers, le bloc reste caché et le joueur est « le voyageur ».
+async function chargerAventuriers() {
+  const [lus, sys] = await Promise.all([api("/api/aventuriers").catch(() => null),
+                                        Object.keys(systemes).length ? systemes : api("/api/systemes").catch(() => ({}))]);
+  aventuriers = lus ?? [];
+  systemes = sys;
+  let garde = null;
+  try { garde = localStorage.getItem(CLE_AVENTURIER); } catch {}
+  aventurier = aventuriers.find(a => a.id === garde) ?? null;  // supprimé de l'univers : de nouveau anonyme
+  renderAventurier();
+}
+
+function renderAventurier() {
+  $("aventurierBloc").hidden = !aventuriers.length;
+  $("aventurierSel").innerHTML = `<option value="">Un voyageur anonyme</option>`
+    + aventuriers.map(a => `<option value="${esc(a.id)}">${esc(a.nom)}</option>`).join("");
+  $("aventurierSel").value = aventurier?.id ?? "";
+  const portrait = portraitAventurier(aventurier);
+  $("aventurierFiche").innerHTML = !aventurier ? "" : `
+    ${portrait ? `<img class="mini" src="${portrait}" alt="Portrait de ${esc(aventurier.nom)}">` : ""}
+    <div><p class="resume">${esc(resumeAventurier(aventurier, systemes))}</p>
+    <p>${esc(aventurier.apparence)}</p></div>`;
+  renderJets();
+}
+
+// Menu des jets : le dé sans bonus, puis les caractéristiques, compétences et capacités de l'aventurier
+function renderJets() {
+  const choisi = $("jetSel").value;
+  $("jetSel").innerHTML = menuJets(aventurier).map(({ groupe, jets }) => {
+    const options = jets.map(({ jet, libelle }) => `<option value="${esc(jet.id)}">${esc(libelle)}</option>`).join("");
+    return groupe ? `<optgroup label="${esc(groupe)}">${options}</optgroup>` : options;
+  }).join("");
+  if (aventurier?.jets?.some(j => j.id === choisi)) $("jetSel").value = choisi;
+  $("desBloc").hidden = !aventurier || !$("optDes").checked;  // partie sans aventurier : rien ne change
+}
+
+$("aventurierSel").onchange = () => {
+  aventurier = aventuriers.find(a => a.id === $("aventurierSel").value) ?? null;
+  try { localStorage.setItem(CLE_AVENTURIER, aventurier?.id ?? ""); } catch {}
+  renderAventurier();
+};
+// Caractéristique supérieure (COF) : dé bonus proposé d'office
+$("jetSel").onchange = () => { $("jetMode").value = jetChoisi(aventurier, $("jetSel").value).avantage ? "avantage" : "normal"; };
+$("jetMode").innerHTML = Object.entries(MODES).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
+
+// Le jet s'affiche dans le journal et entre dans la scène ; le PNJ en tient compte à sa prochaine réplique
+// (quand le joueur dit ce qu'il tente, avant ou après le jet). Sans chiffre pour le PNJ (texteJet).
+function lancerDe() {
+  if (busy || !partie.npcs.length) return;
+  const jet = jetChoisi(aventurier, $("jetSel").value);
+  const r = lancer(jet, $("jetMode").value);
+  const ligne = addLine(null, affichageJet(jet, r));
+  ligne.classList.add("jet");
+  ligne.insertAdjacentHTML("beforeend", `<small class="detail">${esc(detailJet(r))}</small>`);
+  partie.history.push({ speaker: null, content: texteJet(jet, r) });
+  sauverPartie();
+}
+$("jetBtn").onclick = lancerDe;
+
 // --- Export de la conversation -----------------------------------------------
 // Télécharge un fichier texte avec le dialogue tel qu'il est affiché (descriptions comprises).
 function exportConversation() {
@@ -649,6 +716,7 @@ async function tourDe(n, p, voice) {
   try {
     const corps = { npc: n, presents: partie.npcs.filter(x => x !== n), history: partie.history, lieu: partie.lieuActuel };
     corps.longueur = responseLength;
+    if (aventurier) corps.aventurier = ficheAventurier(aventurier);  // le PNJ voit qui lui parle
     await apiStream("/api/npc/talk", corps, (item) => {
       if (p.ctrl.signal.aborted) return;
       if (item.error) throw new Error(item.error);
@@ -839,6 +907,7 @@ $("ici").onclick = (e) => { if (e.target.dataset?.aborder !== undefined) aborder
 $("propOui").onclick = () => { if (proposition) changerLieu(proposition.id); };
 $("propNon").onclick = masquerProposition;
 for (const id of OPTIONS) $(id).onchange = () => { saveOptions(); setBusy(busy); };
+$("optDes").addEventListener("change", renderJets);
 $("optCoupure").addEventListener("change", () => { arreterVeille(); if (parole) veiller(parole); });
 // --- Conversation en cours, gardée dans ce navigateur -----------------------------
 // Rien ne se perd en allant à l'accueil, aux options, à la page de préparation, ni en rechargeant la page.
@@ -969,6 +1038,7 @@ $("nouvelleTableBtn").onclick = async () => {
   viderPartie();
   await chargerLieux();
   await refreshBank();
+  await chargerAventuriers();
   await chargerTheme();
   setBusy(false);
   $("accStatus").textContent = "";
@@ -987,6 +1057,7 @@ async function importerUnivers(charger) {
     if (vider) viderPartie();
     await chargerLieux();
     await refreshBank();
+    await chargerAventuriers();
     await chargerTheme();
     $("accStatus").textContent = resumeImport(r);
   } catch (e) { $("accStatus").textContent = e.message; }
@@ -1079,6 +1150,7 @@ setInterval(() => { if (!document.hidden) verifierSante(); }, 60000);
 
 setBusy(false);
 chargerTheme();
+chargerAventuriers();
 // Partie gardée : restaurée seulement si les lieux et la banque ont été lus (serveur injoignable : elle reste
 // intacte dans le navigateur, sans être réécrite sans son lieu, jusqu'au rechargement)
 (async () => {

@@ -6,8 +6,11 @@ Banque de PNJ et scénario : un fichier JSON par personnage, lisible et modifiab
     pnj/_styles.json        thèmes et styles de portrait créés ou modifiés pour l'univers (voir valider_styles)
     pnj/<nom>-<hex>.json    fiche d'un PNJ
     pnj/<nom>-<hex>.png     son portrait, facultatif (.png, .jpg ou .webp)
+    pnj/_aventurier-<nom>-<hex>.json   fiche d'un aventurier (personnage d'un joueur, voir aventuriers.py),
+    pnj/_aventurier-<nom>-<hex>.png    et son portrait ; « _ » : jamais pris pour un PNJ, même par une version
+                                       qui ne connaît pas les aventuriers
 
-Un scénario complet (scénario, lieux, PNJ) s'exporte en zip et s'importe depuis un zip ou un dossier.
+Un scénario complet (scénario, lieux, PNJ, aventuriers) s'exporte en zip et s'importe depuis un zip ou un dossier.
 """
 import copy
 import io
@@ -22,11 +25,14 @@ import unicodedata
 import zipfile
 from pathlib import PurePosixPath
 
+from .aventuriers import normaliser as normaliser_aventurier
 from .portraits import style_valide, type_image
 
 NPC_ID = re.compile(r"^[a-z0-9-]{1,80}$")  # protège contre les chemins arbitraires
 THEME = re.compile(r"^[a-z0-9-]{1,40}$")   # thème graphique : identifiant défini dans static/style.css
 SCENARIO, LIEUX, STYLES_UNIVERS = "_scenario.json", "_lieux.json", "_styles.json"
+AVENTURIER = "_aventurier-"  # préfixe des fichiers d'un aventurier
+AVENTURIERS_MAX = 50
 COULEURS = ("bg", "surface", "ink", "muted", "line", "glass", "verdigris", "wax", "wax-ink")  # voir style.css
 COULEUR = re.compile(r"^#[0-9a-fA-F]{6}$")
 MODES = ("auto", "sombre", "clair")  # auto : palettes claire et sombre selon l'appareil
@@ -350,46 +356,106 @@ class Banque:
             self.supprimer_portrait(npc_id)
             return True
 
-    # --- Portraits ----------------------------------------------------------------
-    def portrait(self, npc_id):
+    # --- Portraits (d'un PNJ ; d'un aventurier avec prefixe=AVENTURIER) -----------------
+    def portrait(self, npc_id, prefixe=""):
         """Fichier du portrait du PNJ, ou None s'il n'en a pas."""
-        if not NPC_ID.fullmatch(npc_id or ""):
+        if not isinstance(npc_id, str) or not NPC_ID.fullmatch(npc_id):
             return None
-        return next((p for ext in IMAGES if (p := self.dossier / f"{npc_id}.{ext}").exists()), None)
+        return next((p for ext in IMAGES if (p := self.dossier / f"{prefixe}{npc_id}.{ext}").exists()), None)
 
-    def version_portrait(self, npc_id):
+    def version_portrait(self, npc_id, prefixe=""):
         """Version du portrait (date du fichier en millisecondes), 0 s'il n'y en a pas : sert à l'adresse de
         l'image, pour que le navigateur la garde en cache sans montrer un ancien portrait."""
-        chemin = self.portrait(npc_id)
+        chemin = self.portrait(npc_id, prefixe)
         return chemin.stat().st_mtime_ns // 1_000_000 if chemin else 0
 
-    def enregistrer_portrait(self, npc_id, octets, ext):
+    def enregistrer_portrait(self, npc_id, octets, ext, prefixe=""):
         """Remplace le portrait du PNJ (`ext` : png, jpg ou webp). Renvoie faux, sans rien écrire, si la fiche du PNJ
         n'existe plus (supprimé pendant la génération) : pas de portrait orphelin."""
-        if not NPC_ID.fullmatch(npc_id or "") or ext not in IMAGES:
+        if not isinstance(npc_id, str) or not NPC_ID.fullmatch(npc_id) or ext not in IMAGES:
             raise ValueError("Portrait invalide.")
         with self._verrou:
-            if not self.existe(npc_id):
+            if not (self.dossier / f"{prefixe}{npc_id}.json").exists():
                 return False
-            self.supprimer_portrait(npc_id)
-            _ecrire(self.dossier / f"{npc_id}.{ext}", octets)
+            self.supprimer_portrait(npc_id, prefixe)
+            _ecrire(self.dossier / f"{prefixe}{npc_id}.{ext}", octets)
             return True
 
-    def supprimer_portrait(self, npc_id):
+    def supprimer_portrait(self, npc_id, prefixe=""):
         """Vrai si le PNJ avait un portrait."""
         with self._verrou:
-            chemin = self.portrait(npc_id)
+            chemin = self.portrait(npc_id, prefixe)
             if chemin:
                 chemin.unlink()
             return chemin is not None
 
+    # --- Aventuriers (personnages des joueurs) -------------------------------------
+    def chemin_aventurier(self, av_id):
+        """Fichier de l'aventurier, ou None si l'identifiant est invalide."""
+        if not isinstance(av_id, str) or not NPC_ID.fullmatch(av_id):
+            return None
+        return self.dossier / f"{AVENTURIER}{av_id}.json"
+
+    def aventuriers(self):
+        """Fiches de tous les aventuriers (normalisées, avec "id" et "portrait"), triées par nom."""
+        fiches = []
+        for f in sorted(self.dossier.glob(f"{AVENTURIER}*.json")) if self.dossier.exists() else []:
+            fiche = self.lire_aventurier(f.stem[len(AVENTURIER):])
+            if fiche and fiche["nom"]:
+                fiches.append(fiche)
+        return sorted(fiches, key=lambda a: sans_accents(a["nom"]).lower())
+
+    def lire_aventurier(self, av_id):
+        """Fiche de l'aventurier (normalisée, avec "id" et "portrait"), ou None s'il n'existe pas ou est abîmé."""
+        chemin = self.chemin_aventurier(av_id)
+        if not chemin or not chemin.exists():
+            return None
+        try:
+            data = json.loads(_lire(chemin))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return {**normaliser_aventurier(data), "id": av_id, "portrait": self.version_portrait(av_id, AVENTURIER)}
+
+    def ecrire_aventurier(self, av_id, av):
+        """Écrit la fiche (normalisée) ; renvoie l'identifiant."""
+        with self._verrou:
+            _ecrire(self.chemin_aventurier(av_id), _json(normaliser_aventurier(av)))
+        return av_id
+
+    def ajouter_aventurier(self, av):
+        """Nouvel aventurier ; lève ValueError s'il y en a déjà AVENTURIERS_MAX."""
+        existants = list(self.dossier.glob(f"{AVENTURIER}*.json")) if self.dossier.exists() else []
+        if len(existants) >= AVENTURIERS_MAX:
+            raise ValueError(f"Au plus {AVENTURIERS_MAX} aventuriers par univers.")
+        av = normaliser_aventurier(av)
+        return self.ecrire_aventurier(f"{slug(av['nom'], 'aventurier')}-{secrets.token_hex(2)}", av)
+
+    def _ids_aventuriers(self):
+        """Identifiants de tous les fichiers d'aventurier, même abîmés."""
+        fichiers = self.dossier.glob(f"{AVENTURIER}*.json") if self.dossier.exists() else []
+        return [f.stem[len(AVENTURIER):] for f in fichiers if NPC_ID.fullmatch(f.stem[len(AVENTURIER):])]
+
+    def supprimer_aventurier(self, av_id):
+        """Vrai si l'aventurier existait (son portrait part avec lui)."""
+        with self._verrou:
+            chemin = self.chemin_aventurier(av_id)
+            if not chemin or not chemin.exists():
+                return False
+            chemin.unlink()
+            self.supprimer_portrait(av_id, AVENTURIER)
+            return True
+
     def vider(self):
-        """Nouvelle table : supprime tous les PNJ, vide le scénario (thème compris), les lieux, les thèmes et
-        styles de l'univers. Renvoie le nombre de PNJ supprimés."""
+        """Nouvelle table : supprime tous les PNJ et les aventuriers, vide le scénario (thème compris), les lieux,
+        les thèmes et styles de l'univers. Renvoie le nombre de PNJ supprimés."""
         with self._verrou:
             pnjs = self.liste()
             for item in pnjs:
                 self.supprimer(item["id"])
+            for av in self._ids_aventuriers():
+                self.supprimer_aventurier(av)
             self.enregistrer_styles({})
             self.enregistrer_scenario({})
             self.enregistrer_lieux([])
@@ -401,8 +467,8 @@ class Banque:
         tampon = io.BytesIO()
         with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as archive:
             for f in sorted(self.dossier.iterdir()) if self.dossier.exists() else []:
-                if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (
-                        NPC_ID.fullmatch(f.stem) and f.suffix[1:] in ("json", *IMAGES)):
+                if f.name in (SCENARIO, LIEUX, STYLES_UNIVERS) or (  # PNJ et aventuriers, fiches et portraits
+                        NPC_ID.fullmatch(f.stem.removeprefix(AVENTURIER)) and f.suffix[1:] in ("json", *IMAGES)):
                     archive.write(f, f.name)
         return tampon.getvalue()
 
@@ -413,9 +479,10 @@ class Banque:
         sinon les PNJ importés s'ajoutent (même identifiant : remplacé) et seuls le scénario et les lieux fournis
         remplacent les actuels. Tout est vérifié avant d'écrire quoi que ce soit.
         Les portraits (<id du PNJ>.png, .jpg, .webp) suivent leur fiche ; un portrait sans fiche est ignoré.
-        Les thèmes et styles de l'univers (_styles.json) suivent la même règle que le scénario.
-        Renvoie {"scenario": bool, "lieux": nombre, "pnj": nombre, "ignores": [noms]}."""
-        scenario, lieux, styles, pnjs, ignores = None, None, None, {}, []
+        Les thèmes et styles de l'univers (_styles.json) suivent la même règle que le scénario ; les aventuriers
+        (_aventurier-<id>.json et leur portrait), celle des PNJ.
+        Renvoie {"scenario": bool, "lieux": nombre, "pnj": nombre, "aventuriers": nombre, "ignores": [noms]}."""
+        scenario, lieux, styles, pnjs, aventuriers, ignores = None, None, None, {}, {}, []
         images, ids = {}, {}  # portraits : nom du fichier sans extension → (octets, ext) ; nom de fiche → id
         for nom, octets in fichiers.items():
             stem, _, ext = nom.rpartition(".")
@@ -440,6 +507,13 @@ class Banque:
                     styles = valider_styles(data)
                 except ValueError:
                     ignores.append(nom)
+            elif (stem.startswith(AVENTURIER) and isinstance(data, dict)
+                  and normaliser_aventurier(data)["nom"]):
+                av_id = stem[len(AVENTURIER):]
+                if not NPC_ID.fullmatch(av_id):  # renommé à la main
+                    av_id = f"{slug(normaliser_aventurier(data)['nom'], 'aventurier')}-{secrets.token_hex(2)}"
+                aventuriers[av_id] = normaliser_aventurier(data)
+                ids[stem] = AVENTURIER + av_id  # son portrait le suit
             elif not stem.startswith("_") and isinstance(data, dict) and str(data.get("nom") or "").strip():
                 # fichier renommé à la main : il reçoit un identifiant valide, tiré du nom du PNJ
                 npc_id = stem if NPC_ID.fullmatch(stem) else f"{slug(data['nom'])}-{secrets.token_hex(2)}"
@@ -447,8 +521,10 @@ class Banque:
                 ids[stem] = npc_id
             else:
                 ignores.append(nom)
-        if scenario is None and lieux is None and not pnjs:
+        if scenario is None and lieux is None and not pnjs and not aventuriers:
             raise ValueError("Aucun scénario, lieu ni PNJ reconnu dans les fichiers.")
+        if len(aventuriers) > AVENTURIERS_MAX:
+            raise ValueError(f"Au plus {AVENTURIERS_MAX} aventuriers par univers.")
 
         with self._verrou:
             if styles is not None or remplacer:  # avant le scénario : son style de portrait peut en venir
@@ -460,16 +536,27 @@ class Banque:
             for npc_id, npc in pnjs.items():
                 self.ecrire(npc_id, npc)
                 self.supprimer_portrait(npc_id)  # celui d'avant ne correspond plus à la fiche importée
+            for av_id, av in aventuriers.items():
+                self.ecrire_aventurier(av_id, av)
+                self.supprimer_portrait(av_id, AVENTURIER)
             for stem, (octets, ext) in images.items():
                 if stem in ids:
-                    self.enregistrer_portrait(ids[stem], octets, ext)
+                    cible = ids[stem]
+                    if cible.startswith(AVENTURIER):
+                        self.enregistrer_portrait(cible[len(AVENTURIER):], octets, ext, AVENTURIER)
+                    else:
+                        self.enregistrer_portrait(cible, octets, ext)
                 else:
                     ignores.append(f"{stem}.{ext}")
             if remplacer:  # en dernier : tout ce qui est écrit plus haut est déjà en sécurité
                 for item in self.liste():
                     if item["id"] not in pnjs:
                         self.supprimer(item["id"])
-        return {"scenario": scenario is not None, "lieux": nb_lieux, "pnj": len(pnjs), "ignores": sorted(ignores)}
+                for av_id in self._ids_aventuriers():
+                    if av_id not in aventuriers:
+                        self.supprimer_aventurier(av_id)
+        return {"scenario": scenario is not None, "lieux": nb_lieux, "pnj": len(pnjs),
+                "aventuriers": len(aventuriers), "ignores": sorted(ignores)}
 
 
 def nom_de_fichier(chemin):
