@@ -16,6 +16,40 @@ def lignes(reponse):
 
 
 class TestPages:
+    def test_toutes_les_routes_de_l_api(self, app):
+        """Les Blueprints de routes/ (lot 8) gardent exactement les routes et méthodes d'avant le découpage."""
+        routes = {(r.rule, m) for r in app.url_map.iter_rules() if r.rule.startswith("/api/")
+                  for m in r.methods - {"HEAD", "OPTIONS"}}
+        attendues = {
+            ("/api/config", "GET"), ("/api/etat", "GET"), ("/api/sante", "GET"), ("/api/acces", "GET"),
+            ("/api/reglages", "GET"), ("/api/reglages", "PUT"), ("/api/reglages/verifier", "POST"),
+            ("/api/npc/generate", "POST"), ("/api/npc/talk", "POST"),
+            ("/api/scenario", "GET"), ("/api/scenario", "PUT"), ("/api/styles", "GET"), ("/api/styles", "PUT"),
+            ("/api/scenario/export", "GET"), ("/api/scenario/import", "POST"), ("/api/univers", "DELETE"),
+            ("/api/exemples", "GET"), ("/api/exemples/<exemple_id>", "POST"),
+            ("/api/lieux", "GET"), ("/api/lieux", "PUT"),
+            ("/api/bank", "GET"), ("/api/bank", "POST"),
+            ("/api/bank/<npc_id>", "GET"), ("/api/bank/<npc_id>", "PUT"), ("/api/bank/<npc_id>", "DELETE"),
+            ("/api/bank/<npc_id>/portrait", "GET"), ("/api/bank/<npc_id>/portrait", "POST"),
+            ("/api/bank/<npc_id>/portrait", "DELETE"),
+            ("/api/voice", "POST"), ("/api/voices", "GET"), ("/api/voice-engine", "GET"),
+            ("/api/voice-engine", "PUT"), ("/api/tts", "POST"), ("/api/stt", "POST"),
+        }
+        assert routes == attendues
+
+    def test_ecritures_de_l_univers_gardees_par_mj(self, app):
+        """Chaque écriture de l'univers passe par @mj (routes/acces.py), y compris l'export qui contient les secrets."""
+        gardees = {(r.rule, m) for r in app.url_map.iter_rules()
+                   for m in r.methods - {"HEAD", "OPTIONS"}
+                   if app.view_functions[r.endpoint].__code__.co_name == "gardee"}
+        assert gardees == {
+            ("/api/scenario", "PUT"), ("/api/styles", "PUT"), ("/api/lieux", "PUT"), ("/api/scenario/export", "GET"),
+            ("/api/scenario/import", "POST"), ("/api/univers", "DELETE"), ("/api/exemples/<exemple_id>", "POST"),
+            ("/api/bank", "POST"), ("/api/bank/<npc_id>", "PUT"), ("/api/bank/<npc_id>", "DELETE"),
+            ("/api/bank/<npc_id>/portrait", "POST"), ("/api/bank/<npc_id>/portrait", "DELETE"),
+            ("/api/voice-engine", "PUT"),
+        }
+
     def test_page_de_jeu_et_module_js(self, client):
         assert b"PNJ parlants" in client.get("/").data
         reponse = client.get("/js/scene.js")

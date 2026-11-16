@@ -10,6 +10,7 @@ des fiches et pour les dialogues :
 """
 import copy
 import json
+import logging
 import re
 import threading
 import time
@@ -23,7 +24,7 @@ try:  # le SDK Anthropic 2.x repose sur httpx2 (ses erreurs réseau en viennent)
 except ImportError:  # pragma: no cover
     import httpx
 
-
+log = logging.getLogger(__name__)
 DUREE_CACHE = 15  # secondes : liste des modèles d'Ollama et de LM Studio
 
 
@@ -186,7 +187,7 @@ class Moteurs:
         except (anthropic.APIError, httpx.HTTPError) as e:
             raise MoteurIndisponible("La connexion à Claude s'est interrompue.") from e
         if msg.stop_reason == "max_tokens":
-            print(f"[claude] réponse coupée à max_tokens={max_tokens}")
+            log.warning("Claude : réponse coupée à max_tokens=%s", max_tokens)
         return "".join(b.text for b in msg.content if b.type == "text")
 
     def _claude_flux(self, system, messages, max_tokens, output_config, arrets=(), on_usage=None):
@@ -217,7 +218,7 @@ class Moteurs:
                         yield event.delta.text
                     elif event.type == "message_delta":
                         if event.delta.stop_reason == "max_tokens":
-                            print(f"[claude] réponse coupée à max_tokens={max_tokens}")
+                            log.warning("Claude : réponse coupée à max_tokens=%s", max_tokens)
                         if event.usage and hasattr(event.usage, "output_tokens"):
                             usage["output_tokens"] = event.usage.output_tokens
             except (anthropic.APIError, httpx.HTTPError) as e:
@@ -326,7 +327,7 @@ class Moteurs:
         except (KeyError, IndexError, TypeError, AttributeError) as e:  # réponse d'un autre format que prévu
             raise MoteurIndisponible("LM Studio a renvoyé une réponse inattendue.") from e
         if choix.get("finish_reason") == "length":
-            print(f"[lmstudio] réponse coupée à max_tokens={max_tokens}")
+            log.warning("LM Studio : réponse coupée à max_tokens=%s", max_tokens)
         # Les modèles à réflexion (Qwen 3…) peuvent laisser leur raisonnement dans <think>…</think>
         return re.sub(r"<think>.*?</think>", "", texte, flags=re.DOTALL).strip()
 
@@ -362,7 +363,7 @@ class Moteurs:
                             usage["output_tokens"] = data["usage"].get("completion_tokens")
                         for choix in data.get("choices", []):
                             if choix.get("finish_reason") == "length":
-                                print(f"[lmstudio] réponse coupée à max_tokens={max_tokens}")
+                                log.warning("LM Studio : réponse coupée à max_tokens=%s", max_tokens)
                             if choix.get("delta", {}).get("content"):
                                 yield choix["delta"]["content"]
             except (OSError, ValueError) as e:  # coupure réseau, délai dépassé, ligne illisible

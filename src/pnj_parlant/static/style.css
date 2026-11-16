@@ -144,6 +144,9 @@ button:hover:not(:disabled) { filter: brightness(1.1); }
 button.ghost { background: transparent; color: var(--glass); }
 button.ghost:hover:not(:disabled) { filter: none; background: color-mix(in srgb, var(--glass) 12%, transparent); }
 button:disabled { opacity: .5; cursor: wait; }
+/* Petits boutons (actions secondaires) et message d'état près d'une action, communs aux deux pages */
+button.petit { padding: .3rem .7rem; font-size: .9rem; }
+.status { min-height: 1.5rem; color: var(--muted); font-style: italic; }
 :focus-visible { outline: 3px solid var(--verdigris); outline-offset: 2px; }
 a.link { color: var(--glass); font-weight: 500; text-decoration: none; }
 a.link:hover { text-decoration: underline; }

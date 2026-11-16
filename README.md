@@ -262,7 +262,10 @@ Les dossiers `pnj/`, `voices/`, `modeles-stt/` et `certs/` sont pris à côté d
 pyproject.toml              paquet, dépendances (options : voix, stt, tout, portraits, dev) bornées par version majeure, commandes
 LICENSE                     GNU GPL 3.0 ou ultérieure
 src/pnj_parlant/
-  serveur.py                application Flask (routes) et lancement
+  serveur.py                application Flask : contexte (moteurs, banque, réglages à chaud), plafonds de taille, lancement
+  routes/                   API, un Blueprint par domaine : options (config, état, réglages), univers (scénario, lieux,
+                            import/export), pnj (banque), portraits, voix (synthèse, reconnaissance), dialogue ;
+                            acces.py (mot de passe du MJ, @mj), entrees.py (corps JSON, erreurs, tailles)
   config.py                 lecture de config.toml (et son chemin, pour la page Options)
   dependances.py            dépendances manquantes dans .venv (lancer.bat)
   fiches.py                 création des fiches de PNJ
@@ -276,7 +279,10 @@ src/pnj_parlant/
   banque.py                 banque de PNJ et scénario (fichiers JSON)
   systeme.py                état de la carte graphique et d'Ollama
   generer.py                remplissage de la banque en lot (pnj-banque)
-  static/                   pages web : index.html (accueil, partie, options), creation.html, js/scene.js, js/univers.js, js/bandeau.js, js/api.js ;
+  static/                   pages web : index.html (accueil, partie, options), creation.html, style.css ;
+                            js/ : jeu.js, options.js, creation.js (relient chaque page à la logique), modules testés
+                            sans navigateur (scene.js, partie.js, tours.js, controles.js, micro.js, fiche.js,
+                            apparence.js, univers.js, api.js, bandeau.js), tete.js (thème posé avant l'affichage) ;
                             fonts/ : Alegreya Sans et IM Fell English (SIL OFL 1.1, texte dans fonts/OFL.txt)
   exemples/                 univers d'exemple proposés sur l'accueil
 tests/                      tests Python (pytest) et tests/js/ (Node)
@@ -293,7 +299,7 @@ La couverture des modules Python est d'environ 97 %.
 uv sync --extra tout --extra dev   # ou : pip install -e ".[dev]"
 pytest --cov                # tests Python, avec couverture
 ruff check .                # style et erreurs courantes (config dans pyproject.toml)
-node --test tests/js/       # fonctions de la page de jeu (ou : npm test ; Node 22 ou plus récent, comme la CI)
+npm test                    # modules de static/js/ : node --test "tests/js/*.test.mjs" (Node 22 ou plus récent, comme la CI)
 python tests/e2e/lancer.py  # parcours complet dans Edge ou Chrome sans écran (lieux, compagnons, import, interruption, accueil, reprise)
                             # ports : PNJ_E2E_PORT_SERVEUR (5917), PNJ_E2E_PORT_OLLAMA (5918), PNJ_E2E_PORT_DEVTOOLS (9333)
 ```

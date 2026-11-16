@@ -183,11 +183,11 @@ class TestPocket:
         with pytest.raises(VoixIndisponible, match="OSError"):
             pocket.synthese("a", {"name": "estelle"})
 
-    def test_prechauffer_ecarte_les_voix_indisponibles(self, pocket, capsys):
+    def test_prechauffer_ecarte_les_voix_indisponibles(self, pocket, caplog):
         pocket.faux.voix_cassees.add("marius")
         pocket.prechauffer()
         assert [v["name"] for v, _ in pocket.catalogue()] == ["estelle"]
-        assert "marius" in capsys.readouterr().out and pocket.faux.etats == ["estelle"]
+        assert "marius" in caplog.text and pocket.faux.etats == ["estelle"]
 
     def test_sans_le_paquet(self, tmp_path, monkeypatch):
         monkeypatch.setitem(sys.modules, "pocket_tts", None)

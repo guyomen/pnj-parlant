@@ -1,6 +1,7 @@
 ---
 paths:
   - "src/pnj_parlant/serveur.py"
+  - "src/pnj_parlant/routes/**"
   - "src/pnj_parlant/dialogue.py"
   - "src/pnj_parlant/texte.py"
   - "src/pnj_parlant/fiches.py"
@@ -29,8 +30,28 @@ paths:
 (`Contexte.injectes` : jamais remplacés quand les réglages changent).
 Serveur sans état : l'historique vit dans le navigateur.
 
+## Organisation (lot 8)
+- serveur.py : `Contexte` (reste ici : les tests remplacent `serveur.Moteurs`, `serveur.Reconnaissance`,
+  `serveur.paquet_installe`), `create_app` (`plafond` avant chaque requête, erreurs `EntreeInvalide` et 413 en JSON,
+  page `/`, `routes.enregistrer(app)`), lancement (`main`, `certificat`, `arreter`).
+- `routes/` : un Blueprint par domaine, au niveau du module (`bp`), liste dans `routes/__init__.py` (`BLUEPRINTS`) :
+  `options` (config, etat, sante, acces, reglages), `univers` (scenario, styles, lieux, export, import, univers,
+  exemples ; `exemples()`, `EXEMPLES`), `pnj` (bank), `portraits`, `voix` (voice, voices, voice-engine, tts, stt),
+  `dialogue` (npc/generate, npc/talk). Chaque route lit le contexte par `entrees.contexte()`
+  (`current_app.extensions["pnj"]`).
+- `routes/entrees.py` : `contexte`, `erreur`, `EntreeInvalide`, `corps`, `chaine`, `fiche_recue`, `masquer`,
+  `mot_de_passe_recu`, et les tailles `CORPS_MAX`, `STT_MAX_OCTETS`, `MARGE_MULTIPART` (lues comme attributs du module :
+  un `monkeypatch` de `entrees` vaut pour `plafond` et pour /api/stt). `routes/acces.py` : `depuis_le_serveur`,
+  `protege`, `droits`, `est_mj`, `garde`, `refus`, `trop_d_essais`, décorateur `mj`, `EN_TETE_MDP`.
+- Nouvelle route : dans le Blueprint de son domaine ; écriture de l'univers sous `@mj`. `tests/test_api.py` fige la
+  liste des routes et celles gardées par `@mj` (à mettre à jour avec elles). URL inchangées (anglais et français
+  mêlés : changer une URL changerait l'API des pages).
+- Journal : `logging.getLogger(__name__)` dans chaque module (pas de `print`, sauf la console de `main`) ;
+  `main` affiche les messages du paquet en `[nom du module] message`. Les routes `dialogue` et `voix` gardent le nom
+  `pnj_parlant.serveur`.
+
 ## Accès à l'univers (décision D1) et tailles
-- Depuis le PC du serveur (`depuis_le_serveur()` : 127.0.0.1, ::1), rien n'est demandé. Ailleurs, toute écriture de
+- Depuis le PC du serveur (`depuis_le_serveur()` de routes/acces.py : 127.0.0.1, ::1), rien n'est demandé. Ailleurs, toute écriture de
   l'univers (décorateur `@mj` : PUT scénario, styles, lieux ; POST/PUT/DELETE banque ; POST/DELETE portrait ; import ;
   export (il contient les secrets) ; exemples ; DELETE /api/univers ; PUT /api/voice-engine) demande le mot de passe
   du MJ dans l'en-tête `X-Mot-De-Passe-MJ` (encodé par `encodeURIComponent`, décodé par `mot_de_passe_recu`).
@@ -85,7 +106,7 @@ Serveur sans état : l'historique vit dans le navigateur.
   Partie : null avec Claude, sinon `{moteur, cle: "local.modele"|"lmstudio.modele", valeur, modeles, modifiable}` ;
   modèles d'Ollama, ou `Moteurs.modeles_lmstudio()` = identifiants llm/vlm de LM Studio, liste gardée, vide s'il
   est injoignable ; `modifiable` = mot de passe du MJ défini ou PC du serveur).
-- Entrées : `corps(dict|list)` (400 si le JSON n'a pas le bon type), `chaine`, `fiche_recue` : aucune route ne répond 500
+- Entrées (routes/entrees.py) : `corps(dict|list)` (400 si le JSON n'a pas le bon type), `chaine`, `fiche_recue` : aucune route ne répond 500
   sur un corps mal formé (tests : `TestEntreesInvalides`).
 - `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
 - `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir « Réglages à chaud » ci-dessous.

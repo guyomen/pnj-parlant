@@ -27,8 +27,8 @@ Décisions prises le 15 novembre 2026 (à recopier à la place de `<décision>` 
   et la voix réattribuée ; ignore une fiche supprimée). Importer ou changer d'univers depuis l'accueil avec
   une partie en cours demande confirmation pour vider la partie ; refuser la garde.
 
-Livraison : branche `audit-corrections`, un commit par lot, rien n'est poussé. Lot 8 reporté à une session
-à part.
+Livraison : branche `audit-corrections`, un commit par lot, rien n'est poussé. Lot 8 fait à part, sur la branche
+`remaniement-lot8` (depuis `master` après la fusion), non commité.
 
 ## Ordre et suivi
 
@@ -43,7 +43,7 @@ Livraison : branche `audit-corrections`, un commit par lot, rien n'est poussé. 
 | [x] | 7 | Tests manquants | Sonnet | lots 1 et 2 |
 | [x] | 5 | Accessibilité, thèmes, mobile | Sonnet | — |
 | [x] | 9 | Documentation, lanceur, dépendances | Sonnet | D3, D4 |
-| [ ] | 8 | Remaniement (serveur.py, JS en ligne) | Opus | tous les autres |
+| [x] | 8 | Remaniement (serveur.py, JS en ligne) | Opus | tous les autres |
 
 ---
 

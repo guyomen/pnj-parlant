@@ -12,13 +12,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.13"]
+    env:
+      # pour uv sync ET uv run : sans lui, uv run suit .python-version (3.13) et recrée le .venv sans l'option dev
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --extra dev --python ${{ matrix.python }}
+      - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run pytest --cov
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test tests/js/
+      # motif entre guillemets, développé par Node : Node 22 prend un dossier pour un fichier
+      - run: node --test "tests/js/*.test.mjs"

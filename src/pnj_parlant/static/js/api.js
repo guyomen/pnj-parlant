@@ -1,6 +1,7 @@
 // Appels au serveur, communs aux deux pages et à univers.js : serveur injoignable signalé dans le bandeau
 // (requete, js/bandeau.js), erreurs du serveur rendues en français, mot de passe du MJ demandé quand il le faut.
 import { requete, signaler } from "./bandeau.js";
+import { decouperNdjson } from "./scene.js";
 
 // --- Mot de passe du MJ -------------------------------------------------------------------------------
 // Hors du PC du serveur, modifier l'univers (et voir les secrets des PNJ et les notes du MJ) demande le mot de
@@ -103,4 +104,26 @@ export async function api(path, body, method = body === undefined ? "GET" : "POS
   const opts = { method, headers: { "Content-Type": "application/json", ...headers }, signal };
   if (body !== undefined) opts.body = JSON.stringify(body);
   return lireReponse(await envoyer(path, opts, message ? { message } : {}), { panne });
+}
+
+// POST JSON dont la réponse est en NDJSON (un objet JSON par ligne, /api/npc/talk) : chaque objet est passé à
+// onItem dès que sa ligne est complète. Le lecteur est toujours relâché (erreur du serveur, ligne illisible, Stop,
+// erreur levée par onItem) : la connexion se ferme. Lignes découpées par decouperNdjson (scene.js).
+export async function apiStream(path, body, onItem, signal) {
+  const r = await requete(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(body), signal });
+  if (!r.ok) await lireReponse(r);  // lève l'erreur du serveur
+  const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      const { objets, reste } = decouperNdjson(buf + (value ?? ""), done);
+      buf = reste;  // ligne pas encore complète
+      for (const objet of objets) onItem(objet);
+      if (done) break;
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
 }
