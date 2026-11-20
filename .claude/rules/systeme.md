@@ -65,9 +65,12 @@ paths:
   `\GPU Adapter Memory(*)\Dedicated Usage` lus par l'API PDH (`CompteursWindows`, ctypes sur pdh.dll,
   `PdhAddEnglishCounterW` : noms anglais quelle que soit la langue). Requête gardée ouverte (`compteurs_windows`,
   sous verrou ; l'activité est un taux entre deux relevés : seul le premier appel attend 250 ms, ~0,7 s en tout,
-  ensuite ~2 ms) ; en cas d'erreur, fermée et refaite à l'appel suivant, mesures à None. `agreger_compteurs` (pur,
-  testé) : activité d'un moteur = somme des processus, d'une carte = son moteur le plus occupé (Compute pour Ollama,
-  3D pour un jeu), carte = celle qui utilise le plus de VRAM, sinon la plus active ; `par_type` pour le diagnostic.
+  ensuite ~2 ms) ; en cas d'erreur, fermée et refaite à l'appel suivant, mesures à None. Moins de `INTERVALLE_MIN`
+  (1 s) après un relevé, le même est rendu (`_dernier_releve`) : un taux sur quelques ms est du bruit (380 % relevés
+  sur la RX 6600 XT ; plusieurs pages Options ouvertes). `agreger_compteurs` (pur, testé) : activité d'un moteur =
+  somme des processus (plafonnée à 100), d'une carte = son moteur le plus occupé (Compute pour Ollama, 3D pour un jeu),
+  carte = celle qui utilise le plus de VRAM, sinon la plus active ; `par_type` (diagnostic) : types complets, avec
+  espaces chez AMD (« Compute 0 », « High Priority Compute »).
   `mesures_windows(lire=None)` et `gpu_windows(…, mesurer=None)` cherchent leur fonction à l'appel (remplaçable dans
   les tests). Vérifié sur une RX 6600 XT (8176 Mo, 66 % et 4218 Mo relevés).
 - `scripts/diagnostic_gpu.py` (+ `scripts/diagnostic-gpu.bat`, CRLF, messages ASCII) : pour une machine injoignable

@@ -34,7 +34,11 @@ MO = 1024 * 1024
 #   mémoire luid_0x00000000_0x00013a83_phys_0 (une par carte)
 COMPTEUR_MOTEURS = r"\GPU Engine(*)\Utilization Percentage"
 COMPTEUR_MEMOIRE = r"\GPU Adapter Memory(*)\Dedicated Usage"
-RE_MOTEUR = re.compile(r"luid_(0x[0-9a-f]+_0x[0-9a-f]+)_phys_(\d+)_eng_(\d+)_engtype_(\w+)", re.IGNORECASE)
+# Le type de moteur peut contenir des espaces (AMD : « Compute 0 », « High Priority Compute », « True Audio »)
+RE_MOTEUR = re.compile(r"luid_(0x[0-9a-f]+_0x[0-9a-f]+)_phys_(\d+)_eng_(\d+)_engtype_(.+)$", re.IGNORECASE)
+# Écart minimal entre deux relevés : un taux calculé sur quelques millisecondes est du bruit (relevé à 380 % sur une
+# RX 6600 XT) ; plusieurs pages Options ouvertes reçoivent alors le dernier relevé
+INTERVALLE_MIN = 1.0
 RE_CARTE = re.compile(r"luid_(0x[0-9a-f]+_0x[0-9a-f]+)_phys_(\d+)", re.IGNORECASE)
 
 
@@ -239,18 +243,25 @@ class CompteursWindows:
 
 
 _compteurs = None
+_dernier_releve = (float("-inf"), None)  # (time.monotonic(), compteurs bruts)
 _verrou_compteurs = threading.Lock()
 
 
 def compteurs_windows():
     """Compteurs bruts (voir CompteursWindows.lire), ou None s'ils sont illisibles (Windows trop ancien, compteurs
-    désactivés) : la requête est alors refaite à l'appel suivant. Sérialisé : les routes Flask tournent en threads."""
-    global _compteurs
+    désactivés) : la requête est alors refaite à l'appel suivant. Moins de INTERVALLE_MIN après un relevé réussi, le
+    même est rendu. Sérialisé : les routes Flask tournent en threads."""
+    global _compteurs, _dernier_releve
     with _verrou_compteurs:
+        quand, releve = _dernier_releve
+        if releve is not None and time.monotonic() - quand < INTERVALLE_MIN:
+            return releve
         try:
             if _compteurs is None:
                 _compteurs = CompteursWindows()
-            return _compteurs.lire()
+            releve = _compteurs.lire()
+            _dernier_releve = (time.monotonic(), releve)
+            return releve
         except (OSError, AttributeError, ValueError) as e:
             log.debug("compteurs GPU de Windows illisibles : %s", e)
             if _compteurs is not None:

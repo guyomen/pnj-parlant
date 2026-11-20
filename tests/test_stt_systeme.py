@@ -234,13 +234,14 @@ class TestSysteme:
         moteurs = {
             # deux processus sur le moteur 3D (additionnés), Ollama sur un moteur Compute (le plus occupé l'emporte)
             f"pid_100_{amd}_eng_0_engtype_3D": 20.0, f"pid_200_{amd}_eng_0_engtype_3D": 15.5,
-            f"pid_300_{amd}_eng_4_engtype_Compute_0": 87.0, f"pid_300_{amd}_eng_1_engtype_Copy": 2.0,
+            f"pid_300_{amd}_eng_4_engtype_Compute 0": 87.0, f"pid_300_{amd}_eng_1_engtype_Copy": 2.0,
+            f"pid_300_{amd}_eng_5_engtype_High Priority Compute": 1.0,
             f"pid_400_{virtuelle}_eng_0_engtype_3D": 99.0, "instance illisible": 50.0}
         memoire = {amd.upper().replace("LUID", "luid").replace("PHYS", "phys"): 4218 * 1024 * 1024,
                    virtuelle: 0.0, "autre": 1.0}
         assert systeme.agreger_compteurs(moteurs, memoire) == {
             "usage": 87, "memoire_mo": 4218, "carte": "0x00000000_0x00013a83_phys_0",
-            "par_type": {"3D": 35.5, "Compute_0": 87.0, "Copy": 2.0}}
+            "par_type": {"3D": 35.5, "Compute 0": 87.0, "Copy": 2.0, "High Priority Compute": 1.0}}
         # au-delà de 100 % (plusieurs processus) : plafonné
         assert systeme.agreger_compteurs({f"pid_1_{amd}_eng_0_engtype_3D": 70.0,
                                           f"pid_2_{amd}_eng_0_engtype_3D": 60.0}, {amd: 1.0})["usage"] == 100
@@ -274,6 +275,8 @@ class TestSysteme:
                 fermees.append(self)
         monkeypatch.setattr(systeme, "CompteursWindows", FauxCompteurs)
         monkeypatch.setattr(systeme, "_compteurs", None)
+        monkeypatch.setattr(systeme, "_dernier_releve", (float("-inf"), None))
+        monkeypatch.setattr(systeme, "INTERVALLE_MIN", 0)  # chaque appel relève
         assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})
         assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})
         assert len(ouvertes) == 1  # requête gardée entre deux appels
@@ -282,16 +285,36 @@ class TestSysteme:
         assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})  # … et refaite à l'appel suivant
         assert len(ouvertes) == 2
 
+    def test_compteurs_windows_releve_garde_moins_d_une_seconde(self, monkeypatch):
+        horloge, releves = [100.0], []
+
+        class FauxCompteurs:
+            def lire(self):
+                releves.append(horloge[0])
+                return {"releve": float(len(releves))}, {}
+        monkeypatch.setattr(systeme, "CompteursWindows", FauxCompteurs)
+        monkeypatch.setattr(systeme, "_compteurs", None)
+        monkeypatch.setattr(systeme, "_dernier_releve", (float("-inf"), None))
+        monkeypatch.setattr(systeme.time, "monotonic", lambda: horloge[0])
+        assert systeme.compteurs_windows() == ({"releve": 1.0}, {})
+        horloge[0] += 0.5  # deux pages Options ouvertes : un taux sur 0,5 s serait du bruit
+        assert systeme.compteurs_windows() == ({"releve": 1.0}, {})
+        horloge[0] += 0.6
+        assert systeme.compteurs_windows() == ({"releve": 2.0}, {})
+        assert releves == [100.0, 101.1]
+
     def test_compteurs_windows_illisibles(self, monkeypatch):
         def ouvrir():
             raise OSError("PdhAddEnglishCounterW : code PDH 0xC0000BB8")
         monkeypatch.setattr(systeme, "CompteursWindows", ouvrir)
         monkeypatch.setattr(systeme, "_compteurs", None)
+        monkeypatch.setattr(systeme, "_dernier_releve", (float("-inf"), None))
         assert systeme.compteurs_windows() is None
 
     @pytest.mark.skipif(sys.platform != "win32", reason="API PDH de Windows")
     def test_compteurs_windows_reels(self, monkeypatch):
         monkeypatch.setattr(systeme, "_compteurs", None)
+        monkeypatch.setattr(systeme, "_dernier_releve", (float("-inf"), None))
         bruts = systeme.compteurs_windows()
         if bruts is None:
             pytest.skip("compteurs GPU absents de ce Windows")
