@@ -56,15 +56,20 @@ Moteurs choisis dans `config.toml` (ou la page Options) : `[moteurs] creation` /
 `[portraits] moteur` = `aucun` (défaut), `local` ou `en_ligne`.
 
 ## Détails chargés à la demande
-Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés :
-- `serveur.md` : routes, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), moteurs de langage,
-  réglages à chaud (`/api/reglages`, mot de passe du MJ), accès à l'univers hors du PC (`@mj`, secrets masqués,
-  frein aux essais) et tailles maximales des requêtes.
-- `web.md` : vues (accueil, partie, options : réglages du navigateur et du serveur), barre du haut, thèmes graphiques et onglet Apparence (thèmes et
-  styles de portrait éditables par univers), conversation gardée, dialogue,
-  lieux, univers, micro.
-- `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance.
-- `serveur.md` couvre aussi les portraits (portraits.py, stockage, routes) ; `web.md` leur affichage.
+Les règles de `.claude/rules/` se chargent quand on touche aux fichiers concernés (champ `paths`) ; une règle par
+domaine, serveur et pages réunis quand le domaine est petit :
+- `serveur.md` : organisation Flask et Blueprints, accès à l'univers hors du PC (`@mj`, secrets masqués, frein aux
+  essais), tailles maximales des requêtes, /api/config, /api/etat, /api/sante.
+- `moteurs.md` : moteurs de langage (Claude, Ollama, LM Studio), valeurs par défaut, caches de latence.
+- `univers.md` : banque (scénario, lieux, PNJ), export/import, exemples, intégrité des écritures.
+- `dialogue.md` : /api/npc/generate, /api/npc/talk (scène à plusieurs, séquences d'arrêt, NDJSON), texte.py.
+- `aventuriers.md` : personnages des joueurs et jets de dés (serveur, préparation, partie).
+- `portraits.md` : portraits (moteurs, prompt, stockage, routes, affichage).
+- `reglages.md` : réglages à chaud (`/api/reglages`, mot de passe du MJ) et vue Options.
+- `voix.md` : synthèse, attribution des voix, narrateur, reconnaissance, routes de la voix.
+- `web.md` : socle des pages (modules JS, vues, préparation, barre du haut, bandeau d'alertes, api.js, style.css).
+- `partie.md` : vue Partie (état, conversation gardée, dialogue côté navigateur, lieux, micro).
+- `apparence.md` : thèmes graphiques, styles de portrait, onglet Apparence, /api/styles.
 - `systeme.md` : dépendances, config.toml, lanceurs, Docker/Ollama, documentation.
 - `tests.md` : pytest, node, e2e et ses pièges.
 

@@ -2,10 +2,20 @@
 paths:
   - "src/pnj_parlant/voix.py"
   - "src/pnj_parlant/stt.py"
+  - "src/pnj_parlant/routes/voix.py"
   - "tests/test_voix.py"
+  - "tests/test_moteurs_voix.py"
+  - "tests/test_stt_systeme.py"
 ---
 
 # Synthèse et reconnaissance vocales
+
+## Routes (routes/voix.py)
+- `POST /api/voice` (autre voix pour un PNJ, `eviter`) ; `GET /api/voices`, `GET|PUT /api/voice-engine` (page de
+  création ; PUT sous `@mj`).
+- `POST /api/tts {text, voice, narrateur, eviter}` : 503 en cas d'échec → le navigateur utilise `speechSynthesis`.
+- `POST /api/stt` (audio webm/opus + `indice`) : 404 si la reconnaissance locale est indisponible ; taille
+  `STT_MAX_OCTETS` (`serveur.md`). Micro côté navigateur : `partie.md`.
 
 ## Synthèse (voix.py)
 - `[voix] moteur` : `pocket` (Pocket TTS, local, WAV, 1 à 3 s par phrase sur un processeur de PC), `piper` (local,

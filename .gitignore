@@ -31,5 +31,6 @@ dist/
 # Fichier temporaire de reglages.ecrire (contient la cle API)
 .config-*.toml
 
-# Reglages locaux de Claude Code
+# Reglages et consignes locaux de Claude Code (propres à chaque poste)
 .claude/settings.local.json
+CLAUDE.local.md

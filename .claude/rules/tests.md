@@ -52,6 +52,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
+- `test_hook_doc.py` : hook Claude Code `.claude/hooks/doc_a_jour.py` (chargé par son chemin) : blocage si du code
+  change sans documentation, une seule fois (`stop_hook_active`), `git status` lancé dans `CLAUDE_PROJECT_DIR`.
 - `test_api.py` (`TestPages`) fige la liste des routes de l'API (règle, méthode) et celles gardées par `@mj` : à
   mettre à jour avec toute route ajoutée (Blueprints de `routes/`).
 - Tests JS par module (lot 8) : `api.test.mjs` (`apiStream` : vrai `ReadableStream` découpé en morceaux, caractère

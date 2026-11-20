@@ -1,4 +1,47 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(.venv/Scripts/python.exe -m pytest *)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(uv run pytest *)",
+      "Bash(ruff check *)",
+      "Bash(.venv/Scripts/python.exe -m ruff check *)",
+      "Bash(.venv/bin/python -m ruff check *)",
+      "Bash(uv run ruff check *)",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(node --test *)",
+      "Bash(node --check *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "PowerShell(pytest)",
+      "PowerShell(pytest *)",
+      "PowerShell(python -m pytest *)",
+      "PowerShell(.venv/Scripts/python.exe -m pytest *)",
+      "PowerShell(uv run pytest *)",
+      "PowerShell(ruff check *)",
+      "PowerShell(.venv/Scripts/python.exe -m ruff check *)",
+      "PowerShell(uv run ruff check *)",
+      "PowerShell(npm test)",
+      "PowerShell(npm test *)",
+      "PowerShell(node --test *)",
+      "PowerShell(node --check *)",
+      "PowerShell(git status)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(git show *)"
+    ]
+  },
   "hooks": {
     "Stop": [
       {
