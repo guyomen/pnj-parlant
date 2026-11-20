@@ -3,7 +3,8 @@
 // la page à ces modules.
 import { adressePortrait, esc, parLieu } from "./scene.js";
 import { requete, retirer, signaler, verifierSante } from "./bandeau.js";
-import { api as appel, verifierAcces } from "./api.js";
+import { api as appel, mdpMJ, verifierAcces } from "./api.js";
+import { initBoutonMJ, modeMJ, poserModeMJ } from "./mj.js";
 import { COULEURS, THEME_DEFAUT, appliquerTheme, confirmationImport, exporter, identifiant,
          importerFichiers, poserThemesPerso, resumeImport, tousLesThemes } from "./univers.js";
 import { CHAMPS_FICHE, corpsScenario, ficheDuFormulaire, initiale, secretMasque, titreFiche, valeursFormulaire,
@@ -869,10 +870,13 @@ api("/api/config").then(c => {
   renderAvListe();
 }).catch(() => {});
 verifierSante();
+initBoutonMJ({ signaler: (message) => signaler(message, { cle: "mj", niveau: "avertissement" }) });
 // Droits de cet appareil d'abord (mot de passe du MJ demandé s'il en faut un) : les secrets des PNJ et les notes du
 // MJ ne sont envoyés qu'avec lui. Annuler = lecture seule, champs réservés au MJ grisés.
 verifierAcces({ message: "Préparer l’univers depuis cet appareil demande le mot de passe du MJ." })
   .then((acces) => {
+    // MJ reconnu (mot de passe saisi, ou PC du serveur sans mot de passe) : la page passe en mode MJ
+    if (acces.mj && (!acces.protege || mdpMJ()) && !modeMJ()) poserModeMJ(true);
     if (acces.mj) return;
     signaler(acces.protege
       ? "Lecture seule : secrets des PNJ et notes du MJ masqués sur cet appareil. Le mot de passe du MJ sera demandé au premier enregistrement."

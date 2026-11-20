@@ -158,12 +158,118 @@ class TestSysteme:
         def run(*a, **k):
             raise panne
         monkeypatch.setattr(systeme.subprocess, "run", run)
-        assert systeme.etat_gpu() is None
+        assert systeme.gpu_nvidia() is None
 
     @pytest.mark.parametrize("sortie", ["", "pas de virgules", "a, b, c, d", "a, 1, 2"])
     def test_gpu_sortie_illisible(self, monkeypatch, sortie):
         monkeypatch.setattr(systeme.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=sortie))
-        assert systeme.etat_gpu() is None
+        assert systeme.gpu_nvidia() is None
+
+    @pytest.mark.parametrize("plateforme, nom_os, attendu", [("linux", "posix", "linux"), ("win32", "nt", "windows"),
+                                                              ("darwin", "posix", None)])
+    def test_gpu_sans_nvidia_selon_le_systeme(self, monkeypatch, plateforme, nom_os, attendu):
+        monkeypatch.setattr(systeme, "gpu_nvidia", lambda: None)
+        monkeypatch.setattr(systeme, "gpu_linux", lambda: "linux")
+        monkeypatch.setattr(systeme, "gpu_windows", lambda: "windows")
+        monkeypatch.setattr(systeme.sys, "platform", plateforme)
+        monkeypatch.setattr(systeme.os, "name", nom_os)
+        assert systeme.etat_gpu() == attendu
+
+    def test_gpu_nvidia_d_abord(self, monkeypatch):
+        monkeypatch.setattr(systeme, "gpu_nvidia", lambda: {"nom": "NVIDIA"})
+        monkeypatch.setattr(systeme, "gpu_linux", lambda: pytest.fail("pas de repli avec nvidia-smi"))
+        monkeypatch.setattr(systeme, "gpu_windows", lambda: pytest.fail("pas de repli avec nvidia-smi"))
+        assert systeme.etat_gpu() == {"nom": "NVIDIA"}
+
+    @staticmethod
+    def carte_linux(racine, nom, **fichiers):
+        d = racine / nom / "device"
+        d.mkdir(parents=True)
+        for f, v in fichiers.items():
+            (d / f).write_text(f"{v}\n", encoding="utf-8")
+
+    def test_gpu_linux_amd(self, tmp_path):
+        mo = 1024 * 1024
+        self.carte_linux(tmp_path, "card0", vendor="0x8086")  # puce Intel intégrée : rien de mesuré
+        self.carte_linux(tmp_path, "card1", vendor="0x1002", gpu_busy_percent=37, mem_info_vram_used=1024 * mo,
+                         mem_info_vram_total=8192 * mo)
+        self.carte_linux(tmp_path, "card1-HDMI-A-1", vendor="0x1002")  # sortie d'écran, pas une carte
+        assert systeme.gpu_linux(tmp_path) == {"nom": "Carte AMD", "usage": 37, "memoire_mo": 1024,
+                                               "memoire_totale_mo": 8192}
+
+    def test_gpu_linux_autre_carte_et_nom(self, tmp_path):
+        self.carte_linux(tmp_path / "intel", "card0", vendor="0x8086")
+        assert systeme.gpu_linux(tmp_path / "intel") == {"nom": "Carte Intel", "usage": None, "memoire_mo": None,
+                                                         "memoire_totale_mo": None}
+        # nom donné par le pilote ; activité illisible et mémoire nulle = inconnues
+        self.carte_linux(tmp_path / "amd", "card0", vendor="0x1002", product_name="AMD Radeon RX 6600",
+                         gpu_busy_percent="illisible", mem_info_vram_used=0, mem_info_vram_total=0)
+        assert systeme.gpu_linux(tmp_path / "amd") == {"nom": "AMD Radeon RX 6600", "usage": None, "memoire_mo": None,
+                                                       "memoire_totale_mo": None}
+
+    def test_gpu_linux_aucune(self, tmp_path):
+        assert systeme.gpu_linux(tmp_path) is None
+        assert systeme.gpu_linux(tmp_path / "absent") is None
+        (tmp_path / "card0" / "device").mkdir(parents=True)  # sans fabricant
+        assert systeme.gpu_linux(tmp_path) is None
+
+    def test_gpu_windows(self):
+        cartes = [{"nom": "Microsoft Basic Display Adapter", "id_materiel": "ROOT\\BasicDisplay", "memoire": 1 << 40},
+                  {"nom": "Intel(R) UHD Graphics 620", "id_materiel": "PCI\\VEN_8086&DEV_3EA0", "memoire": 1 << 30},
+                  {"nom": "AMD Radeon RX 6600", "id_materiel": "pci\\ven_1002&dev_73ff", "memoire": 8 << 30}]
+        assert systeme.gpu_windows(lambda: cartes) == {"nom": "AMD Radeon RX 6600", "usage": None, "memoire_mo": None,
+                                                        "memoire_totale_mo": 8192}
+        assert systeme.gpu_windows(lambda: [{"nom": "Intel", "id_materiel": "PCI\\X", "memoire": None}]) == {
+            "nom": "Intel", "usage": None, "memoire_mo": None, "memoire_totale_mo": None}
+        assert systeme.gpu_windows(lambda: cartes[:1]) is None  # carte virtuelle seule
+
+    @pytest.mark.parametrize("panne", [OSError("registre"), ImportError("winreg")])
+    def test_gpu_windows_registre_illisible(self, panne):
+        def lire():
+            raise panne
+        assert systeme.gpu_windows(lire) is None
+
+    def test_cartes_du_registre(self, monkeypatch):
+        # faux winreg : sous-clés 0000 (format récent), 0001 (ancien format en octets), 0002 (sans DriverDesc),
+        # Properties (protégée)
+        cles = {"0000": {"DriverDesc": "AMD Radeon RX 6600", "MatchingDeviceId": "PCI\\VEN_1002",
+                         "HardwareInformation.qwMemorySize": 8 << 30},
+                "0001": {"DriverDesc": "Intel(R) UHD Graphics",
+                         "HardwareInformation.MemorySize": (1 << 30).to_bytes(4, "little")},
+                "0002": {"MatchingDeviceId": "PCI\\X"}, "Properties": None}
+
+        class Cle:
+            def __init__(self, valeurs):
+                self.valeurs = valeurs
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def ouvrir(parent, nom):
+            if parent == "HKLM":
+                return Cle(None)
+            if cles[nom] is None:
+                raise PermissionError(nom)
+            return Cle(cles[nom])
+
+        def enumerer(_cle, i):
+            if i >= len(cles):
+                raise OSError("fin")
+            return list(cles)[i]
+
+        def valeur(cle, nom):
+            if nom not in cle.valeurs:
+                raise FileNotFoundError(nom)
+            return cle.valeurs[nom], 0
+
+        monkeypatch.setitem(sys.modules, "winreg", SimpleNamespace(
+            HKEY_LOCAL_MACHINE="HKLM", OpenKey=ouvrir, EnumKey=enumerer, QueryValueEx=valeur))
+        assert systeme.cartes_du_registre() == [
+            {"nom": "AMD Radeon RX 6600", "id_materiel": "PCI\\VEN_1002", "memoire": 8 << 30},
+            {"nom": "Intel(R) UHD Graphics", "id_materiel": "", "memoire": 1 << 30}]
 
     def test_ollama(self, monkeypatch):
         urls = []

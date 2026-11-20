@@ -225,6 +225,52 @@ export const groupeUtile = (groupe, valeurs) =>
 
 export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifié${n > 1 ? "s" : ""}` : "";
 
+// Page Options : lignes {titre, texte, alerte?, barre?} (texte brut, échappé par la page). `detail` faux = mode
+// joueur (js/mj.js) : sans noms de modèles ni mémoire, juste ce qui sert et si ça marche.
+// Moteurs (/api/config ; moteurs.creation/dialogue = description() du serveur : modèle Claude, « local : … »,
+// « LM Studio : … »)
+const moteurEnBref = (d) => !d ? "—" : d.startsWith("local") ? "IA sur ce PC (Ollama)"
+  : d.startsWith("LM Studio") ? "IA sur ce PC (LM Studio)" : "Claude (en ligne)";
+export function lignesMoteurs(cfg, detail = true) {
+  const m = cfg?.moteurs ?? {}, nom = (d) => (detail ? d ?? "—" : moteurEnBref(d));
+  return [
+    { titre: "Création", texte: nom(m.creation) },
+    { titre: "Dialogues", texte: nom(m.dialogue) },
+    { titre: "Voix", texte: cfg?.tts ? (detail ? cfg.tts : "sur ce PC") : "voix du navigateur" },
+    { titre: "Reconnaissance", texte: cfg?.stt_local ? "sur ce PC" : "navigateur" },
+    { titre: "Portraits", texte: cfg?.portraits ? (cfg.portraits === "local" ? "sur ce PC" : "en ligne") : "aucun" },
+  ];
+}
+// Carte graphique (systeme.py) : chaque mesure peut manquer (null) selon la marque et le système (AMD ou Intel sous
+// Windows : nom et mémoire vidéo seulement)
+function ligneGpu(g, detail) {
+  const mesure = [], connue = (v) => typeof v === "number";
+  if (connue(g.usage)) mesure.push(`calcul ${g.usage} %`);
+  if (detail && connue(g.memoire_mo) && connue(g.memoire_totale_mo)) mesure.push(`mémoire ${g.memoire_mo} / ${g.memoire_totale_mo} Mo`);
+  else if (detail && connue(g.memoire_totale_mo)) mesure.push(`${g.memoire_totale_mo} Mo de mémoire vidéo`);
+  if (detail && !connue(g.usage)) mesure.push("activité non mesurée");
+  const ligne = { titre: g.nom, texte: mesure.join(", ") || "détectée" };
+  if (connue(g.memoire_mo) && g.memoire_totale_mo > 0) ligne.barre = Math.round(100 * g.memoire_mo / g.memoire_totale_mo);
+  return ligne;
+}
+// État de la machine (/api/etat : ollama et lmstudio null s'ils ne servent pas, gpu null sans carte détectée)
+export function lignesEtat(etat, detail = true) {
+  const lignes = [], o = etat?.ollama, l = etat?.lmstudio, g = etat?.gpu;
+  if (o) {
+    lignes.push(!o.ok ? { titre: "Ollama", alerte: true, texte: detail
+      ? "ne répond pas : démarrez-le (lancer.bat le fait sous Windows ; sous Linux : docker compose up -d)."
+      : "ne répond pas : prévenez le MJ." }
+      : { titre: "Ollama", texte: !detail ? "actif" : `actif — ${o.charges?.length
+        ? o.charges.map(x => `${x.nom} (${x.vram_mo} Mo en mémoire vidéo)`).join(", ") : "aucun modèle chargé"}` });
+  }
+  if (l) {
+    lignes.push(l.ok ? { titre: "LM Studio", texte: detail ? `actif — ${l.modele || "modèle chargé"}` : "actif" }
+                     : { titre: "LM Studio", alerte: true, texte: detail ? l.message : "ne répond pas : prévenez le MJ." });
+  }
+  lignes.push(g ? ligneGpu(g, detail) : { titre: "Carte graphique", texte: "aucune carte détectée" });
+  return lignes;
+}
+
 // --- Modèle de l'IA, dans la vue Partie ------------------------------------------------------------------
 // `modele_dialogue` de /api/config ({moteur, cle, valeur, modeles, modifiable}, null avec Claude) → contenu de la
 // liste : {cle, valeur, options: [{valeur, libelle}], modifiable}, ou null (liste cachée). LM Studio : "" = le

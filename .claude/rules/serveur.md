@@ -76,7 +76,7 @@ Serveur sans état : l'historique vit dans le navigateur.
   `{moteur, cle: "local.modele"|"lmstudio.modele", valeur, modeles, modifiable}` ; modèles d'Ollama, ou
   `Moteurs.modeles_lmstudio()` = identifiants llm/vlm de LM Studio, liste gardée, vide s'il est injoignable ;
   `modifiable` = mot de passe du MJ défini ou PC du serveur).
-- `GET /api/etat` : GPU (`systeme.etat_gpu`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
+- `GET /api/etat` : GPU (`systeme.etat_gpu` : NVIDIA, AMD, Intel ; mesures inconnues à null, voir `systeme.md`), Ollama si un moteur est `local`, LM Studio s'il est choisi.
 - `GET|PUT /api/reglages`, `POST /api/reglages/verifier` : voir `reglages.md`.
 - `GET /api/sante` → `{problemes: [{cle, niveau, message}]}` (`Contexte.problemes`, aussi affiché dans la console au
   démarrage) : tomlkit absent (erreur), voix sans catalogue (avertissement : paquet absent ou aucune voix),

@@ -55,7 +55,18 @@ paths:
   flash attention + cache KV q8_0, port lié à 127.0.0.1, `healthcheck` (`ollama list`).
 - `scripts/ecran.sh` (Linux) : coupe/rallume l'écran graphique pour libérer ~700 Mo de VRAM ; refuse un argument
   inconnu, survit à un `nvidia-smi` en panne.
-- `systeme.py` : état GPU (nvidia-smi) et Ollama pour `/api/etat`.
+- `systeme.py` : état GPU et Ollama pour `/api/etat`. `etat_gpu` → `{nom, usage, memoire_mo, memoire_totale_mo}`,
+  chaque mesure à None si inconnue : `gpu_nvidia` (nvidia-smi) d'abord ; sinon `gpu_linux` (sysfs
+  `/sys/class/drm/card*/device` : amdgpu donne activité et VRAM, une autre carte son fabricant ; sorties `card0-HDMI…`
+  ignorées) ou `gpu_windows` (registre de la classe des cartes graphiques via `winreg`, `cartes_du_registre` : nom et
+  VRAM dédiée `qwMemorySize`, ancien `MemorySize` en octets ; cartes sans `PCI\` ignorées ; pas d'activité : les
+  compteurs de Windows sont lents, ~2,5 s, et leurs noms traduits). La carte qui a le plus de VRAM l'emporte.
+- `scripts/diagnostic_gpu.py` (+ `scripts/diagnostic-gpu.bat`, CRLF, messages ASCII) : pour une machine injoignable
+  (pas de SSH). Bibliothèque standard seule, `src/` ajouté à `sys.path` (aucune installation). Écrit
+  `diagnostic-gpu.txt` (ignoré par git ; chemin personnel remplacé par `~`, pas de nom de machine) : résultats et
+  durées de `etat_gpu`/`gpu_*`, affichage de `lignesEtat` (si Node), nvidia-smi, registre et WMI, compteurs GPU de
+  Windows (noms traduits, activité 3D et VRAM dédiée chronométrées : piste pour mesurer l'activité), sysfs,
+  lspci/rocm-smi/amd-smi sous Linux, `/api/ps` d'Ollama. Une exception est rapportée, pas levée.
 
 ## Documentation
 - README.md : Linux, fonctionnement, page de jeu, réglages, organisation du code. docs/installation-windows.md : pas à pas Windows

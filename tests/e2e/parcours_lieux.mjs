@@ -135,6 +135,13 @@ const ecoutes = await js(`window.__ecoute`);
 await js(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }))`);
 await pause(200);
 verifier("accueil : la barre d'espace n'ouvre pas le micro", await js(`window.__ecoute === ${ecoutes}`));
+// Mode joueur (par défaut) : charger un univers, « Nouvelle table » et « Créer son univers » cachés ; le bouton « MJ »
+// (depuis le PC, sans mot de passe du MJ : rien n'est demandé) les fait apparaître
+const visible = (sel) => `(document.querySelector(${JSON.stringify(sel)})?.offsetParent ?? null) !== null`;
+const carteCharger = "#exemplesListe";
+verifier("accueil en mode joueur : chargement d'univers, « Nouvelle table » et préparation cachés", await quand(`!document.documentElement.hasAttribute("data-mj") && !${visible(carteCharger)} && !${visible("#nouvelleTableBtn")} && !${visible('.onglets a[href="creation.html"]')} && ${visible("#accHasardBtn")}`));
+await js(`document.getElementById("mjBtn").click()`);
+verifier("bouton MJ : chargement d'univers, « Nouvelle table » et préparation affichés", await quand(`document.documentElement.hasAttribute("data-mj") && document.getElementById("mjBtn").getAttribute("aria-pressed") === "true" && sessionStorage.getItem("mode-mj") === "1" && ${visible(carteCharger)} && ${visible("#nouvelleTableBtn")} && ${visible('.onglets a[href="creation.html"]')}`));
 const fondAvant = await js(`getComputedStyle(document.body).backgroundColor`);  // thème par défaut
 // Nouvel univers pendant une partie : refuser de la vider la garde ; accepter la vide
 await js(`window.confirm = (m) => !m.startsWith("Une conversation est en cours")`);
@@ -170,6 +177,14 @@ const barreJeu = await js(placeBarre);
 await js(`location.hash = "options"`);
 verifier("options affichées, retour vers la partie", await quand(`document.body.dataset.vue === "options" && document.getElementById("optionsRetour").getAttribute("href") === "#jeu" && document.getElementById("optInterrompre").offsetParent !== null`));
 verifier("barre du haut : onglet Options actif, même place que dans la partie", await quand(`document.querySelector(".onglets [aria-current=page]")?.dataset.vue === "options" && document.querySelectorAll(".onglets a").length === 4 && ${placeBarre} === ${JSON.stringify(barreJeu)}`));
+
+// Bouton « MJ » de nouveau : retour en mode joueur (moteurs en bref ; réglages du serveur, préparation et « Modèle de
+// l'IA » cachés), puis mode MJ (tout réapparaît, réglages du serveur relus)
+const lienPreparer = `document.querySelector('.onglets a[href="creation.html"]')`;
+await js(`document.getElementById("mjBtn").click()`);
+verifier("options en mode joueur : informations seulement, réglages du serveur, préparation et modèle de l'IA cachés", await quand(`!document.documentElement.hasAttribute("data-mj") && sessionStorage.getItem("mode-mj") === null && document.getElementById("infos").textContent.includes("IA sur ce PC (Ollama)") && document.getElementById("opt-serveur").offsetParent === null && ${lienPreparer}.offsetParent === null && getComputedStyle(document.getElementById("modeleBloc")).display === "none" && !document.querySelector('#optionsNav [data-aller="opt-serveur"]') && !document.querySelector("#reglagesServeur .groupe")`));
+await js(`document.getElementById("mjBtn").click()`);
+verifier("bouton MJ : mode MJ, réglages du serveur et « Préparer l'univers » affichés", await quand(`document.documentElement.hasAttribute("data-mj") && document.getElementById("mjBtn").getAttribute("aria-pressed") === "true" && sessionStorage.getItem("mode-mj") === "1" && document.getElementById("opt-infos").offsetParent === null && ${lienPreparer}.offsetParent !== null && !!document.querySelector('#optionsNav [data-aller="opt-serveur"]') && document.querySelectorAll("#reglagesServeur .groupe").length > 5`));
 
 // Options : sous-options grisées sans « Plusieurs PNJ » ; un réglage du serveur modifié depuis la page (depuis le
 // PC, sans mot de passe du MJ) est enregistré dans config.toml et appliqué

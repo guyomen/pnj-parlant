@@ -210,9 +210,10 @@
     <nav class="onglets" aria-label="Navigation">
       <a href="#" data-vue="accueil">Accueil</a>
       <a href="#jeu" data-vue="jeu">Partie</a>
-      <a href="creation.html">Préparer l’univers</a>
+      <a data-mj-seul href="creation.html">Préparer l’univers</a>
       <a href="#options" data-vue="options">Options</a>
     </nav>
+    <button type="button" class="bouton-mj" id="mjBtn" aria-pressed="false" title="Se connecter en MJ">MJ</button>
   </div>
 </header>
 <div class="bandeau" id="bandeau" role="alert" aria-live="assertive" hidden></div>
@@ -222,11 +223,11 @@
     <p class="accroche">Parlez à voix haute avec les personnages de votre univers de jeu de rôle : ils vous répondent dans leur rôle.</p>
     <div class="univers-ligne">
       <p class="univers-actuel" id="universActuel"></p>
-      <button class="ghost petit" id="nouvelleTableBtn" title="Supprime l’univers actuel et la conversation en cours">Nouvelle table</button>
+      <button class="ghost petit" id="nouvelleTableBtn" data-mj-seul title="Supprime l’univers actuel et la conversation en cours">Nouvelle table</button>
     </div>
   </div>
   <div class="cartes">
-    <article class="carte">
+    <article class="carte" data-mj-seul>
       <h2>Charger un univers</h2>
       <p class="hint">Un univers prêt à jouer, ou celui qu’on vous a envoyé (zip ou dossier exporté depuis la préparation).</p>
       <div id="exemplesListe" class="row"></div>
@@ -250,7 +251,7 @@
       <button class="ghost" id="accReprendreBtn" hidden>Reprendre la conversation</button>
       <a class="link" href="#jeu">Aller à la table de jeu →</a>
     </article>
-    <article class="carte">
+    <article class="carte" data-mj-seul>
       <h2>Créer son univers</h2>
       <p class="hint">Écrivez le monde, ses lieux et ses secrets, puis demandez des PNJ qui s’y rattachent. Exportez-le pour le partager.</p>
       <a class="link" href="creation.html">Préparer l’univers →</a>
@@ -340,8 +341,8 @@
         <button class="ghost" id="entreeBtn">Faire entrer</button>
       </div>
     </div>
-    <!-- Modèle de l'IA locale (Ollama ou LM Studio) : changé à chaud, comme dans les options -->
-    <div class="bloc modele-ia" id="modeleBloc" hidden>
+    <!-- Modèle de l'IA locale (Ollama ou LM Studio) : changé à chaud, comme dans les options ; mode MJ seulement -->
+    <div class="bloc modele-ia" id="modeleBloc" data-mj-seul hidden>
       <label for="modeleSel">Modèle de l’IA</label>
       <select id="modeleSel"></select>
     </div>
@@ -352,7 +353,7 @@
   <div class="titre-page titre-options">
     <div>
       <h1 id="optionsTitre">Options</h1>
-      <p class="accroche">Vos réglages de partie, ceux du serveur et l’état de la machine.</p>
+      <p class="accroche"><span data-hors-mj>Vos réglages de partie et l’état de la machine.</span><span data-mj-seul>Vos réglages de partie, ceux du serveur et l’état de la machine.</span></p>
     </div>
     <a class="link" id="optionsRetour" href="#jeu">← Retour à la partie</a>
   </div>
@@ -397,14 +398,20 @@
         </div>
       </section>
 
-      <!-- Réglages du serveur (config.toml), protégés par le mot de passe du MJ -->
-      <section class="carte" id="opt-serveur" data-titre="Accès">
+      <!-- Mode joueur : les moteurs en bref ; les réglages du serveur sont réservés au mode MJ (js/mj.js) -->
+      <section class="carte" id="opt-infos" data-titre="Informations" data-hors-mj>
+        <div class="tete-groupe"><h2>Informations</h2></div>
+        <div class="sys" id="infos"></div>
+        <p class="aide-groupe">Les réglages du serveur sont réservés au MJ : bouton « MJ » en haut à droite.</p>
+      </section>
+      <!-- Réglages du serveur (config.toml), protégés par le mot de passe du MJ : mode MJ seulement -->
+      <section class="carte" id="opt-serveur" data-titre="Accès" data-mj-seul>
         <div class="tete-groupe"><h2>Réglages du serveur</h2><span class="etiquette" id="fichierConfig">config.toml</span></div>
         <div class="acces" id="acces"><p>Chargement…</p></div>
         <p class="message-options" id="reglagesMessage" role="status"></p>
       </section>
-      <div class="options-contenu" id="reglagesServeur"></div>
-      <div class="barre-reglages" id="barreReglages" hidden>
+      <div class="options-contenu" id="reglagesServeur" data-mj-seul></div>
+      <div class="barre-reglages" id="barreReglages" data-mj-seul hidden>
         <span class="nb" id="reglagesNb"></span>
         <button class="ghost" id="reglagesAnnuler">Annuler</button>
         <button id="reglagesEnregistrer">Enregistrer</button>

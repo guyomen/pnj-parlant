@@ -398,6 +398,49 @@ test("options : valeur d'un champ, groupes utiles, résumé", () => {
   assert.equal(scene.resumeModifs(3), "3 réglages modifiés");
 });
 
+test("lignesMoteurs : moteurs en détail (mode MJ) ou en bref (mode joueur)", () => {
+  const cfg = { moteurs: { creation: "claude-sonnet-4-6", dialogue: "local : qwen3:4b" }, tts: "piper",
+                stt_local: true, portraits: "en_ligne" };
+  const textes = (detail) => scene.lignesMoteurs(cfg, detail).map(l => `${l.titre}=${l.texte}`);
+  assert.deepEqual(textes(true), ["Création=claude-sonnet-4-6", "Dialogues=local : qwen3:4b", "Voix=piper",
+                                  "Reconnaissance=sur ce PC", "Portraits=en ligne"]);
+  assert.deepEqual(textes(false), ["Création=Claude (en ligne)", "Dialogues=IA sur ce PC (Ollama)", "Voix=sur ce PC",
+                                   "Reconnaissance=sur ce PC", "Portraits=en ligne"]);
+  assert.equal(scene.lignesMoteurs({ moteurs: { dialogue: "LM Studio : modèle chargé" } }, false)[1].texte, "IA sur ce PC (LM Studio)");
+  // configuration pas encore lue
+  assert.deepEqual(scene.lignesMoteurs({}, false).map(l => l.texte), ["—", "—", "voix du navigateur", "navigateur", "aucun"]);
+});
+
+test("lignesEtat : état de la machine, sans modèles ni mémoire en mode joueur", () => {
+  const etat = { ollama: { ok: true, charges: [{ nom: "qwen3:4b", vram_mo: 2900 }] }, lmstudio: null,
+                 gpu: { nom: "NVIDIA T400", usage: 12, memoire_mo: 1000, memoire_totale_mo: 4000 } };
+  assert.deepEqual(scene.lignesEtat(etat, true), [
+    { titre: "Ollama", texte: "actif — qwen3:4b (2900 Mo en mémoire vidéo)" },
+    { titre: "NVIDIA T400", barre: 25, texte: "calcul 12 %, mémoire 1000 / 4000 Mo" }]);
+  assert.deepEqual(scene.lignesEtat(etat, false), [
+    { titre: "Ollama", texte: "actif" }, { titre: "NVIDIA T400", barre: 25, texte: "calcul 12 %" }]);
+  const panne = { ollama: { ok: false }, lmstudio: { ok: false, message: "LM Studio ne répond pas sur http://x." }, gpu: null };
+  assert.deepEqual(scene.lignesEtat(panne, false).map(l => [l.titre, l.texte, !!l.alerte]), [
+    ["Ollama", "ne répond pas : prévenez le MJ.", true], ["LM Studio", "ne répond pas : prévenez le MJ.", true],
+    ["Carte graphique", "aucune carte détectée", false]]);
+  assert.equal(scene.lignesEtat(panne, true)[1].texte, "LM Studio ne répond pas sur http://x.");
+  assert.equal(scene.lignesEtat({ ollama: { ok: true, charges: [] } }, true)[0].texte, "actif — aucun modèle chargé");
+});
+
+test("lignesEtat : carte AMD ou Intel, mesures inconnues (null) selon le système", () => {
+  const gpu = (g, detail) => scene.lignesEtat({ gpu: { nom: "AMD Radeon RX 6600", usage: null, memoire_mo: null,
+                                                      memoire_totale_mo: null, ...g } }, detail)[0];
+  // Windows (registre) : nom et mémoire vidéo dédiée, sans activité ni barre
+  assert.deepEqual(gpu({ memoire_totale_mo: 8192 }, true),
+    { titre: "AMD Radeon RX 6600", texte: "8192 Mo de mémoire vidéo, activité non mesurée" });
+  assert.deepEqual(gpu({ memoire_totale_mo: 8192 }, false), { titre: "AMD Radeon RX 6600", texte: "détectée" });
+  assert.deepEqual(gpu({}, true), { titre: "AMD Radeon RX 6600", texte: "activité non mesurée" });
+  // Linux (amdgpu) : tout est mesuré ; activité seule possible
+  assert.deepEqual(gpu({ usage: 40, memoire_mo: 2048, memoire_totale_mo: 8192 }, true),
+    { titre: "AMD Radeon RX 6600", texte: "calcul 40 %, mémoire 2048 / 8192 Mo", barre: 25 });
+  assert.deepEqual(gpu({ usage: 40 }, false), { titre: "AMD Radeon RX 6600", texte: "calcul 40 %" });
+});
+
 test("choixModele : liste « Modèle de l’IA » de la vue Partie", () => {
   assert.equal(scene.choixModele(null), null);
   assert.equal(scene.choixModele(undefined), null);

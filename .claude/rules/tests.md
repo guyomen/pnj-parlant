@@ -52,6 +52,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - `test_exemples.py` : chaque dossier de `src/pnj_parlant/exemples/` (avec `_infos.json`) se charge comme une banque,
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
+- `test_diagnostic_gpu.py` : `scripts/diagnostic_gpu.py` chargé par son chemin, `commande` et `urlopen` remplacés
+  (ni PowerShell, ni réseau) : rapport complet sans chemin personnel, exception rapportée, octets du registre.
 - `test_hook_doc.py` : hook Claude Code `.claude/hooks/doc_a_jour.py` (chargé par son chemin) : blocage si du code
   change sans documentation, une seule fois (`stop_hook_active`), `git status` lancé dans `CLAUDE_PROJECT_DIR`.
 - `test_api.py` (`TestPages`) fige la liste des routes de l'API (règle, méthode) et celles gardées par `@mj` : à
@@ -59,7 +61,8 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
 - Tests JS par module (lot 8) : `api.test.mjs` (`apiStream` : vrai `ReadableStream` découpé en morceaux, caractère
   coupé, erreur, lecteur relâché), `tours.test.mjs`, `controles.test.mjs`, `micro.test.mjs` (faux `AudioContext`),
   `partie.test.mjs`, `preparation.test.mjs` (fiche.js, apparence.js), `tete.test.mjs` (script classique exécuté par
-  `vm` avec un faux `document`). Ils chargent leur module par son chemin.
+  `vm` avec un faux `document`), `mj.test.mjs` (mode MJ : faux `fetch`, `sessionStorage` et fenêtre du mot de passe
+  par `poserDialogueMdp`). Ils chargent leur module par son chemin.
 - `tests/js/scene.test.mjs` charge scene.js depuis son texte (data: URL), univers.js et api.js par leur chemin (ils
   importent d'autres modules ; le package.json de la racine, `"type": "module"`, en fait des modules ES) ;
   `fauxFetch(reponses)` remplace `fetch` (et `document`/`localStorage` minimaux pour `chargerTheme`). Tests JS de
@@ -82,9 +85,10 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
     réplique est ignorée (`busy`).
   - `faux_ollama.py` finit chaque réplique par `{"done": true}` (sans elle, le serveur juge le flux coupé net).
   - Le parcours commence sur `/#jeu` (bandeau : voix Piper absentes signalées, puis fermées ; Entrée dans « Métier »
-    ignorée pendant une réplique), puis passe par l'accueil (barre d'espace sans effet, exemple Pré-Novice chargé
+    ignorée pendant une réplique), puis passe par l'accueil (barre d'espace sans effet, mode joueur puis bouton « MJ » : chargement d'univers et « Nouvelle
+    table » cachés puis affichés, exemple Pré-Novice chargé
     deux fois : partie gardée si on refuse de la vider, vidée sinon ; son thème Parchemin, PNJ au
-    hasard), un rechargement (conversation reprise, fiche modifiée sur le serveur relue), les options (onglet actif, barre du haut immobile, sous-options
+    hasard), un rechargement (conversation reprise, fiche modifiée sur le serveur relue), les options (onglet actif, barre du haut immobile, bouton « MJ » : mode joueur puis de nouveau MJ, sous-options
     grisées, réglage du serveur enregistré dans le config.toml temporaire), la liste « Modèle de l'IA » de la partie
     (`faux_ollama.py` liste `faux` et `autre` dans /api/tags ; changé puis remis), la page de
     préparation (onglets, « Créer un PNJ ici », point de modification, thème créé dans l'onglet Apparence, aventurier

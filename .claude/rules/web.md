@@ -20,7 +20,8 @@ Apparence), `aventuriers.md`, `portraits.md` ; API du serveur : `serveur.md` et 
   `fiche.js` et `apparence.js` (page de préparation), `univers.js`, `aventurier.js` (aventurier joué, jets de dés,
   aperçu des bonus). `bandeau.js` : DOM par `globalThis.document`.
 - `js/tete.js` : script classique (ni module, ni `defer`), chargé dans le `<head>` des deux pages avant `style.css` :
-  pose `theme` et `theme-css` gardés avant l'affichage (pas de flash ; test `tete.test.mjs` dans un contexte `vm`).
+  pose `theme` et `theme-css` gardés avant l'affichage, et `<html data-mj>` si sessionStorage `mode-mj` = "1" (pas de
+  flash ; test `tete.test.mjs` dans un contexte `vm`).
 - Toute nouvelle fonction testable sans DOM va dans le module de son domaine, avec son test dans `tests/js/`.
 - Interface et commentaires en français ; texte de l'interface avec typographie française (« », ’, espaces).
 
@@ -78,8 +79,24 @@ Apparence), `aventuriers.md`, `portraits.md` ; API du serveur : `serveur.md` et 
   notes d'un lieu, `f-secret` d'une fiche de la banque) : grisés par `masquerChamp` et jamais renvoyés (le serveur
   garde la valeur) ; révélés par la réponse d'un enregistrement fait avec le mot de passe.
 
+## Mode MJ (js/mj.js, test `mj.test.mjs`)
+- Bouton `#mjBtn.bouton-mj` tout à droite de la barre du haut (les deux pages ; `initBoutonMJ({signaler})` depuis jeu.js
+  et creation.js ; sur téléphone, en position absolue à droite de la marque). `aria-pressed` = mode MJ.
+- `connecterMJ()` : `/api/acces` → `ouvertureMJ` : `mot_de_passe` (mot de passe gardé, sinon demandé par
+  `demanderMotDePasse`, vérifié par `POST /api/reglages/verifier`, qui l'exige même sur le PC ; redemandé s'il est
+  faux, message du serveur sur 429) / `libre` (PC du serveur sans mot de passe) / `impossible` (`MESSAGE_SANS_MDP`).
+  Un nouveau clic = mode joueur (`poserModeMJ(false)` oublie aussi `mdp-mj`). Au chargement, `modeEncoreValide`
+  revérifie le mode gardé sans rien demander. creation.js passe en mode MJ si `verifierAcces` reconnaît le MJ (mot de
+  passe saisi, ou PC sans mot de passe).
+- `poserModeMJ` : sessionStorage `mode-mj`, `<html data-mj>`, événement `mode-mj` sur `document` (detail : actif ;
+  écouté par options.js). Mode d'affichage seulement : le serveur garde ses contrôles (`@mj`, réglages).
+- Balisage : `[data-mj-seul]` caché hors mode MJ (sauf l'onglet `aria-current` de la page ouverte), `[data-hors-mj]`
+  caché en mode MJ (style.css). Mode MJ seulement : onglet « Préparer l’univers », cartes « Charger un univers » et
+  « Créer son univers » de l'accueil, « Nouvelle table », « Modèle de l'IA » de la partie (`#modeleBloc`), réglages du
+  serveur de la page Options (voir `reglages.md`).
+
 ## Mise en page commune (style.css)
-- Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options),
+- Barre du haut commune (`header.entete` : marque + `nav.onglets` Accueil, Partie, Préparer l’univers, Options + bouton « MJ »),
   même balisage dans les deux pages, styles dans `style.css` ; largeur fixe (`--page-large`), indépendante du contenu,
   et `scrollbar-gutter: stable` : elle ne bouge pas d'une page à l'autre (vérifié par l'e2e). Onglet actif :
   `aria-current="page"` (posé par `afficherVue` dans index.html, en dur dans creation.html).

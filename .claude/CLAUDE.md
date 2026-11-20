@@ -33,20 +33,21 @@ src/pnj_parlant/
   voix.py, stt.py    # synthèse (Pocket TTS, Piper, Edge) ; reconnaissance (faster-whisper)
   portraits.py       # portraits des PNJ (facultatif) : SD-Turbo local (diffusers) ou Pollinations en ligne
   banque.py          # banque de PNJ, scénario, lieux et aventuriers (JSON dans pnj/)
-  systeme.py         # état GPU et Ollama
+  systeme.py         # état GPU (nvidia-smi, sinon sysfs Linux ou registre Windows) et Ollama
   generer.py         # pnj-banque 20 [--metier ...]
   static/            # index.html (accueil, partie, options), creation.html (scénario, lieux, PNJ, aventuriers, apparence),
                      # style.css (thèmes)
                      # js/ : jeu.js + options.js (index.html), creation.js : DOM, relient la page aux modules testés
                      # sans navigateur : scene.js, partie.js (état de la partie), tours.js (qui parle), controles.js,
                      # micro.js, fiche.js, apparence.js, univers.js (univers, thèmes), aventurier.js (jets de dés),
-                     # api.js (requêtes, NDJSON),
-                     # bandeau.js (alertes) ; tete.js (script classique du <head> : thème sans flash)
+                     # api.js (requêtes, NDJSON), mj.js (bouton « MJ », mode MJ / joueur),
+                     # bandeau.js (alertes) ; tete.js (script classique du <head> : thème et mode MJ sans flash)
   exemples/          # univers d'exemple (format de pnj/ + _infos.json), proposés sur l'accueil
 tests/               # pytest ; tests/js (node --test) ; tests/e2e (navigateur sans écran)
 config.toml.example  # tous les réglages ; config.toml (clé API) n'est pas versionné
 lancer.bat, docker-compose.yml  # lancement Windows, Ollama dans Docker
 scripts/ecran.sh     # libère la VRAM sous Linux (écran graphique coupé)
+scripts/diagnostic_gpu.py, diagnostic-gpu.bat  # rapport carte graphique (machine injoignable), sans installation
 docs/                # installation-windows.md : guide pas à pas Windows
 LICENSE              # GPL-3.0 ; static/fonts/OFL.txt pour les polices (SIL OFL 1.1)
 ```

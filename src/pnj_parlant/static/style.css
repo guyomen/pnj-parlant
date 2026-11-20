@@ -89,11 +89,20 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 .onglets a:hover { color: var(--glass); }
 .onglets a[aria-current=page] { color: var(--glass); border-bottom-color: var(--glass); }
 .onglets a:focus-visible { outline-offset: -3px; }
+/* Bouton « MJ » (js/mj.js), tout à droite : creux en mode joueur, plein en mode MJ */
+.entete-in { position: relative; }
+.bouton-mj { margin-left: auto; flex: none; padding: .3rem .8rem; font-size: .9rem; letter-spacing: .04em;
+             background: transparent; color: var(--glass); border: 1px solid var(--glass); }
+.bouton-mj[aria-pressed=true] { background: var(--glass); color: var(--surface); }
+/* Mode MJ (<html data-mj>, posé par js/tete.js puis js/mj.js) : ce qui lui est réservé, et l'inverse.
+   L'onglet de la page en cours reste visible (préparation ouverte directement). */
+html:not([data-mj]) [data-mj-seul]:not([aria-current]), html[data-mj] [data-hors-mj] { display: none !important; }
 /* Téléphone : la marque au-dessus, les onglets en dessous ; la barre ne colle plus en haut */
 @media (max-width: 40rem) {
   .entete { position: static; }
   .entete-in { flex-direction: column; align-items: stretch; gap: 0; padding-top: .7rem; }
   .onglets { min-height: 2.75rem; margin: 0 -.85rem; }
+  .bouton-mj { position: absolute; top: .45rem; right: var(--gouttiere); }
 }
 
 /* Contenu d'une page : même largeur et mêmes marges partout (sauf la partie, plus large) */

@@ -62,13 +62,15 @@ Dans la partie, **Créer un PNJ** en invente un d'après son métier ; ou choisi
 - **Longueur des réponses** : **Courte** (une phrase), **Normale** (`phrases_max` de `config.toml`) ou **Détaillée**.
 - **Exporter la conversation** l'enregistre dans un fichier texte lisible ; **Importer une conversation** la reprend là où elle s'était arrêtée (même lieu, mêmes PNJ). Un PNJ absent de la banque est recréé par le modèle d'après ce qu'il a dit.
 - Sous la discussion : l'utilisation du contexte (barre de progression si sa limite est connue) et le cumul des tokens de la scène. Ollama utilise `[local] contexte` ; pour Claude, définissez `contexte` dans `[claude]` selon la fenêtre du modèle.
-- **Modèle de l’IA** (en bas de la colonne de droite, seulement si les dialogues passent par Ollama ou LM Studio) : la liste des modèles installés, sur le modèle en cours. Un autre choix s'applique aussitôt, sans relancer, et s'enregistre dans `config.toml` (`modele` de `[local]` ou de `[lmstudio]`, comme dans les options ; avec Ollama, il sert aussi à la création des PNJ si elle passe par Ollama). Avec LM Studio, « Modèle chargé dans LM Studio » reprend celui qui y est chargé. La liste est grisée pendant qu'un PNJ parle. Hors du PC du serveur, elle demande le mot de passe du MJ (gardé jusqu'à la fermeture de l'onglet) ; sans mot de passe défini, elle ne se change que depuis le PC.
+- **Modèle de l’IA** (en bas de la colonne de droite, en mode MJ, seulement si les dialogues passent par Ollama ou LM Studio) : la liste des modèles installés, sur le modèle en cours. Un autre choix s'applique aussitôt, sans relancer, et s'enregistre dans `config.toml` (`modele` de `[local]` ou de `[lmstudio]`, comme dans les options ; avec Ollama, il sert aussi à la création des PNJ si elle passe par Ollama). Avec LM Studio, « Modèle chargé dans LM Studio » reprend celui qui y est chargé. La liste est grisée pendant qu'un PNJ parle. Hors du PC du serveur, elle demande le mot de passe du MJ (gardé jusqu'à la fermeture de l'onglet) ; sans mot de passe défini, elle ne se change que depuis le PC.
+
+**Mode MJ** : le bouton **MJ**, tout à droite de la barre du haut, ouvre le mode MJ ; un nouveau clic revient en mode joueur. Avec un mot de passe du MJ, il le demande (sur tous les appareils, le PC compris) ; sans mot de passe, il s'ouvre directement sur le PC du serveur et reste fermé aux autres appareils. Le mode est gardé jusqu'à la fermeture de l'onglet. En mode MJ seulement apparaissent l'onglet **Préparer l’univers**, les cartes « Charger un univers » et « Créer son univers » de l'accueil, le bouton **Nouvelle table**, la liste **Modèle de l’IA** de la partie et tous les réglages du serveur dans la page Options ; en mode joueur, l'accueil ne propose que de discuter avec un PNJ. C'est un confort d'affichage : le serveur garde ses propres protections (mot de passe du MJ pour toute modification).
 
 La page **Options** a trois parties (rubriques à gauche, en haut sur téléphone) :
 
-- **Cette partie** : les réglages de ce navigateur (chaque joueur a les siens), dans le tableau ci-dessous.
-- **Le serveur** : les réglages de `config.toml`, modifiables à chaud sans ouvrir le fichier (voir [Configuration](#configuration)).
-- **État** : moteurs utilisés, Ollama ou LM Studio (actif ou pas, modèle chargé) et carte graphique.
+- **Cette partie** : les réglages de ce navigateur (chaque joueur a les siens, sans mot de passe), dans le tableau ci-dessous.
+- **Le serveur** : en mode joueur, les moteurs utilisés en bref (« Informations ») ; en mode MJ, les réglages de `config.toml`, modifiables à chaud sans ouvrir le fichier (voir [Configuration](#configuration)).
+- **État** : Ollama ou LM Studio (actif ou pas) et carte graphique ; en mode MJ, avec les moteurs, le modèle chargé et la mémoire vidéo. Une carte NVIDIA est lue par `nvidia-smi` (activité et mémoire vidéo) ; sinon, sous Linux, une carte AMD est lue par son pilote (activité et mémoire vidéo), et sous Windows, une carte AMD ou Intel affiche son nom et sa mémoire vidéo, sans son activité. Si la carte est mal reconnue, lancez `python scripts/diagnostic_gpu.py` (sous Windows, double-clic sur `scripts\diagnostic-gpu.bat`) : sans rien installer ni modifier, il écrit `diagnostic-gpu.txt` (sans nom de machine ni d'utilisateur), à joindre à votre signalement.
 
 | Option de la partie | Effet |
 |---|---|
@@ -265,7 +267,7 @@ Réglages que la page Options ne montre pas : `garder_en_memoire` (`[local]`, du
 
 **Depuis la page Options** (partie « Le serveur »), les réglages utiles se changent sans ouvrir le fichier : moteurs de langage, Claude (clé, modèle, effort), Ollama et LM Studio (adresse, modèle, mode réflexion, contexte, température), dialogue (historique, PNJ en scène, phrases par réplique, interventions), voix, reconnaissance vocale, portraits, HTTPS, port et mot de passe du MJ. Les modifications s'accumulent jusqu'à **Enregistrer** : le serveur les vérifie, les écrit dans `config.toml` en gardant vos commentaires et votre mise en forme, et les applique aussitôt, sans redémarrage (sauf le port et HTTPS, signalés « au redémarrage »). La clé API et le mot de passe ne sont jamais renvoyés au navigateur. Le reste (genres des voix Piper, dossiers, `max_tokens`…) se règle dans le fichier.
 
-Ces réglages sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (bouton **Déverrouiller**, gardé le temps de l'onglet) ; sans mot de passe, seul le PC du serveur peut les modifier, les téléphones des joueurs les voient en lecture seule. Le même mot de passe protège l'univers depuis les autres appareils (voir [Accès depuis une autre machine](#accès-depuis-une-autre-machine-ex-le-téléphone-dun-joueur)). Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
+Ces réglages ne s'affichent qu'en **mode MJ** (bouton **MJ** de la barre du haut) et sont protégés par le **mot de passe du MJ** (`mot_de_passe_mj` dans `[serveur]`, ou la page Options) : avec un mot de passe, il est demandé sur tous les appareils (en ouvrant le mode MJ, gardé le temps de l'onglet ; **Verrouiller** revient en mode joueur) ; sans mot de passe, seul le PC du serveur peut ouvrir le mode MJ et les modifier. Le même mot de passe protège l'univers depuis les autres appareils (voir [Accès depuis une autre machine](#accès-depuis-une-autre-machine-ex-le-téléphone-dun-joueur)). Le mot de passe est rangé en clair dans `config.toml` : c'est une protection pour la table de jeu, pas un coffre-fort.
 
 Le serveur refuse les requêtes trop volumineuses (413) : 60 Mo pour un import d'univers (500 fichiers au plus, zip décompressés compris), 5 Mo pour un enregistrement du micro, 2 Mo pour le reste.
 
@@ -311,6 +313,7 @@ src/pnj_parlant/
 tests/                      tests Python (pytest) et tests/js/ (Node)
 docs/                       installation-windows.md : guide pas à pas Windows
 scripts/ecran.sh            libère la mémoire vidéo sous Linux
+scripts/diagnostic_gpu.py   rapport sur la carte graphique (diagnostic-gpu.bat sous Windows)
 lancer.bat                  lanceur Windows (double-clic)
 ```
 

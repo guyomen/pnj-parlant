@@ -12,6 +12,7 @@ import { auHasard, enchainerTours, oublierNonDit, ordreDesReponses, ordreDiscuss
 import { requete, retirer as retirerAlerte, signaler, verifierSante } from "./bandeau.js";
 import { api, apiStream, lireReponse } from "./api.js";
 import { initOptions, ouvrirOptions, refreshSys } from "./options.js";
+import { initBoutonMJ } from "./mj.js";
 import { chargerExemple, chargerTheme, confirmationImport, confirmationNouvelleTable, confirmationViderPartie,
          importerFichiers, resumeImport, resumeUnivers } from "./univers.js";
 import { MODES, affichageJet, detailJet, ficheAventurier, jetChoisi, lancer, menuJets, portraitAventurier,
@@ -1110,6 +1111,7 @@ async function chargerConfig(premiere = false) {
   else if (premiere && !c.tts) statut("Synthèse vocale indisponible sur le serveur : la voix du navigateur sera utilisée.");
 }
 initOptions({ config: () => cfg, chargerConfig });  // vue Options (js/options.js)
+initBoutonMJ({ signaler: (message) => alerte(message, "avertissement", "mj") });  // mode MJ (js/mj.js)
 chargerConfig(true);
 verifierSante();
 

@@ -27,7 +27,8 @@ Côté serveur de la réplique : `dialogue.md`. Aventurier joué et jets de dés
   tokens : `compteurVide`, `cumulerUsage`. Hors de `partie` : `ici` (boutons « Aborder »), `tokenUsage`.
 - `busy` + `setBusy(b)` : `appliquerControles()` (état de chaque contrôle calculé par `etatControles`, js/controles.js)
   puis, à la fin d'une action, libère les attentes et `sauverPartie()` ; `libre()` attend la fin de l'action en cours.
-- Modèle de l'IA (`#modeleBloc.modele-ia`, dernier bloc de la colonne de droite, styles dans style.css) : liste
+- Modèle de l'IA (`#modeleBloc.modele-ia`, dernier bloc de la colonne de droite, styles dans style.css ; `data-mj-seul` :
+  caché en mode joueur, js/mj.js) : liste
   `#modeleSel` construite par `afficherModele()` (dans `chargerConfig`) d'après `modele_dialogue` de /api/config,
   via `choixModele` (scene.js : null avec Claude = bloc caché ; LM Studio : "" = « Modèle chargé dans LM Studio » ;
   modèle configuré absent = « (introuvable) ») ; désactivée par `setBusy` pendant une action et si `modifiable` est

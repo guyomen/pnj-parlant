@@ -7,19 +7,29 @@ import vm from "node:vm";
 
 const source = readFileSync(new URL("../../src/pnj_parlant/static/js/tete.js", import.meta.url), "utf8");
 
-function executer(stockage) {
+function executer(stockage, session = {}) {
   const ajoutes = [];
   const document = {
     documentElement: { dataset: {} },
     head: { appendChild: (el) => ajoutes.push(el) },
     createElement: (tag) => ({ tag }),
   };
-  const localStorage = stockage === null
+  const faux = (valeurs) => valeurs === null
     ? { getItem() { throw new Error("stockage interdit"); } }
-    : { getItem: (cle) => stockage[cle] ?? null };
-  vm.runInNewContext(source, { document, localStorage });
+    : { getItem: (cle) => valeurs[cle] ?? null };
+  vm.runInNewContext(source, { document, localStorage: faux(stockage), sessionStorage: faux(session) });
+  executer.mj = "mj" in document.documentElement.dataset;
   return { theme: document.documentElement.dataset.theme, ajoutes };
 }
+
+test("tete.js : mode MJ gardé par l'onglet posé avant l'affichage (<html data-mj>)", () => {
+  executer({}, { "mode-mj": "1" });
+  assert.equal(executer.mj, true);
+  executer({}, {});
+  assert.equal(executer.mj, false);
+  executer({}, null);  // stockage interdit : mode joueur, sans erreur
+  assert.equal(executer.mj, false);
+});
 
 test("tete.js : thème et CSS des thèmes de l'univers gardés posés avant l'affichage", () => {
   const { theme, ajoutes } = executer({ theme: "parchemin", "theme-css": "html[data-theme=\"x\"] { --bg: #000000; }" });

@@ -31,6 +31,11 @@ Tout nouveau réglage utile en partie va aussi dans le `CATALOGUE` (voir CLAUDE.
   `mot_de_passe` dans le refus : la page Options a son propre formulaire).
 
 ## Page Options (index.html, `#options`, js/options.js)
+- Deux modes (js/mj.js, `web.md`) : mode joueur = « Cette partie », « Informations » (`#opt-infos`, `data-hors-mj` :
+  moteurs en bref, `lignesMoteurs(cfg, false)`) et « Machine » sans détail (`lignesEtat(etat, false)` : ni modèles
+  ni mémoire) ; mode MJ = « Accès » et réglages du serveur (`data-mj-seul`, lus par `chargerReglages` seulement en mode
+  MJ) et « Machine » détaillée. Événement `mode-mj` : modifications abandonnées, réglages lus ou vidés, `construireNav`
+  (rubriques du mode en cours seulement) et `refreshSys` (seule la dernière demande s'affiche, `demandeSys`).
 - Rubriques (`#optionsNav`, construites par `construireNav` d'après les `section[id][data-titre]` de
   `.options-contenu`, intercalaires « Ce navigateur » / « Le serveur » / « État ») ; un clic fait défiler.
 - « Cette partie » : réglages du navigateur (`OPTIONS` en localStorage), en lignes `.reglage` (libellé + aide |
@@ -44,9 +49,12 @@ Tout nouveau réglage utile en partie va aussi dans le `CATALOGUE` (voir CLAUDE.
 - Accès (`afficherAcces`) : déverrouillé / formulaire du mot de passe / modifiable depuis ce PC / lecture seule ; mot
   de passe gardé en sessionStorage `mdp-mj`, envoyé en `X-Mot-De-Passe-MJ`, oublié sur 403 (champs réaffichés
   verrouillés, modifications gardées). `controle(r)` affiche la valeur en attente s'il y en a une ; « Verrouiller »
-  abandonne les modifications ; un nombre vidé reprend sa valeur en quittant le champ.
+  = quitter le mode MJ (`poserModeMJ(false)`, modifications abandonnées) ; un nombre vidé reprend sa valeur en quittant le champ.
 - Après enregistrement : message (fichier, réglages au redémarrage), `chargerConfig()` (la partie reprend les
   moteurs) et `refreshSys()`. `beforeunload` si des modifications attendent.
-- « État » (`refreshSys`, toutes les 3 s seulement sur la vue Options) : moteurs (/api/config), Ollama, LM Studio, GPU.
-- Fonctions pures (scene.js, testées) : `valeurReglage(type, champ)`, `groupeUtile(groupe, valeurs)`, `resumeModifs(n)`.
+- « État » (`refreshSys`, toutes les 3 s seulement sur la vue Options) : moteurs (/api/config, mode MJ), Ollama,
+  LM Studio, GPU.
+- Fonctions pures (scene.js, testées) : `valeurReglage(type, champ)`, `groupeUtile(groupe, valeurs)`, `resumeModifs(n)`,
+  `lignesMoteurs(cfg, detail)`, `lignesEtat(etat, detail)` (lignes `{titre, texte, alerte?, barre?}`, texte brut ; carte
+  graphique : mesures null affichées « activité non mesurée », barre seulement si la mémoire utilisée est connue).
 - Changement du modèle depuis la vue Partie (`#modeleSel`) : `partie.md`.

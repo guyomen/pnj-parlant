@@ -34,3 +34,6 @@ dist/
 # Reglages et consignes locaux de Claude Code (propres à chaque poste)
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Rapport de scripts/diagnostic_gpu.py (carte graphique)
+diagnostic-gpu.txt

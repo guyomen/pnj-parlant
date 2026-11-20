@@ -1,9 +1,12 @@
 // Vue Options de la page de jeu (index.html, « #options ») : rubriques, réglages du serveur (écrits dans
 // config.toml et appliqués à chaud, mot de passe du MJ), état de la machine. Chargé par js/jeu.js, qui fournit la
 // configuration de la partie et son rechargement (initOptions).
-import { esc, groupeUtile, resumeModifs, valeurReglage } from "./scene.js";
+// Mode joueur (js/mj.js) : options de ce navigateur, moteurs en bref (« Informations ») et état sans détail ;
+// les réglages du serveur ne sont lus et affichés qu'en mode MJ.
+import { esc, groupeUtile, lignesEtat, lignesMoteurs, resumeModifs, valeurReglage } from "./scene.js";
 import { requete, verifierSante } from "./bandeau.js";
 import { api, enTeteMdp, garderMdp, lireReponse, mdpMJ } from "./api.js";
+import { EVENEMENT, modeMJ, poserModeMJ } from "./mj.js";
 
 const $ = (id) => document.getElementById(id);
 // config() : /api/config lu par la partie ; chargerConfig() : la relit (moteurs changés)
@@ -15,16 +18,19 @@ export function initOptions({ config, chargerConfig }) {
 
 // Ouverture de la vue : réglages relus (sauf modifications en attente), état de la machine, diagnostic
 export function ouvrirOptions() {
-  if (!Object.keys(modifsReglages).length) chargerReglages();
+  if (modeMJ() && !Object.keys(modifsReglages).length) chargerReglages();
   refreshSys();
   verifierSante();
 }
 
 // --- Options : rubriques ---------------------------------------------------------------------------
-// Un bouton par rubrique (carte de la colonne de droite) : il y fait défiler la page
+// Un bouton par rubrique (carte de la colonne de droite) : il y fait défiler la page. Seulement les rubriques
+// du mode en cours (data-mj-seul : mode MJ ; data-hors-mj : mode joueur).
 function construireNav() {
-  const cartes = [...document.querySelectorAll(".options-contenu > section[id]")];
-  const intercalaires = { "opt-partie": "Ce navigateur", "opt-serveur": "Le serveur", "opt-machine": "État" };
+  const mj = modeMJ();
+  const cartes = [...document.querySelectorAll(".options-contenu > section[id]")]
+    .filter(c => (mj ? !c.closest("[data-hors-mj]") : !c.closest("[data-mj-seul]")));
+  const intercalaires = { "opt-partie": "Ce navigateur", "opt-infos": "Le serveur", "opt-serveur": "Le serveur", "opt-machine": "État" };
   $("optionsNav").innerHTML = cartes.map(c => (intercalaires[c.id] ? `<span class="sep">${intercalaires[c.id]}</span>` : "")
     + `<button type="button" data-aller="${c.id}">${esc(c.dataset.titre)}</button>`).join("");
 }
@@ -35,6 +41,22 @@ $("optionsNav").onclick = (e) => {
   for (const b of $("optionsNav").querySelectorAll("button")) b.classList.toggle("actif", b.dataset.aller === id);
 };
 construireNav();
+
+// Changement de mode (bouton « MJ ») : réglages du serveur lus en entrant, oubliés en sortant (modifications
+// en attente comprises : elles ne pourraient plus être enregistrées)
+document.addEventListener(EVENEMENT, (e) => {
+  modifsReglages = {};
+  messageOptions("");
+  if (e.detail) {
+    if (document.body.dataset.vue === "options") chargerReglages();
+  } else {
+    reglagesServeur = null;
+    $("reglagesServeur").innerHTML = "";
+    majBarreReglages();
+  }
+  construireNav();
+  refreshSys();
+});
 
 // --- Options : réglages du serveur (écrits dans config.toml, appliqués aussitôt) --------------------
 // /api/reglages : {groupes: [{id, titre, aide, si, reglages: [{cle, libelle, type, valeur, choix…}]}], protege, local}.
@@ -54,8 +76,11 @@ function messageOptions(texte, erreur = false) {
 }
 
 async function chargerReglages() {
-  try { reglagesServeur = await api("/api/reglages"); }
+  let lus;
+  try { lus = await api("/api/reglages"); }
   catch (e) { $("acces").innerHTML = `<p>${esc(e.message)}</p>`; return; }
+  if (!modeMJ()) return;  // mode MJ quitté pendant la lecture : rien à afficher
+  reglagesServeur = lus;
   modifsReglages = {};
   afficherReglages();
 }
@@ -136,12 +161,9 @@ $("acces").addEventListener("submit", async (e) => {
     afficherReglages();
   } catch (err) { messageOptions(err.message, true); }
 });
+// « Verrouiller » = quitter le mode MJ (mot de passe oublié, modifications abandonnées)
 $("acces").addEventListener("click", (e) => {
-  if (e.target.id !== "verrouiller") return;
-  garderMdp("");
-  modifsReglages = {};  // verrouillé : elles ne pourraient plus être enregistrées
-  messageOptions("");
-  afficherReglages();
+  if (e.target.id === "verrouiller") poserModeMJ(false);
 });
 
 function majBarreReglages() {
@@ -207,35 +229,20 @@ $("reglagesEnregistrer").onclick = async () => {
 window.addEventListener("beforeunload", (e) => { if (Object.keys(modifsReglages).length) e.preventDefault(); });
 
 // --- Options : état de la machine ---------------------------------------------------------------
-const ligneSys = (titre, texte, alerte = false) =>
-  `<div class="ligne"><span>${esc(titre)}</span><span${alerte ? ' class="alert"' : ""}>${texte}</span></div>`;
+// Lignes de lignesMoteurs / lignesEtat (scene.js) : en détail en mode MJ, en bref en mode joueur
+const ligneSys = ({ titre, texte, alerte = false, barre }) =>
+  `<div class="ligne"><span>${esc(titre)}</span><span${alerte ? ' class="alert"' : ""}>${esc(texte)}</span></div>`
+  + (barre === undefined ? "" : `<div class="bar"><i style="width:${Math.min(100, Math.max(0, barre))}%"></i></div>`);
+let demandeSys = 0;  // seule la dernière demande s'affiche (/api/etat peut être lent : Ollama qui ne répond pas)
 export async function refreshSys() {
-  const box = $("sys");
+  const box = $("sys"), mj = modeMJ(), demande = ++demandeSys;
   const cfg = deps.config();
+  $("infos").innerHTML = mj ? "" : lignesMoteurs(cfg, false).map(ligneSys).join("");
+  let h;
   try {
     const e = await api("/api/etat");
-    const m = cfg.moteurs ?? {};
-    let h = ligneSys("Création", esc(m.creation ?? "—")) + ligneSys("Dialogues", esc(m.dialogue ?? "—"))
-      + ligneSys("Voix", cfg.tts ? esc(cfg.tts) : "voix du navigateur")
-      + ligneSys("Reconnaissance", cfg.stt_local ? "sur ce PC" : "navigateur")
-      + ligneSys("Portraits", cfg.portraits ? esc(cfg.portraits === "local" ? "sur ce PC" : "en ligne") : "aucun");
-    if (e.ollama) {
-      h += e.ollama.ok
-        ? ligneSys("Ollama", `actif — ${e.ollama.charges.length ? e.ollama.charges.map(x => `${esc(x.nom)} (${x.vram_mo} Mo en mémoire vidéo)`).join(", ") : "aucun modèle chargé"}`)
-        : ligneSys("Ollama", "ne répond pas : démarrez-le (lancer.bat le fait sous Windows ; sous Linux : docker compose up -d).", true);
-    }
-    if (e.lmstudio) {
-      h += e.lmstudio.ok ? ligneSys("LM Studio", `actif — ${esc(e.lmstudio.modele || "modèle chargé")}`)
-                         : ligneSys("LM Studio", esc(e.lmstudio.message), true);
-    }
-    if (e.gpu) {
-      const pct = Math.round(100 * e.gpu.memoire_mo / e.gpu.memoire_totale_mo);
-      h += ligneSys(e.gpu.nom, `calcul ${e.gpu.usage} %, mémoire ${e.gpu.memoire_mo} / ${e.gpu.memoire_totale_mo} Mo`)
-        + `<div class="bar"><i style="width:${pct}%"></i></div>`;
-    } else {
-      h += ligneSys("Carte graphique", "aucune carte NVIDIA détectée");
-    }
-    box.innerHTML = h;
-  } catch { box.innerHTML = ligneSys("Serveur", "injoignable", true); }
+    h = [...(mj ? lignesMoteurs(cfg, true) : []), ...lignesEtat(e, mj)].map(ligneSys).join("");
+  } catch { h = ligneSys({ titre: "Serveur", texte: "injoignable", alerte: true }); }
+  if (demande === demandeSys) box.innerHTML = h;
 }
 setInterval(() => { if (!document.hidden && document.body.dataset.vue === "options") refreshSys(); }, 3000);
