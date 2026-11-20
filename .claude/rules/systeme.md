@@ -59,12 +59,22 @@ paths:
   chaque mesure à None si inconnue : `gpu_nvidia` (nvidia-smi) d'abord ; sinon `gpu_linux` (sysfs
   `/sys/class/drm/card*/device` : amdgpu donne activité et VRAM, une autre carte son fabricant ; sorties `card0-HDMI…`
   ignorées) ou `gpu_windows` (registre de la classe des cartes graphiques via `winreg`, `cartes_du_registre` : nom et
-  VRAM dédiée `qwMemorySize`, ancien `MemorySize` en octets ; cartes sans `PCI\` ignorées ; pas d'activité : les
-  compteurs de Windows sont lents, ~2,5 s, et leurs noms traduits). La carte qui a le plus de VRAM l'emporte.
+  VRAM dédiée `qwMemorySize` (WMI `AdapterRAM` et l'ancien `MemorySize` plafonnent à 4 Go), ancien `MemorySize` en
+  octets en secours ; cartes sans `PCI\` ignorées). La carte qui a le plus de VRAM l'emporte.
+- Windows, activité et VRAM utilisée : compteurs `\GPU Engine(*)\Utilization Percentage` et
+  `\GPU Adapter Memory(*)\Dedicated Usage` lus par l'API PDH (`CompteursWindows`, ctypes sur pdh.dll,
+  `PdhAddEnglishCounterW` : noms anglais quelle que soit la langue). Requête gardée ouverte (`compteurs_windows`,
+  sous verrou ; l'activité est un taux entre deux relevés : seul le premier appel attend 250 ms, ~0,7 s en tout,
+  ensuite ~2 ms) ; en cas d'erreur, fermée et refaite à l'appel suivant, mesures à None. `agreger_compteurs` (pur,
+  testé) : activité d'un moteur = somme des processus, d'une carte = son moteur le plus occupé (Compute pour Ollama,
+  3D pour un jeu), carte = celle qui utilise le plus de VRAM, sinon la plus active ; `par_type` pour le diagnostic.
+  `mesures_windows(lire=None)` et `gpu_windows(…, mesurer=None)` cherchent leur fonction à l'appel (remplaçable dans
+  les tests). Vérifié sur une RX 6600 XT (8176 Mo, 66 % et 4218 Mo relevés).
 - `scripts/diagnostic_gpu.py` (+ `scripts/diagnostic-gpu.bat`, CRLF, messages ASCII) : pour une machine injoignable
   (pas de SSH). Bibliothèque standard seule, `src/` ajouté à `sys.path` (aucune installation). Écrit
   `diagnostic-gpu.txt` (ignoré par git ; chemin personnel remplacé par `~`, pas de nom de machine) : résultats et
-  durées de `etat_gpu`/`gpu_*`, affichage de `lignesEtat` (si Node), nvidia-smi, registre et WMI, compteurs GPU de
+  durées de `etat_gpu` (premier appel et suivant)/`gpu_*`, 8 relevés PDH à 1 s (activité par type de moteur : à lancer
+  pendant qu'un PNJ répond), affichage de `lignesEtat` (si Node), nvidia-smi, registre et WMI, compteurs GPU de
   Windows (noms traduits, activité 3D et VRAM dédiée chronométrées : piste pour mesurer l'activité), sysfs,
   lspci/rocm-smi/amd-smi sous Linux, `/api/ps` d'Ollama. Une exception est rapportée, pas levée.
 

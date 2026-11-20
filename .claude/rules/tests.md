@@ -53,7 +53,10 @@ python tests/e2e/lancer.py   # parcours complet dans Edge ou Chrome sans écran 
   fiches conformes au schéma, lieux existants, pas de `voix` (attribuée par le serveur selon la machine), thème
   présent dans `style.css`.
 - `test_diagnostic_gpu.py` : `scripts/diagnostic_gpu.py` chargé par son chemin, `commande` et `urlopen` remplacés
-  (ni PowerShell, ni réseau) : rapport complet sans chemin personnel, exception rapportée, octets du registre.
+  (ni PowerShell, ni réseau, ni vrais compteurs, `time.sleep` remplacé) : rapport complet sans chemin personnel,
+  exception rapportée, relevés des compteurs, octets du registre. Compteurs GPU de Windows (test_stt_systeme.py) :
+  `agreger_compteurs` sur des instances inventées, `CompteursWindows` remplacé (requête gardée, refaite après une
+  panne) ; vraie lecture PDH seulement sous Windows (`skipif`).
 - `test_hook_doc.py` : hook Claude Code `.claude/hooks/doc_a_jour.py` (chargé par son chemin) : blocage si du code
   change sans documentation, une seule fois (`stop_hook_active`), `git status` lancé dans `CLAUDE_PROJECT_DIR`.
 - `test_api.py` (`TestPages`) fige la liste des routes de l'API (règle, méthode) et celles gardées par `@mj` : à

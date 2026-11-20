@@ -93,14 +93,39 @@ def section_systeme():
 def section_systeme_py():
     titre("Ce que lit systeme.py (page Options, rubrique État)")
     from pnj_parlant import systeme
-    gpu = appel("etat_gpu()", systeme.etat_gpu)
+    appel("etat_gpu(), premier appel", systeme.etat_gpu)  # Windows : ouvre la requête des compteurs (≈ 0,5 s)
+    time.sleep(1)
+    gpu = appel("etat_gpu(), appel suivant", systeme.etat_gpu)  # ce que voit la page toutes les 3 s
     appel("gpu_nvidia()", systeme.gpu_nvidia)
     if sys.platform.startswith("linux"):
         appel("gpu_linux()", systeme.gpu_linux)
     if os.name == "nt":
         appel("cartes_du_registre()", systeme.cartes_du_registre)
         appel("gpu_windows()", systeme.gpu_windows)
+        section_compteurs_pdh(systeme)
     return gpu if isinstance(gpu, dict) or gpu is None else None
+
+
+def section_compteurs_pdh(systeme):
+    """Compteurs de Windows tels que systeme.py les lit (API PDH) : activité par type de moteur (3D, Compute…) de
+    la carte retenue, relevée chaque seconde. Lancé pendant qu'un PNJ répond (modèle local), il montre quel moteur
+    Ollama fait travailler."""
+    titre("Windows : compteurs lus par systeme.py (API PDH), 8 relevés à 1 s d'écart")
+    ecrire("Astuce : lancez ce diagnostic pendant qu'un PNJ répond, pour voir l'activité du modèle local.")
+    for i in range(8):
+        debut = time.perf_counter()
+        bruts = systeme.compteurs_windows()
+        duree = (time.perf_counter() - debut) * 1000
+        if bruts is None:
+            ecrire(f"relevé {i + 1} ({duree:.1f} ms) : compteurs illisibles")
+        else:
+            m = systeme.agreger_compteurs(*bruts)
+            ecrire(f"relevé {i + 1} ({duree:.1f} ms, {len(bruts[0])} instances de moteurs) : activité {m['usage']} %, "
+                   f"mémoire dédiée {m['memoire_mo']} Mo, carte {m['carte']}")
+            ecrire(f"    par type de moteur : {m['par_type']}")
+            if i == 0:
+                ecrire(f"    mémoire par carte : { {k: round(v / systeme.MO) for k, v in bruts[1].items()} }")
+        time.sleep(1)
 
 
 def section_affichage(gpu):

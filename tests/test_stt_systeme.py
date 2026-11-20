@@ -217,11 +217,88 @@ class TestSysteme:
         cartes = [{"nom": "Microsoft Basic Display Adapter", "id_materiel": "ROOT\\BasicDisplay", "memoire": 1 << 40},
                   {"nom": "Intel(R) UHD Graphics 620", "id_materiel": "PCI\\VEN_8086&DEV_3EA0", "memoire": 1 << 30},
                   {"nom": "AMD Radeon RX 6600", "id_materiel": "pci\\ven_1002&dev_73ff", "memoire": 8 << 30}]
-        assert systeme.gpu_windows(lambda: cartes) == {"nom": "AMD Radeon RX 6600", "usage": None, "memoire_mo": None,
-                                                        "memoire_totale_mo": 8192}
-        assert systeme.gpu_windows(lambda: [{"nom": "Intel", "id_materiel": "PCI\\X", "memoire": None}]) == {
+        sans_compteurs = lambda: {"usage": None, "memoire_mo": None, "carte": None, "par_type": {}}  # noqa: E731
+        assert systeme.gpu_windows(lambda: cartes, sans_compteurs) == {
+            "nom": "AMD Radeon RX 6600", "usage": None, "memoire_mo": None, "memoire_totale_mo": 8192}
+        assert systeme.gpu_windows(lambda: [{"nom": "Intel", "id_materiel": "PCI\\X", "memoire": None}],
+                                   sans_compteurs) == {
             "nom": "Intel", "usage": None, "memoire_mo": None, "memoire_totale_mo": None}
-        assert systeme.gpu_windows(lambda: cartes[:1]) is None  # carte virtuelle seule
+        assert systeme.gpu_windows(lambda: cartes[:1], sans_compteurs) is None  # carte virtuelle seule
+        # compteurs de Windows : activité et mémoire utilisée (rapport de la RX 6600 XT : 66 %, 4218 Mo)
+        mesures = lambda: {"usage": 66, "memoire_mo": 4218, "carte": "x", "par_type": {}}  # noqa: E731
+        assert systeme.gpu_windows(lambda: cartes, mesures) == {
+            "nom": "AMD Radeon RX 6600", "usage": 66, "memoire_mo": 4218, "memoire_totale_mo": 8192}
+
+    def test_agreger_compteurs(self):
+        amd, virtuelle = "luid_0x00000000_0x00013a83_phys_0", "luid_0x00000000_0x0001560f_phys_0"
+        moteurs = {
+            # deux processus sur le moteur 3D (additionnés), Ollama sur un moteur Compute (le plus occupé l'emporte)
+            f"pid_100_{amd}_eng_0_engtype_3D": 20.0, f"pid_200_{amd}_eng_0_engtype_3D": 15.5,
+            f"pid_300_{amd}_eng_4_engtype_Compute_0": 87.0, f"pid_300_{amd}_eng_1_engtype_Copy": 2.0,
+            f"pid_400_{virtuelle}_eng_0_engtype_3D": 99.0, "instance illisible": 50.0}
+        memoire = {amd.upper().replace("LUID", "luid").replace("PHYS", "phys"): 4218 * 1024 * 1024,
+                   virtuelle: 0.0, "autre": 1.0}
+        assert systeme.agreger_compteurs(moteurs, memoire) == {
+            "usage": 87, "memoire_mo": 4218, "carte": "0x00000000_0x00013a83_phys_0",
+            "par_type": {"3D": 35.5, "Compute_0": 87.0, "Copy": 2.0}}
+        # au-delà de 100 % (plusieurs processus) : plafonné
+        assert systeme.agreger_compteurs({f"pid_1_{amd}_eng_0_engtype_3D": 70.0,
+                                          f"pid_2_{amd}_eng_0_engtype_3D": 60.0}, {amd: 1.0})["usage"] == 100
+
+    def test_agreger_compteurs_sans_memoire_ni_mesure(self):
+        a, b = "luid_0x0_0x1_phys_0", "luid_0x0_0x2_phys_0"
+        # mémoire nulle partout (puce intégrée) : la carte la plus active
+        m = systeme.agreger_compteurs({f"pid_1_{a}_eng_0_engtype_3D": 3.0, f"pid_1_{b}_eng_0_engtype_3D": 9.0},
+                                      {a: 0.0, b: 0.0})
+        assert (m["usage"], m["memoire_mo"], m["carte"]) == (9, 0, "0x0_0x2_phys_0")
+        # mémoire connue, aucun moteur : activité inconnue
+        assert systeme.agreger_compteurs({}, {a: 2 * 1024 * 1024})["usage"] is None
+        assert systeme.agreger_compteurs({}, {}) == {"usage": None, "memoire_mo": None, "carte": None, "par_type": {}}
+        assert systeme.mesures_windows(lambda: None)["usage"] is None  # compteurs illisibles
+
+    def test_compteurs_windows_requete_gardee_puis_refaite_apres_panne(self, monkeypatch):
+        ouvertes, fermees = [], []
+
+        class FauxCompteurs:
+            def __init__(self):
+                ouvertes.append(self)
+                self.releves = 0
+
+            def lire(self):
+                self.releves += 1
+                if self.releves == 3:
+                    raise OSError("compteur disparu")
+                return {"m": 1.0}, {"c": 2.0}
+
+            def fermer(self):
+                fermees.append(self)
+        monkeypatch.setattr(systeme, "CompteursWindows", FauxCompteurs)
+        monkeypatch.setattr(systeme, "_compteurs", None)
+        assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})
+        assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})
+        assert len(ouvertes) == 1  # requête gardée entre deux appels
+        assert systeme.compteurs_windows() is None  # panne : requête fermée…
+        assert fermees == ouvertes
+        assert systeme.compteurs_windows() == ({"m": 1.0}, {"c": 2.0})  # … et refaite à l'appel suivant
+        assert len(ouvertes) == 2
+
+    def test_compteurs_windows_illisibles(self, monkeypatch):
+        def ouvrir():
+            raise OSError("PdhAddEnglishCounterW : code PDH 0xC0000BB8")
+        monkeypatch.setattr(systeme, "CompteursWindows", ouvrir)
+        monkeypatch.setattr(systeme, "_compteurs", None)
+        assert systeme.compteurs_windows() is None
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="API PDH de Windows")
+    def test_compteurs_windows_reels(self, monkeypatch):
+        monkeypatch.setattr(systeme, "_compteurs", None)
+        bruts = systeme.compteurs_windows()
+        if bruts is None:
+            pytest.skip("compteurs GPU absents de ce Windows")
+        moteurs, memoire = bruts
+        assert all(isinstance(v, float) for v in [*moteurs.values(), *memoire.values()])
+        assert systeme.compteurs_windows() is not None  # requête gardée, relue
+        systeme._compteurs.fermer()
 
     @pytest.mark.parametrize("panne", [OSError("registre"), ImportError("winreg")])
     def test_gpu_windows_registre_illisible(self, panne):
