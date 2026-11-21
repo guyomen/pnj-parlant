@@ -402,7 +402,8 @@ class TestRouteEtat:
 
     def test_ollama_interroge_a_l_adresse_configuree(self, client, moteurs):
         moteurs.local_cfg["url"] = "http://ollama:11434"
-        assert client.get("/api/etat").get_json() == {"gpu": {"nom": "GPU"}, "ollama": {"ok": True}, "lmstudio": None}
+        assert client.get("/api/etat").get_json() == {"gpu": {"nom": "GPU"}, "ollama": {"ok": True}, "lmstudio": None,
+                                                    "strata": None}
         assert self.appels == ["http://ollama:11434"]
 
     def test_tout_claude_pas_d_ollama_ni_lmstudio(self, client, moteurs):
@@ -414,6 +415,12 @@ class TestRouteEtat:
         moteurs.choix = {"creation": "claude", "dialogue": "lmstudio"}
         moteurs.etat_lmstudio = lambda: {"ok": False, "message": "arrêté"}
         assert client.get("/api/etat").get_json()["lmstudio"] == {"ok": False, "message": "arrêté"}
+
+    def test_strata(self, client, moteurs):
+        moteurs.choix = {"creation": "strata", "dialogue": "strata"}
+        moteurs.etat_strata = lambda: {"ok": True, "modele": "qwen"}
+        d = client.get("/api/etat").get_json()
+        assert d["strata"] == {"ok": True, "modele": "qwen"} and d["lmstudio"] is None and self.appels == []
 
 
 # --- /api/voice-engine ---------------------------------------------------------------------------

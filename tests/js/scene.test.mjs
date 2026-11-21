@@ -554,3 +554,18 @@ test("styles : aucune couleur en dur hors des palettes, cibles tactiles, viewpor
     assert.doesNotMatch(html, /onsubmit=/, f);
   }
 });
+
+test("Strata : moteur en bref, état et liste « Modèle de l’IA »", () => {
+  assert.equal(scene.lignesMoteurs({ moteurs: { dialogue: "Strata : modèle chargé" } }, false)[1].texte,
+    "IA sur ce PC (Strata)");
+  const etat = { ollama: null, lmstudio: null, strata: { ok: true, modele: "qwen3.8" }, gpu: null };
+  assert.deepEqual(scene.lignesEtat(etat, true)[0], { titre: "Strata", texte: "actif — qwen3.8" });
+  const panne = { strata: { ok: false, message: "Strata injoignable." }, gpu: null };
+  assert.deepEqual(scene.lignesEtat(panne, false)[0],
+    { titre: "Strata", alerte: true, texte: "ne répond pas : prévenez le MJ." });
+  assert.equal(scene.lignesEtat(panne, true)[0].texte, "Strata injoignable.");
+  const choix = scene.choixModele({ moteur: "strata", cle: "strata.modele", valeur: "", modeles: ["qwen3.8"] });
+  assert.deepEqual(choix.options.map(o => o.libelle), ["Modèle chargé dans Strata", "qwen3.8"]);
+  assert.deepEqual(scene.changementModele(choix, "qwen3.8"), { "strata.modele": "qwen3.8" });
+  assert.equal(scene.groupeUtile({ si: "strata" }, { "moteurs.creation": "strata", "moteurs.dialogue": "claude" }), true);
+});

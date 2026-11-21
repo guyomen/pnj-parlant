@@ -3,8 +3,8 @@
 # puis renseignez cle_api dans config.toml (ce fichier-là n'est pas versionné).
 
 [moteurs]
-creation = "local"         # création des fiches : "claude" (réseau nécessaire), "local" ou "lmstudio"
-dialogue = "local"         # répliques des PNJ : "claude", "local" (Ollama) ou "lmstudio" (sans réseau)
+creation = "local"         # création des fiches : "claude" (réseau nécessaire), "local", "lmstudio" ou "strata"
+dialogue = "local"         # répliques des PNJ : "claude", "local" (Ollama), "lmstudio" ou "strata" (sans réseau)
 
 [claude]
 cle_api = ""               # "sk-ant-..." ; vide = on lit la variable d'environnement ANTHROPIC_API_KEY
@@ -46,6 +46,20 @@ delai_max = 180            # secondes ; le tout premier appel peut charger le mo
 max_tokens = 1500
 
 [lmstudio.dialogue]
+max_tokens = 200
+
+[strata]                   # modèle local servi par Strata (« strata launch »), API compatible OpenAI
+url = "http://127.0.0.1:8080/v1"   # adresse affichée par Strata au démarrage (« This computer »), avec /v1
+cle_api = ""               # clé de Strata (strata launch --show-key) ; vide = variable d'environnement STRATA_API_KEY
+modele = ""                # vide = le modèle chargé dans Strata
+reflexion = false          # coupe le mode réflexion (Qwen 3…) : bien plus rapide, et évite les réponses vides
+temperature = 0.8
+delai_max = 180            # secondes ; Strata ne traite qu'une requête à la fois si --parallel 1
+
+[strata.generation]
+max_tokens = 1500
+
+[strata.dialogue]
 max_tokens = 200
 
 [dialogue]

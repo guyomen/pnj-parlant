@@ -33,25 +33,29 @@ def config_get():
 
 @bp.get("/api/etat")
 def etat():
-    """État de la machine pour la page Options : GPU, et Ollama ou LM Studio s'ils servent."""
+    """État de la machine pour la page Options : GPU, et Ollama, LM Studio ou Strata s'ils servent."""
     ctx = contexte()
-    ollama = lmstudio = None
+    ollama = lmstudio = strata = None
     if "local" in ctx.moteurs.choix.values():
         ollama = systeme.etat_ollama(ctx.moteurs.local_cfg.get("url", "http://localhost:11434"))
     if "lmstudio" in ctx.moteurs.choix.values():
         lmstudio = ctx.moteurs.etat_lmstudio()
-    return jsonify({"gpu": systeme.etat_gpu(), "ollama": ollama, "lmstudio": lmstudio})
+    if "strata" in ctx.moteurs.choix.values():
+        strata = ctx.moteurs.etat_strata()
+    return jsonify({"gpu": systeme.etat_gpu(), "ollama": ollama, "lmstudio": lmstudio, "strata": strata})
 
 
 def modele_dialogue(m, installes):
     """Choix du modèle de dialogue depuis la vue Partie : None avec Claude ; sinon {moteur, cle (réglage du
-    CATALOGUE), valeur (modèle en cours ; LM Studio : "" = le modèle chargé), modeles (installés), modifiable
+    CATALOGUE), valeur (modèle en cours ; LM Studio, Strata : "" = le modèle chargé), modeles (installés), modifiable
     (cet appareil peut changer les réglages : mot de passe du MJ s'il existe, sinon PC du serveur)}."""
     moteur = m.choix.get("dialogue")
     if moteur == "local":
         valeur, modeles = m.modele_local_installe(installes), [x["nom"] for x in installes]
     elif moteur == "lmstudio":
         valeur, modeles = m.lmstudio_cfg.get("modele") or "", m.modeles_lmstudio()
+    elif moteur == "strata":
+        valeur, modeles = m.strata_cfg.get("modele") or "", m.modeles_strata()
     else:
         return None
     return {"moteur": moteur, "cle": f"{moteur}.modele", "valeur": valeur, "modeles": modeles,

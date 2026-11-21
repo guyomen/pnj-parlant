@@ -55,11 +55,12 @@ class TestDefauts:
         import tomllib
         from pathlib import Path
         exemple = tomllib.loads((Path(__file__).parent.parent / "config.toml.example").read_text(encoding="utf-8"))
-        for section in ("moteurs", "local", "lmstudio"):
+        for section in ("moteurs", "local", "lmstudio", "strata"):
             for cle, valeur in exemple[section].items():
                 if not isinstance(valeur, dict):
                     assert DEFAUTS[section][cle] == valeur, f"{section}.{cle}"
         assert exemple["local"]["generation"] == DEFAUTS["local"]["generation"]
+        assert exemple["strata"]["dialogue"] == DEFAUTS["strata"]["dialogue"]
         assert exemple["claude"]["dialogue"] == DEFAUTS["claude"]["dialogue"]
 
     def test_section_incomplete_completee(self):

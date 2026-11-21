@@ -239,3 +239,105 @@ class TestLMStudio:
 
     def test_etat_pour_la_page_options(self, lmstudio):
         assert lmstudio["moteurs"].etat_lmstudio() == {"ok": True, "modele": "qwen-charge"}
+
+
+MODELES_STRATA = {"object": "list", "data": [
+    {"id": "qwen3.8-flash-next-iq2_xs", "object": "model", "status": {"value": "loaded"}, "meta": {"n_ctx": 131072}},
+]}
+
+
+@pytest.fixture
+def strata(monkeypatch):
+    """Remplace les appels HTTP à Strata ; garde l'adresse, les en-têtes et le corps de chaque requête."""
+    etat = {"requetes": [], "entetes": [], "adresses": [], "modeles": MODELES_STRATA,
+            "reponse": FausseReponseLMStudio(["Bonjour, ", "voyageur."])}
+
+    def urlopen(req, timeout=None):
+        etat["adresses"].append(req.full_url)
+        etat["entetes"].append(dict(req.header_items()))
+        if req.full_url.endswith("/models"):
+            return FausseReponseLMStudio(corps=etat["modeles"])
+        etat["requetes"].append(json.loads(req.data))
+        return etat["reponse"]
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+    monkeypatch.delenv("STRATA_API_KEY", raising=False)
+    config = json.loads(json.dumps(CONFIG))
+    config["moteurs"] = {"creation": "strata", "dialogue": "strata"}
+    config["strata"] = {"url": "http://strata:8080/v1", "cle_api": "sk-strata-test"}
+    etat["moteurs"] = Moteurs(config)
+    return etat
+
+
+class TestStrata:
+    def test_replique_en_flux_avec_la_cle_et_le_modele_charge(self, strata):
+        assert "".join(strata["moteurs"].replique("Tu es Berthe.", [{"role": "user", "content": "Salut"}],
+                                                  ARRETS)) == "Bonjour, voyageur."
+        assert strata["adresses"] == ["http://strata:8080/v1/models", "http://strata:8080/v1/chat/completions"]
+        assert all(e["Authorization"] == "Bearer sk-strata-test" for e in strata["entetes"])
+        corps = strata["requetes"][-1]
+        assert corps["model"] == "qwen3.8-flash-next-iq2_xs"
+        assert corps["stop"] == ARRETS and corps["stream"] is True and corps["max_tokens"] == 200
+        assert corps["reasoning_effort"] == "none"
+
+    def test_modele_de_config_sans_aller_retour(self, strata):
+        strata["moteurs"].strata_cfg["modele"] = "autre"
+        list(strata["moteurs"].replique("s", [{"role": "user", "content": "a"}]))
+        assert strata["adresses"] == ["http://strata:8080/v1/chat/completions"]
+        assert strata["requetes"][-1]["model"] == "autre"
+
+    def test_fiche_au_schema_json(self, strata):
+        strata["reponse"] = FausseReponseLMStudio(corps={"choices": [
+            {"finish_reason": "stop", "message": {"content": '{"nom": "Brom"}'}}]})
+        assert strata["moteurs"].fiche("s", "Un forgeron", {"type": "object"}) == '{"nom": "Brom"}'
+        corps = strata["requetes"][-1]
+        assert corps["response_format"]["json_schema"]["schema"] == {"type": "object"}
+        assert corps["stream"] is False and corps["max_tokens"] == 1500
+
+    def test_compteurs_usage(self, strata):
+        strata["reponse"] = FausseReponseLMStudio(["Salut."], {"prompt_tokens": 29, "completion_tokens": 24})
+        usage = {}
+        list(strata["moteurs"].replique("s", [{"role": "user", "content": "a"}], on_usage=usage.update))
+        assert usage == {"input_tokens": 29, "output_tokens": 24}
+
+    def test_taille_de_contexte_et_description(self, strata):
+        assert strata["moteurs"].contexte_max() == 131072
+        assert strata["moteurs"].description() == {"creation": "Strata : modèle chargé",
+                                                   "dialogue": "Strata : modèle chargé"}
+
+    def test_cle_lue_dans_l_environnement(self, strata, monkeypatch):
+        strata["moteurs"].strata_cfg["cle_api"] = ""
+        monkeypatch.setenv("STRATA_API_KEY", "sk-strata-env")
+        list(strata["moteurs"].replique("s", [{"role": "user", "content": "a"}]))
+        assert strata["entetes"][-1]["Authorization"] == "Bearer sk-strata-env"
+
+    def test_sans_cle_message_clair(self, strata):
+        strata["moteurs"].strata_cfg["cle_api"] = ""
+        with pytest.raises(MoteurIndisponible, match="Clé API Strata absente"):
+            strata["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+        assert strata["adresses"] == []  # rien n'est envoyé sans clé
+        assert strata["moteurs"].etat_strata()["ok"] is False
+
+    def test_cle_refusee(self, strata, monkeypatch):
+        def urlopen(req, timeout=None):
+            raise module.urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+        monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+        with pytest.raises(MoteurIndisponible, match="Strata refuse la clé API"):
+            strata["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+
+    def test_modele_pas_encore_charge(self, strata):
+        strata["modeles"] = {"data": [{"id": "qwen", "status": {"value": "loading"}}]}
+        with pytest.raises(MoteurIndisponible, match="pas encore chargé"):
+            strata["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+
+    def test_strata_injoignable(self, strata, monkeypatch):
+        def urlopen(req, timeout=None):
+            raise module.urllib.error.URLError("refusé")
+        monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+        with pytest.raises(MoteurIndisponible, match="Strata injoignable"):
+            strata["moteurs"].replique("s", [{"role": "user", "content": "a"}])
+        assert strata["moteurs"].contexte_max() is None
+        assert strata["moteurs"].modeles_strata() == []
+
+    def test_etat_et_modeles_pour_les_pages(self, strata):
+        assert strata["moteurs"].etat_strata() == {"ok": True, "modele": "qwen3.8-flash-next-iq2_xs"}
+        assert strata["moteurs"].modeles_strata() == ["qwen3.8-flash-next-iq2_xs"]
