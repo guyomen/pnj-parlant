@@ -112,7 +112,7 @@ class Contexte:
                 raise ValueError(
                     f"Le moteur de voix « {nom_tts} » n'est pas utilisable ici (paquet ou voix manquants).")
         moteurs = None
-        if change("moteurs.", "claude.", "local.", "lmstudio.") and not self.injectes["moteurs"]:
+        if change("moteurs.", "claude.", "local.", "lmstudio.", "strata.") and not self.injectes["moteurs"]:
             moteurs = Moteurs(nouveaux)
         if self.cfg.fichier:
             reglages.ecrire(self.cfg.fichier, changements)
@@ -197,6 +197,10 @@ class Contexte:
             etat = self.moteurs.etat_lmstudio()
             if not etat["ok"]:
                 signaler("lmstudio", "erreur", etat["message"])
+        if "strata" in choix:
+            etat = self.moteurs.etat_strata()
+            if not etat["ok"]:
+                signaler("strata", "erreur", etat["message"])
         return liste
 
     def styles(self):

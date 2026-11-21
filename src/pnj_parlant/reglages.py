@@ -1,7 +1,7 @@
 """
 Réglages du serveur modifiables depuis la page Options, sans ouvrir config.toml.
 
-CATALOGUE décrit les réglages utiles (moteurs, Claude, Ollama, LM Studio, dialogue, voix, reconnaissance,
+CATALOGUE décrit les réglages utiles (moteurs, Claude, Ollama, LM Studio, Strata, dialogue, voix, reconnaissance,
 portraits, serveur) : clé de config.toml, type, choix ou bornes, valeur par défaut, aide. Les autres réglages
 (genres des voix Piper, dossiers, max_tokens…) restent dans le fichier.
 
@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 MOTEURS = [["claude", "Claude (API Anthropic, réseau)"], ["local", "Ollama (local)"],
-           ["lmstudio", "LM Studio (local)"]]
+           ["lmstudio", "LM Studio (local)"], ["strata", "Strata (local)"]]
 EFFORTS = [[e, e] for e in ("low", "medium", "high", "xhigh", "max")]
 
 
@@ -67,6 +67,16 @@ CATALOGUE = [
          R("lmstudio.modele", "Modèle", "texte", "", "Vide : le modèle chargé dans LM Studio."),
          R("lmstudio.reflexion", "Mode réflexion", "booleen", False, "Désactivé : bien plus rapide."),
          R("lmstudio.temperature", "Température", "nombre", 0.8, min=0, max=2, pas=0.1),
+     ]},
+    {"id": "strata", "titre": "Strata", "si": "strata",
+     "aide": "Modèle local servi par Strata (strata launch). La clé s'affiche avec : strata launch --show-key",
+     "reglages": [
+         R("strata.url", "Adresse", "url", "http://127.0.0.1:8080/v1", "Adresse donnée par Strata, avec /v1."),
+         R("strata.cle_api", "Clé API", "secret", "",
+           "Vide : la variable d'environnement STRATA_API_KEY est utilisée."),
+         R("strata.modele", "Modèle", "texte", "", "Vide : le modèle chargé dans Strata."),
+         R("strata.reflexion", "Mode réflexion", "booleen", False, "Désactivé : bien plus rapide."),
+         R("strata.temperature", "Température", "nombre", 0.8, min=0, max=2, pas=0.1),
      ]},
     {"id": "dialogue", "titre": "Dialogue",
      "reglages": [

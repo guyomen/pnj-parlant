@@ -22,6 +22,8 @@ class FauxMoteurs:
         self.local_cfg = {"url": "http://localhost:1", "modele": "faux"}
         self.lmstudio_cfg = {"url": "http://localhost:2", "modele": ""}
         self.lmstudio = ["qwen", "gemma"]  # modèles de LM Studio (modeles_lmstudio)
+        self.strata_cfg = {"url": "http://localhost:3/v1", "modele": ""}
+        self.strata = ["qwen3.8-flash-next-iq2_xs"]  # modèles de Strata (modeles_strata)
         self.fiche_json = json.dumps(FICHE, ensure_ascii=False)
         self.reponses = ["Bonjour."]
         self.usage = None
@@ -43,6 +45,9 @@ class FauxMoteurs:
 
     def modeles_lmstudio(self):
         return list(self.lmstudio)
+
+    def modeles_strata(self):
+        return list(self.strata)
 
     def fiche(self, system, demande, schema):
         self.derniere_demande = demande

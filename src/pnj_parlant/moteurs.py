@@ -1,16 +1,18 @@
 """
 Moteurs de langage : Claude (API Anthropic), modèle local (Ollama, dans Docker)
-ou modèle local servi par LM Studio (API compatible OpenAI).
+ou modèle local servi par LM Studio ou Strata (API compatible OpenAI).
 
 Le choix se fait dans la section [moteurs] de config.toml, séparément pour la création
 des fiches et pour les dialogues :
     creation = "claude"     # meilleure inventivité, demande le réseau
     dialogue = "local"      # fonctionne sans réseau (Ollama)
     dialogue = "lmstudio"   # fonctionne sans réseau (LM Studio, sans Docker)
+    dialogue = "strata"     # fonctionne sans réseau (Strata, clé API)
 """
 import copy
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -25,7 +27,7 @@ except ImportError:  # pragma: no cover
     import httpx
 
 log = logging.getLogger(__name__)
-DUREE_CACHE = 15  # secondes : liste des modèles d'Ollama et de LM Studio
+DUREE_CACHE = 15  # secondes : liste des modèles d'Ollama, de LM Studio et de Strata
 
 
 class MoteurIndisponible(Exception):
@@ -44,6 +46,9 @@ DEFAUTS = {
               "generation": {"max_tokens": 1500}, "dialogue": {"max_tokens": 200}},
     "lmstudio": {"url": "http://localhost:1234", "modele": "", "reflexion": False, "temperature": 0.8,
                  "delai_max": 180, "generation": {"max_tokens": 1500}, "dialogue": {"max_tokens": 200}},
+    "strata": {"url": "http://127.0.0.1:8080/v1", "cle_api": "", "modele": "", "reflexion": False,
+               "temperature": 0.8, "delai_max": 180,
+               "generation": {"max_tokens": 1500}, "dialogue": {"max_tokens": 200}},
 }
 
 
@@ -61,6 +66,15 @@ def avec_defauts(config, defauts=DEFAUTS):
 
 MESSAGE_SANS_CLE = ("Clé API Claude absente : renseignez-la dans la page Options (ou la variable "
                     "ANTHROPIC_API_KEY), ou choisissez un moteur local.")
+MESSAGE_SANS_CLE_STRATA = ("Clé API Strata absente : renseignez-la dans la page Options (rubrique Strata) ou la "
+                           "variable STRATA_API_KEY. Pour l'afficher : strata launch --show-key")
+MESSAGE_CLE_STRATA_REFUSEE = ("Strata refuse la clé API : vérifiez-la dans la page Options (rubrique Strata). "
+                              "Pour l'afficher : strata launch --show-key")
+MESSAGES_INJOIGNABLE = {
+    "lmstudio": "LM Studio injoignable : démarrez son serveur local (onglet Developer > Start Server, "
+                "ou « lms server start »).",
+    "strata": "Strata injoignable : démarrez-le (« strata launch »), puis attendez qu'il ait chargé son modèle.",
+}
 
 
 class Moteurs:
@@ -70,6 +84,7 @@ class Moteurs:
         self.claude_cfg = config["claude"]
         self.local_cfg = config["local"]
         self.lmstudio_cfg = config["lmstudio"]
+        self.strata_cfg = config["strata"]
         # Réponses des serveurs de modèles gardées quelques secondes : {clé: (échéance, valeur)}. Le cache vit avec
         # l'instance : changer de réglages reconstruit les moteurs (Contexte.appliquer_reglages) et le vide.
         self._cache = {}
@@ -111,6 +126,8 @@ class Moteurs:
                 return self.claude_cfg["modele"]
             if m == "lmstudio":
                 return f"LM Studio : {self.lmstudio_cfg.get('modele') or 'modèle chargé'}"
+            if m == "strata":
+                return f"Strata : {self.strata_cfg.get('modele') or 'modèle chargé'}"
             return f"local : {self.local_cfg.get('modele')}"
         return {"creation": nom(self.choix["creation"]), "dialogue": nom(self.choix["dialogue"])}
 
@@ -119,6 +136,12 @@ class Moteurs:
         if self.choix["dialogue"] == "lmstudio":
             try:
                 limite = self._lmstudio_modele().get("loaded_context_length")
+            except MoteurIndisponible:
+                limite = None
+        elif self.choix["dialogue"] == "strata":
+            try:
+                meta = self._strata_modele().get("meta")
+                limite = meta.get("n_ctx") if isinstance(meta, dict) else None
             except MoteurIndisponible:
                 limite = None
         else:
@@ -152,6 +175,8 @@ class Moteurs:
             return self._local(system, messages, self.local_cfg["generation"]["max_tokens"], schema)
         if self.choix["creation"] == "lmstudio":
             return self._lmstudio(system, messages, self.lmstudio_cfg["generation"]["max_tokens"], schema)
+        if self.choix["creation"] == "strata":
+            return self._strata(system, messages, self.strata_cfg["generation"]["max_tokens"], schema)
         cfg = self.claude_cfg["generation"]
         return self._claude(system, messages, cfg["max_tokens"],
                             {"effort": cfg["effort"], "format": {"type": "json_schema", "schema": schema}})
@@ -169,6 +194,9 @@ class Moteurs:
         if self.choix["dialogue"] == "lmstudio":
             maximum = max(64, round(self.lmstudio_cfg["dialogue"]["max_tokens"] * multiplicateur))
             return self._lmstudio_flux(system, messages, maximum, arrets, on_usage)
+        if self.choix["dialogue"] == "strata":
+            maximum = max(64, round(self.strata_cfg["dialogue"]["max_tokens"] * multiplicateur))
+            return self._strata_flux(system, messages, maximum, arrets, on_usage)
         cfg = self.claude_cfg["dialogue"]
         maximum = max(64, round(cfg["max_tokens"] * multiplicateur))
         return self._claude_flux(system, messages, maximum, {"effort": cfg["effort"]}, arrets, on_usage)
@@ -313,33 +341,42 @@ class Moteurs:
                 raise MoteurIndisponible(self._message_lecture("Le modèle local", TimeoutError())) from e
             raise MoteurIndisponible("Modèle local injoignable : lancez-le avec « docker compose up -d ».") from e
 
-    # --- Modèle local (LM Studio, API compatible OpenAI) ----------------------
-    def _lmstudio(self, system, messages, max_tokens, schema=None):
+    # --- Serveurs locaux à l'API compatible OpenAI : LM Studio et Strata -----------------------------------
+    # Même requête (/chat/completions, flux SSE), mêmes réponses. Ce qui change : l'adresse, la liste des modèles
+    # (/api/v0/models pour LM Studio, /v1/models pour Strata), la clé API (Strata seulement) et les messages.
+    NOMS_COMPAT = {"lmstudio": "LM Studio", "strata": "Strata"}
+
+    def _cfg_compat(self, moteur):
+        return self.lmstudio_cfg if moteur == "lmstudio" else self.strata_cfg
+
+    def _compat(self, moteur, system, messages, max_tokens, schema=None):
+        nom = self.NOMS_COMPAT[moteur]
         try:
-            with self._lmstudio_requete(system, messages, max_tokens, schema) as r:
+            with self._compat_requete(moteur, system, messages, max_tokens, schema) as r:
                 data = json.loads(r.read())
             if isinstance(data, dict) and data.get("error"):
-                raise MoteurIndisponible(f"LM Studio a renvoyé une erreur : {self._detail_erreur(data['error'])}")
+                raise MoteurIndisponible(f"{nom} a renvoyé une erreur : {self._detail_erreur(data['error'])}")
             choix = data["choices"][0]
             texte = choix["message"].get("content") or ""
         except (OSError, ValueError) as e:  # délai dépassé en lisant, connexion coupée, réponse illisible
-            raise MoteurIndisponible(self._message_lecture("LM Studio", e)) from e
+            raise MoteurIndisponible(self._message_lecture(nom, e)) from e
         except (KeyError, IndexError, TypeError, AttributeError) as e:  # réponse d'un autre format que prévu
-            raise MoteurIndisponible("LM Studio a renvoyé une réponse inattendue.") from e
+            raise MoteurIndisponible(f"{nom} a renvoyé une réponse inattendue.") from e
         if choix.get("finish_reason") == "length":
-            log.warning("LM Studio : réponse coupée à max_tokens=%s", max_tokens)
+            log.warning("%s : réponse coupée à max_tokens=%s", nom, max_tokens)
         # Les modèles à réflexion (Qwen 3…) peuvent laisser leur raisonnement dans <think>…</think>
         return re.sub(r"<think>.*?</think>", "", texte, flags=re.DOTALL).strip()
 
     @staticmethod
     def _detail_erreur(erreur):
-        """Texte d'une erreur de LM Studio : chaîne, ou objet {"message": ...} au format OpenAI."""
+        """Texte d'une erreur de LM Studio ou Strata : chaîne, ou objet {"message": ...} au format OpenAI."""
         if isinstance(erreur, dict):
             erreur = erreur.get("message") or json.dumps(erreur, ensure_ascii=False)
         return str(erreur)[:200]
 
-    def _lmstudio_flux(self, system, messages, max_tokens, arrets=(), on_usage=None):
-        r = self._lmstudio_requete(system, messages, max_tokens, stream=True, arrets=arrets)
+    def _compat_flux(self, moteur, system, messages, max_tokens, arrets=(), on_usage=None):
+        nom = self.NOMS_COMPAT[moteur]
+        r = self._compat_requete(moteur, system, messages, max_tokens, stream=True, arrets=arrets)
 
         def morceaux():
             # Flux SSE au format OpenAI : « data: {...} » par morceau de texte, jusqu'à « data: [DONE] ».
@@ -357,20 +394,70 @@ class Moteurs:
                         data = json.loads(ligne)
                         if data.get("error"):
                             raise MoteurIndisponible(
-                                f"LM Studio a renvoyé une erreur : {self._detail_erreur(data['error'])}")
+                                f"{nom} a renvoyé une erreur : {self._detail_erreur(data['error'])}")
                         if data.get("usage"):
                             usage["input_tokens"] = data["usage"].get("prompt_tokens")
                             usage["output_tokens"] = data["usage"].get("completion_tokens")
                         for choix in data.get("choices", []):
                             if choix.get("finish_reason") == "length":
-                                log.warning("LM Studio : réponse coupée à max_tokens=%s", max_tokens)
+                                log.warning("%s : réponse coupée à max_tokens=%s", nom, max_tokens)
                             if choix.get("delta", {}).get("content"):
                                 yield choix["delta"]["content"]
             except (OSError, ValueError) as e:  # coupure réseau, délai dépassé, ligne illisible
-                raise MoteurIndisponible(self._message_lecture("LM Studio", e)) from e
+                raise MoteurIndisponible(self._message_lecture(nom, e)) from e
             if on_usage and usage and None not in usage.values():
                 on_usage(usage)
         return morceaux()
+
+    def _compat_requete(self, moteur, system, messages, max_tokens, schema=None, stream=False, arrets=()):
+        """Envoie la requête à LM Studio ou Strata et renvoie la réponse HTTP ouverte."""
+        cfg, nom = self._cfg_compat(moteur), self.NOMS_COMPAT[moteur]
+        if moteur == "lmstudio":
+            url = f"{cfg.get('url', DEFAUTS['lmstudio']['url']).rstrip('/')}/v1/chat/completions"
+            entetes = {}
+            # modèle de config.toml : aucun aller-retour de plus ; sinon celui qui est chargé (liste en cache)
+            modele = cfg.get("modele") or self._lmstudio_modele().get("id")
+        else:
+            url = f"{cfg.get('url', DEFAUTS['strata']['url']).rstrip('/')}/chat/completions"
+            entetes = self._entetes_strata()
+            modele = cfg.get("modele") or self._strata_modele().get("id")
+        body = {
+            "model": modele,
+            "messages": [{"role": "system", "content": system}] + messages,
+            "max_tokens": max_tokens,
+            "temperature": cfg.get("temperature", 0.8),
+            "stream": stream,
+        }
+        if stream:
+            body["stream_options"] = {"include_usage": True}  # tokens comptés dans le dernier morceau
+        if schema:
+            # le serveur contraint la sortie à ce schéma JSON
+            body["response_format"] = {"type": "json_schema",
+                                       "json_schema": {"name": "fiche", "strict": True, "schema": schema}}
+        if arrets:
+            body["stop"] = list(arrets)  # la génération s'arrête net sur l'un de ces textes
+        if cfg.get("reflexion") is False:
+            body["reasoning_effort"] = "none"  # coupe le mode réflexion, qui sinon mange tout max_tokens
+        req = urllib.request.Request(url, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", **entetes})
+        try:
+            return urllib.request.urlopen(req, timeout=cfg.get("delai_max", 180))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")
+            if moteur == "strata" and e.code in (401, 403):
+                raise MoteurIndisponible(MESSAGE_CLE_STRATA_REFUSEE) from e
+            raise MoteurIndisponible(f"{nom} a renvoyé une erreur : {detail[:200]}") from e
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if self._delai_depasse(e):
+                raise MoteurIndisponible(self._message_lecture(nom, TimeoutError())) from e
+            raise MoteurIndisponible(MESSAGES_INJOIGNABLE[moteur]) from e
+
+    # --- LM Studio --------------------------------------------------------------------------------------------
+    def _lmstudio(self, system, messages, max_tokens, schema=None):
+        return self._compat("lmstudio", system, messages, max_tokens, schema)
+
+    def _lmstudio_flux(self, system, messages, max_tokens, arrets=(), on_usage=None):
+        return self._compat_flux("lmstudio", system, messages, max_tokens, arrets, on_usage)
 
     def etat_lmstudio(self):
         """Pour la page Options : {"ok": True, "modele": id} ou {"ok": False, "message": raison}."""
@@ -407,39 +494,60 @@ class Moteurs:
             with urllib.request.urlopen(url, timeout=5) as r:
                 return [m for m in json.loads(r.read()).get("data", []) if isinstance(m, dict)]
         except (OSError, ValueError, AttributeError) as e:
-            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
-                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
+            raise MoteurIndisponible(MESSAGES_INJOIGNABLE["lmstudio"]) from e
 
-    def _lmstudio_requete(self, system, messages, max_tokens, schema=None, stream=False, arrets=()):
-        """Envoie la requête à LM Studio et renvoie la réponse HTTP ouverte."""
-        cfg = self.lmstudio_cfg
-        body = {
-            # modèle de config.toml : aucun aller-retour de plus ; sinon celui qui est chargé (liste en cache)
-            "model": cfg.get("modele") or self._lmstudio_modele().get("id"),
-            "messages": [{"role": "system", "content": system}] + messages,
-            "max_tokens": max_tokens,
-            "temperature": cfg.get("temperature", 0.8),
-            "stream": stream,
-        }
-        if stream:
-            body["stream_options"] = {"include_usage": True}  # tokens comptés dans le dernier morceau
-        if schema:
-            # LM Studio contraint la sortie à ce schéma JSON
-            body["response_format"] = {"type": "json_schema",
-                                       "json_schema": {"name": "fiche", "strict": True, "schema": schema}}
-        if arrets:
-            body["stop"] = list(arrets)  # la génération s'arrête net sur l'un de ces textes
-        if cfg.get("reflexion") is False:
-            body["reasoning_effort"] = "none"  # coupe le mode réflexion, qui sinon mange tout max_tokens
-        req = urllib.request.Request(f"{cfg.get('url', 'http://localhost:1234').rstrip('/')}/v1/chat/completions",
-                                     data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    # --- Strata -----------------------------------------------------------------------------------------------
+    def _strata(self, system, messages, max_tokens, schema=None):
+        return self._compat("strata", system, messages, max_tokens, schema)
+
+    def _strata_flux(self, system, messages, max_tokens, arrets=(), on_usage=None):
+        return self._compat_flux("strata", system, messages, max_tokens, arrets, on_usage)
+
+    def _entetes_strata(self):
+        """En-tête de la clé API : celle de config.toml, sinon la variable d'environnement STRATA_API_KEY."""
+        cle = self.strata_cfg.get("cle_api") or os.environ.get("STRATA_API_KEY", "")
+        if not cle:
+            raise MoteurIndisponible(MESSAGE_SANS_CLE_STRATA)
+        return {"Authorization": f"Bearer {cle}"}
+
+    def etat_strata(self):
+        """Pour la page Options : {"ok": True, "modele": id} ou {"ok": False, "message": raison}."""
         try:
-            return urllib.request.urlopen(req, timeout=cfg.get("delai_max", 180))
+            return {"ok": True, "modele": self._strata_modele().get("id", "")}
+        except MoteurIndisponible as e:
+            return {"ok": False, "message": str(e)}
+
+    def modeles_strata(self):
+        """Modèles servis par Strata (identifiants), pour le choix du modèle dans la partie. Vide si Strata ne
+        répond pas."""
+        try:
+            modeles = self._en_cache(("strata", self.strata_cfg.get("url")), self._lire_modeles_strata)
+        except MoteurIndisponible:
+            return []
+        return [m["id"] for m in modeles if isinstance(m.get("id"), str)]
+
+    def _strata_modele(self):
+        """Modèle chargé dans Strata (fiche de /v1/models), celui de config.toml s'il est renseigné."""
+        cfg = self.strata_cfg
+        modeles = self._en_cache(("strata", cfg.get("url")), self._lire_modeles_strata)
+        if cfg.get("modele"):
+            return next((m for m in modeles if m.get("id") == cfg["modele"]), {"id": cfg["modele"]})
+        # Strata ne sert qu'un modèle à la fois ; "status" dit s'il est chargé (absent : on le suppose chargé)
+        charges = [m for m in modeles
+                   if not isinstance(m.get("status"), dict) or m["status"].get("value", "loaded") == "loaded"]
+        if not charges:
+            raise MoteurIndisponible("Strata répond, mais son modèle n'est pas encore chargé : patientez un peu.")
+        return charges[0]
+
+    def _lire_modeles_strata(self):
+        url = f"{self.strata_cfg.get('url', DEFAUTS['strata']['url']).rstrip('/')}/models"
+        req = urllib.request.Request(url, headers=self._entetes_strata())
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return [m for m in json.loads(r.read()).get("data", []) if isinstance(m, dict)]
         except urllib.error.HTTPError as e:
-            detail = e.read().decode(errors="replace")
-            raise MoteurIndisponible(f"LM Studio a renvoyé une erreur : {detail[:200]}") from e
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            if self._delai_depasse(e):
-                raise MoteurIndisponible(self._message_lecture("LM Studio", TimeoutError())) from e
-            raise MoteurIndisponible("LM Studio injoignable : démarrez son serveur local "
-                                     "(onglet Developer > Start Server, ou « lms server start »).") from e
+            if e.code in (401, 403):
+                raise MoteurIndisponible(MESSAGE_CLE_STRATA_REFUSEE) from e
+            raise MoteurIndisponible(f"Strata a renvoyé une erreur ({e.code}).") from e
+        except (OSError, ValueError, AttributeError) as e:
+            raise MoteurIndisponible(MESSAGES_INJOIGNABLE["strata"]) from e

@@ -65,7 +65,8 @@ def test_catalogue_coherent():
             assert r["defaut"] in [c[0] for c in r["choix"]], r["cle"]
         if r["type"] in ("entier", "nombre"):
             assert r["min"] <= r["defaut"] <= r["max"], r["cle"]
-    assert {"moteurs.dialogue", "lmstudio.modele", "serveur.mot_de_passe_mj"} <= set(cles)
+    assert {"moteurs.dialogue", "lmstudio.modele", "strata.cle_api", "serveur.mot_de_passe_mj"} <= set(cles)
+    assert reglages.REGLAGES["strata.cle_api"]["type"] == "secret"  # jamais renvoyée au navigateur
 
 
 def test_lire_et_poser():
@@ -196,6 +197,9 @@ def test_modele_de_dialogue_pour_la_partie(web, moteurs):
     assert (d["cle"], d["valeur"], d["modeles"]) == ("lmstudio.modele", "", ["qwen", "gemma"])
     moteurs.lmstudio_cfg["modele"] = "gemma"
     assert web.get("/api/config").get_json()["modele_dialogue"]["valeur"] == "gemma"
+    moteurs.choix["dialogue"] = "strata"
+    d = web.get("/api/config").get_json()["modele_dialogue"]
+    assert (d["cle"], d["valeur"], d["modeles"]) == ("strata.modele", "", ["qwen3.8-flash-next-iq2_xs"])
     moteurs.choix["dialogue"] = "claude"
     assert web.get("/api/config").get_json()["modele_dialogue"] is None
 

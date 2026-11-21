@@ -219,7 +219,8 @@ export function valeurReglage(type, champ) {
   return brut;
 }
 
-// Un groupe ne sert que si l'un des moteurs de langage vaut groupe.si (« claude », « local », « lmstudio »)
+// Un groupe ne sert que si l'un des moteurs de langage vaut groupe.si (« claude », « local », « lmstudio »,
+// « strata »)
 export const groupeUtile = (groupe, valeurs) =>
   !groupe.si || [valeurs["moteurs.creation"], valeurs["moteurs.dialogue"]].includes(groupe.si);
 
@@ -228,9 +229,10 @@ export const resumeModifs = (n) => n ? `${n} réglage${n > 1 ? "s" : ""} modifi�
 // Page Options : lignes {titre, texte, alerte?, barre?} (texte brut, échappé par la page). `detail` faux = mode
 // joueur (js/mj.js) : sans noms de modèles ni mémoire, juste ce qui sert et si ça marche.
 // Moteurs (/api/config ; moteurs.creation/dialogue = description() du serveur : modèle Claude, « local : … »,
-// « LM Studio : … »)
+// « LM Studio : … », « Strata : … »)
 const moteurEnBref = (d) => !d ? "—" : d.startsWith("local") ? "IA sur ce PC (Ollama)"
-  : d.startsWith("LM Studio") ? "IA sur ce PC (LM Studio)" : "Claude (en ligne)";
+  : d.startsWith("LM Studio") ? "IA sur ce PC (LM Studio)"
+  : d.startsWith("Strata") ? "IA sur ce PC (Strata)" : "Claude (en ligne)";
 export function lignesMoteurs(cfg, detail = true) {
   const m = cfg?.moteurs ?? {}, nom = (d) => (detail ? d ?? "—" : moteurEnBref(d));
   return [
@@ -253,9 +255,10 @@ function ligneGpu(g, detail) {
   if (connue(g.memoire_mo) && g.memoire_totale_mo > 0) ligne.barre = Math.round(100 * g.memoire_mo / g.memoire_totale_mo);
   return ligne;
 }
-// État de la machine (/api/etat : ollama et lmstudio null s'ils ne servent pas, gpu null sans carte détectée)
+// État de la machine (/api/etat : ollama, lmstudio et strata null s'ils ne servent pas, gpu null sans carte
+// détectée)
 export function lignesEtat(etat, detail = true) {
-  const lignes = [], o = etat?.ollama, l = etat?.lmstudio, g = etat?.gpu;
+  const lignes = [], o = etat?.ollama, g = etat?.gpu;
   if (o) {
     lignes.push(!o.ok ? { titre: "Ollama", alerte: true, texte: detail
       ? "ne répond pas : démarrez-le (lancer.bat le fait sous Windows ; sous Linux : docker compose up -d)."
@@ -263,9 +266,10 @@ export function lignesEtat(etat, detail = true) {
       : { titre: "Ollama", texte: !detail ? "actif" : `actif — ${o.charges?.length
         ? o.charges.map(x => `${x.nom} (${x.vram_mo} Mo en mémoire vidéo)`).join(", ") : "aucun modèle chargé"}` });
   }
-  if (l) {
-    lignes.push(l.ok ? { titre: "LM Studio", texte: detail ? `actif — ${l.modele || "modèle chargé"}` : "actif" }
-                     : { titre: "LM Studio", alerte: true, texte: detail ? l.message : "ne répond pas : prévenez le MJ." });
+  for (const [titre, l] of [["LM Studio", etat?.lmstudio], ["Strata", etat?.strata]]) {
+    if (!l) continue;
+    lignes.push(l.ok ? { titre, texte: detail ? `actif — ${l.modele || "modèle chargé"}` : "actif" }
+                     : { titre, alerte: true, texte: detail ? l.message : "ne répond pas : prévenez le MJ." });
   }
   lignes.push(g ? ligneGpu(g, detail) : { titre: "Carte graphique", texte: "aucune carte détectée" });
   return lignes;
@@ -273,14 +277,15 @@ export function lignesEtat(etat, detail = true) {
 
 // --- Modèle de l'IA, dans la vue Partie ------------------------------------------------------------------
 // `modele_dialogue` de /api/config ({moteur, cle, valeur, modeles, modifiable}, null avec Claude) → contenu de la
-// liste : {cle, valeur, options: [{valeur, libelle}], modifiable}, ou null (liste cachée). LM Studio : "" = le
-// modèle chargé dans LM Studio ; un modèle configuré mais introuvable reste affiché, marqué « introuvable ».
+// liste : {cle, valeur, options: [{valeur, libelle}], modifiable}, ou null (liste cachée). LM Studio, Strata :
+// "" = le modèle chargé ; un modèle configuré mais introuvable reste affiché, marqué « introuvable ».
 export function choixModele(info) {
-  if (!info || typeof info.cle !== "string" || !["local", "lmstudio"].includes(info.moteur)) return null;
+  if (!info || typeof info.cle !== "string" || !["local", "lmstudio", "strata"].includes(info.moteur)) return null;
   const valeur = typeof info.valeur === "string" ? info.valeur : "";
   const noms = [...new Set((Array.isArray(info.modeles) ? info.modeles : []).filter(m => typeof m === "string" && m))];
   const options = noms.map(m => ({ valeur: m, libelle: m }));
   if (info.moteur === "lmstudio") options.unshift({ valeur: "", libelle: "Modèle chargé dans LM Studio" });
+  if (info.moteur === "strata") options.unshift({ valeur: "", libelle: "Modèle chargé dans Strata" });
   if (!options.some(o => o.valeur === valeur)) options.push({ valeur, libelle: `${valeur || "aucun"} (introuvable)` });
   return { cle: info.cle, valeur, options, modifiable: info.modifiable !== false };
 }
